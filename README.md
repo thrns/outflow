@@ -1,6 +1,6 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path file loading and safe initialization, and an atomic JSON writer on Unix. The Tauri desktop shell, microphone and dictation flows, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path loading and initialization, an explicitly confirmed reset, and an atomic JSON writer on Unix. The Tauri desktop shell, microphone and dictation flows, Windows owner-only ACL writing, and release packaging have not been implemented.
 
 ## Prerequisites
 
@@ -9,6 +9,98 @@ Outflow is an offline desktop dictation application in development. This reposit
 - Rust **1.99.1** and Cargo. The root `rust-toolchain.toml` selects the documented toolchain and installs the `rustfmt` and `clippy` components when needed.
 
 Vite documents its [Node.js support range](https://vite.dev/guide/) and Vitest documents its [Node.js requirement](https://vitest.dev/guide/).
+
+## Supported hardware and OS test matrix
+
+The development hardware inventory is in [`docs/BENCHMARK_MATRIX.md`](docs/BENCHMARK_MATRIX.md), with its machine-readable source at [`docs/benchmark-matrix.json`](docs/benchmark-matrix.json). It follows the current support tiers: macOS 13+ Apple Silicon arm64 (Tier 1, Phase 0 gated), macOS 13+ Intel x64 (Tier 2 gated), Windows 10/11 x64 (Tier 1), Ubuntu-family Linux X11 x64 (Tier 1), Fedora-family Linux X11 x64 (Tier 2), and GNOME/KDE Wayland x64 (best-effort, portal/compositor dependent).
+
+The current development host is `MAC-ARM64-01`: macOS 26.6.2 (25G83), Apple M3 Pro, arm64, with **18 GB installed physical RAM**. This machine is available for macOS platform work but is not a physical 4 GB reference system. No physical 4 GB test machine is verified for any listed target. Intel macOS, Windows, Ubuntu-family X11, Fedora-family X11, and GNOME/KDE Wayland machines are unavailable in the current task environment. The exact Linux distribution release minima are not yet specified in `docs/TECH_STACK.md`.
+
+Every target requires CPU-only testing on 4 GB installed physical RAM for the project gate. A VM, cgroup, or other memory limit is supplemental and does not certify the physical 4 GB requirement. Hardware identification and successful platform smoke tests do not establish performance certification; RSS, installed size, latency, real-time factor, speech quality, and battery gates remain unmeasured here. Wayland support remains best-effort with explicit Copy fallback when compositor or portal capabilities are missing.
+
+Run the development-only standard-library validator and its `unittest` suite from the repository root:
+
+```sh
+python3 scripts/validate_benchmark_matrix.py
+python3 -m unittest discover -s scripts/tests -v
+```
+
+The script checks required target IDs, availability labels, evidence fields, 4 GB claims, and prohibited identifying field names. It does not discover hardware, change application behavior, or become an Outflow runtime dependency.
+
+### Hardware matrix troubleshooting
+
+- If `python3` is missing, install Python 3 with its standard library and rerun the commands above; no pip package is needed.
+- If validation reports a missing or duplicate target, correct `id` in `docs/benchmark-matrix.json`; each required target ID must appear exactly once.
+- For `AVAILABLE`, record the observed OS version/build, CPU model, architecture, installed physical RAM, and source commands in `hardware` and `evidence`. Keep unknown values `null` for `PENDING` or `UNAVAILABLE` records.
+- If a hardware query is denied, record that command as unavailable and use a direct OS hardware profile only when it reports the fact. Do not infer a CPU or RAM value from the target definition.
+- Do not change the current machine's 18 GB to 4 GB or record a simulated memory limit as installed physical RAM. A physical 4 GB claim requires matching hardware facts and RAM evidence; application performance certification still needs the separate benchmark protocol in `docs/ARCHITECTURE.md` §8.
+
+## Benchmark audio fixtures
+
+The English ASR evaluation fixture manifest is [`docs/benchmark-fixtures.json`](docs/benchmark-fixtures.json), and its provenance, transcription, coverage, normalization, and redistribution policy is [`docs/BENCHMARK_FIXTURES.md`](docs/BENCHMARK_FIXTURES.md). These are development-only evaluation inputs; Outflow does not record user microphone audio for this corpus.
+
+Validate the manifest and run all standard-library script tests from the repository root:
+
+```sh
+python3 scripts/validate_fixture_manifest.py
+python3 -m unittest discover -s scripts/tests -v
+```
+
+To add a fixture safely, follow the fixture policy: verify the exact source and redistribution rights, select non-sensitive audio, create and human-check a separate reference file, record the observed recording condition, compute the SHA-256 of the final audio bytes, and add the metadata and verification evidence to the manifest. Then run both commands above and review the diff for personal recordings, customer speech, or sensitive transcripts. Never add audio or references before privacy and license review.
+
+A fixture is benchmark-ready only when its local audio and non-empty human reference file exist, audio checksum matches, provenance and redistribution permission are verified with reviewable evidence, and its human transcription is verified. Planned entries currently have no reference recordings, verified references, permission evidence, or audio hashes; ready audio fixtures: **0**. Consequently the corpus is not benchmark-ready and T-003 and AC-06 remain incomplete.
+
+Troubleshooting:
+
+- **Manifest valid but ASR readiness is NOT READY:** this is expected while entries are planned. Validation does not create or download audio.
+- **A ready entry is rejected for a missing file:** use a repository-relative path to an existing regular file and ensure symlinks resolve inside the repository.
+- **Checksum mismatch:** recompute SHA-256 from the exact final audio bytes after any re-encoding or edit, then review the fixture as a changed asset.
+- **Provenance or permission is not verified:** keep the fixture planned until the specific audio's source and redistribution rights are documented.
+- **Human reference is not verified:** compare the entire recording against its separate reference; do not use an ASR output as the gold transcript.
+
+## Synthetic Word Error Rate calculator
+
+The development-only calculator scores lexical word errors between a reference transcription and a prediction. It uses word-level Levenshtein alignment and reports substitutions (**S**), deletions (**D**), insertions (**I**), and the reference word count (**N**) with:
+
+```text
+WER = (S + D + I) / N
+```
+
+Run the self-contained demonstration from the repository root:
+
+```sh
+python3 scripts/score_wer.py --demo
+```
+
+It uses the synthetic reference `the quick brown fox` and prediction `the quick fox`, and prints:
+
+```text
+Outflow WER calculator ready
+Reference words: 4
+Substitutions: 0
+Deletions: 1
+Insertions: 0
+Word Error Rate: 25.00%
+```
+
+Code can also call `scripts.score_wer.calculate_wer(reference, prediction)`. The result contains edit counts, reference word count, edit distance, and `wer` as a fraction (`0.25` means 25%). For an empty normalized reference, `wer` is `None` because its denominator is zero; insertion counts are still returned. WER may exceed 100% when insertions outnumber reference words.
+
+Normalization follows the fixture policy's NFC normalization, Unicode lowercase, collapsed whitespace, and punctuation-free lexical scoring. The policy does not define exact Unicode token boundaries. For this synthetic calculator only, the provisional `provisional-unicode-boundary-v1` tokenizer treats runs of Unicode letters, numbers, and combining marks as words, with punctuation and other characters separating tokens. It preserves token spellings, does not expand contractions or rewrite numbers, and does not apply vocabulary corrections. This provisional tokenizer is not a frozen benchmark rule; decide and document the exact tokenization policy before scoring any real corpus. Punctuation accuracy remains a separate evaluation and is not calculated here.
+
+Run the standard-library tests with:
+
+```sh
+python3 -m unittest discover -s scripts/tests -v
+```
+
+The WER tests use synthetic strings only; existing manifest-validator tests may create temporary synthetic files. The suite does not run speech recognition, load real recordings, read real fixture transcripts, or store benchmark results. Passing synthetic scoring tests is not a real ASR benchmark and does not satisfy T-003, T-010, or AC-06. Real evaluation still requires a frozen, licensed, human-verified corpus and the hardware/model gates in the benchmark protocol.
+
+Troubleshooting:
+
+- **The demo reports an argument error:** run it with `--demo` from the repository root.
+- **An empty-reference result has no numeric WER:** this is intentional; there is no reference-word denominator. Silence/no-speech evaluation is separate.
+- **A punctuation or contraction case is tokenized unexpectedly:** the punctuation boundary rule is provisional. Do not use it as a benchmark policy until the fixture policy is explicitly frozen.
+- **You need benchmark results:** the manifest currently has zero ready audio fixtures; this calculator does not load audio, run an ASR model, or create results.
 
 ## Rust workspace foundation
 
@@ -29,7 +121,8 @@ crates/
     ├── examples/json_roundtrip.rs
     ├── examples/version_compatibility.rs
     ├── examples/load_settings.rs
-    └── examples/initialize_settings.rs
+    ├── examples/initialize_settings.rs
+    └── examples/reset_settings.rs
 ```
 
 The `outflow-core` library currently provides a development-only status function. Run its example from the project root:
@@ -136,7 +229,7 @@ Validation: passed
 
 Schema version **1** is the only supported version. Version **0** is rejected because the project has no historical v0 settings shape; it must not be guessed or converted. Versions greater than 1 are rejected until an explicit, tested migration path exists. Missing, `null`, negative, non-integer, string, malformed, or out-of-range version fields are rejected. The decoder never treats an unknown version as v1 and never substitutes defaults after an error. Errors do not include raw JSON or vocabulary text.
 
-The loader and atomic writer accept schema v1 only. A version may be migrated only through an explicitly defined and tested path. Unknown newer versions must be rejected rather than downgraded; invalid or unsupported settings must not be overwritten. Any future migration must preserve user settings and vocabulary, or report failure without changing the original configuration. No v0-to-v1 migration is planned without evidence of a real historical v0 schema.
+The loader accepts schema v1 only. A version may be migrated only through an explicitly defined and tested path; unknown newer versions must be rejected rather than downgraded. Initialization never overwrites invalid or unsupported settings. The separate confirmed reset below is the deliberate discard path and does not migrate the old document. Any future migration must preserve user settings and vocabulary, or report failure without changing the original configuration. No v0-to-v1 migration is planned without evidence of a real historical v0 schema.
 
 Run the compatibility example from the repository root:
 
@@ -192,7 +285,7 @@ RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
 
 Malformed JSON, unsupported schema versions, invalid values, invalid UTF-8, oversized files, unsafe paths, permission denials, and other filesystem failures return the existing structured `SettingsStorageError`. Initialization never turns a loading error into defaults and never repairs, deletes, renames, backs up, or overwrites a file. Error text contains safe error categories and parser locations, not raw JSON or vocabulary/shortcut values.
 
-Initialization does not save defaults automatically so first-run does not silently create persistent settings, and a damaged or newer configuration cannot be silently replaced. A future caller may choose when to persist settings through the existing `save_settings_atomic()` API. Current recovery is detection and reporting only: there is no user-directed reset, backup restore, schema migration, configuration-directory discovery, Tauri command, or frontend synchronization in this slice. Keep an invalid source file intact for future user-directed recovery.
+Initialization does not save defaults automatically so first-run does not silently create persistent settings, and a damaged or newer configuration cannot be silently replaced. Invalid input remains available for deliberate recovery with the separately confirmed reset described below. Backup restore, schema migration, configuration-directory discovery, a Tauri command, and frontend synchronization are not implemented.
 
 Run the synthetic temporary-directory example and the Rust tests from the repository root:
 
@@ -216,11 +309,61 @@ The verified run on macOS 26.6.2 arm64 passed all **63 Rust workspace tests** (6
 Troubleshooting:
 
 - **First run returns defaults:** this is expected when the explicit path is missing; defaults remain in memory until an approved caller saves them.
-- **Malformed JSON, unsupported version, or invalid settings:** initialization stops with a redacted error and leaves the original file unchanged. Preserve it for future user-directed recovery; no automatic repair or migration is available.
+- **Malformed JSON, unsupported version, or invalid settings:** initialization stops with a redacted error and leaves the original file unchanged. To replace it, use the separate reset only after explicit confirmation; no automatic repair or migration occurs.
 - **Invalid UTF-8 or file too large:** the loader rejects the file before decoding and does not truncate or replace it.
 - **Permission or filesystem error:** initialization returns the loader's structured failure instead of defaults. Check that the supplied path is a readable regular file and that the parent is accessible. Error messages omit paths and operating-system error text.
 
 These behaviors were exercised on macOS 26.6.2 arm64 only. Linux and Windows were not tested in this task; the existing writer remains Unix-only.
+
+### Explicit settings reset
+
+`outflow_settings::reset_settings_to_defaults(path, confirmed)` replaces an existing settings file with the compiled, validated schema v1 defaults only when `confirmed` is `true`. Confirmation is required because the operation discards local preferences and custom vocabulary. The boolean records caller intent; it is not a security boundary or a substitute for a future native confirmation prompt. No Reset button, dialog, Tauri command, or frontend connection exists yet.
+
+Reset clears the custom vocabulary and returns settings to their defaults: English, unconfigured shortcuts, the system-default input device, Clean mode with filler removal, Launch at Login off, and user-initiated update checks. The reset checks for an existing regular file and rejects symbolic links. It does not read or parse the old contents, so the same explicit operation can replace malformed JSON, invalid settings, or an unsupported schema version. A missing file returns `DestinationMissing`; reset never creates a first-run file. `initialize_settings()` remains read-only and never calls reset, so invalid or unreadable settings continue to produce errors with the source file unchanged until reset is explicitly invoked.
+
+On Unix, reset uses the existing same-directory temporary file and atomic rename path. The replacement file is owner-only (`0600`), and the original is not truncated or deleted before rename. Any failure before replacement preserves the original file. If rename succeeds but parent-directory synchronization fails, reset returns `ReplacementDurabilityUncertain`: the new defaults are visible, but crash durability is not confirmed. Callers must not automatically retry this uncertain outcome. No backup is created. Filesystem snapshots and operating-system backups may retain older settings; reset is not secure erasure.
+
+The reset is currently available only where the atomic writer is implemented: Unix. Windows and other non-Unix targets fail closed with `UnsupportedPlatform` until owner-only ACL and atomic replacement guarantees are implemented. Filesystem tests in this task ran on macOS 26.6.2 arm64; Linux behavior has not been tested.
+
+Run the example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-settings --example reset_settings
+```
+
+It uses synthetic settings in a temporary directory, performs no network operations, prints no settings values or absolute paths, and removes its temporary files on exit. Expected output:
+
+```text
+Outflow settings reset ready
+Unconfirmed reset: cancelled
+Confirmed reset: defaults restored
+Invalid configuration: recovered
+Schema version: 1
+```
+
+Run the automated Rust and frontend checks with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+Troubleshooting:
+
+- **Reset says it was not confirmed:** the file is untouched. Obtain explicit user confirmation in the calling UI before passing `true`.
+- **Reset reports a missing or unsafe destination:** it only accepts an existing regular file, not a missing path, directory, or symbolic link. Create or select the intended settings file through the caller; reset itself does not create one.
+- **Initialization rejects malformed JSON or an unsupported version:** that behavior is intentional and leaves the file untouched. To recover, explicitly confirm a reset; reset does not need the old document to parse.
+- **Reset returns `ReplacementFailed`:** replacement did not occur and the prior file remains. Check that the parent directory is accessible and writable, then resolve the filesystem issue before invoking reset again.
+- **Reset returns `ReplacementDurabilityUncertain`:** rename already happened and defaults are visible. Do not automatically retry; inspect the resulting file or let the user decide what to do next.
+- **Reset returns `UnsupportedPlatform`:** the current atomic writer has no owner-only implementation on that platform. It does not fall back to a less restrictive write.
+- **Old data remains in a system backup or snapshot:** reset replaces Outflow's settings file, but it does not securely erase snapshots or OS-managed backups.
 
 ### Atomic settings file writing
 
@@ -505,4 +648,4 @@ The running page was visually inspected in the browser at **1440×900**, **390×
 
 ## Current implementation status
 
-The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading and safe initialization, and explicit-path atomic writes on Unix. Settings initialization and filesystem loading were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, user-directed recovery, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Home features, reusable component library, Tauri shell, microphone capture, or dictation behavior is included yet. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.
+The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading and safe initialization, explicit confirmed reset, and explicit-path atomic writes on Unix. The reset and settings filesystem behavior were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Reset button, confirmation dialog, Tauri command, Home features, reusable component library, Tauri shell, microphone capture, or dictation behavior is included yet. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.

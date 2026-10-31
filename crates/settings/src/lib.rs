@@ -1,13 +1,15 @@
 //! Typed model, JSON codec, and validation for Outflow's local settings schema v1.
 //!
 //! This crate owns configuration values, an in-memory schema v1 JSON codec,
-//! read-only settings loading and initialization, and an explicit-path atomic
-//! file writer. It performs no migration, networking, or operating system
-//! integration. Its reader accepts schema v1 only, rejects unknown fields, and
-//! validates decoded values. Schema v0 is unsupported because no historical v0
-//! shape exists; every other unknown version is also rejected until an explicit,
-//! tested migration path is defined. Rejected settings are never replaced with
-//! defaults. The data model follows C-08 and `docs/ARCHITECTURE.md` §7.
+//! read-only settings loading and initialization, user-directed settings reset,
+//! and an explicit-path atomic file writer. It performs no migration,
+//! networking, or operating system integration. Its reader accepts schema v1
+//! only, rejects unknown fields, and validates decoded values. Schema v0 is
+//! unsupported because no historical v0 shape exists; every other unknown
+//! version is also rejected until an explicit, tested migration path is defined.
+//! Rejected settings are never replaced with defaults unless a caller explicitly
+//! confirms the separate reset operation. The data model follows C-08 and
+//! `docs/ARCHITECTURE.md` §7.
 
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -20,7 +22,7 @@ pub mod storage;
 
 pub use storage::{
     MAX_SETTINGS_FILE_BYTES, SettingsStorageError, SettingsStorageOperation, load_settings,
-    save_settings_atomic,
+    reset_settings_to_defaults, save_settings_atomic,
 };
 
 /// Whether settings were loaded from an existing file or are available as

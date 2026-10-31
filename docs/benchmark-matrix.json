@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "purpose": "Development and benchmarking inventory only; hardware availability is not performance certification.",
+  "required_physical_ram_gb": 4,
+  "cpu_only_required": true,
+  "performance_certification": "NOT_ASSESSED",
+  "targets": [
+    {
+      "id": "macos_13_plus_arm64",
+      "target_os": "macOS",
+      "supported_version": "13+",
+      "architecture": "arm64",
+      "support_tier": "Tier 1 — subject to Phase 0 validation",
+      "availability": "AVAILABLE",
+      "required_physical_ram_gb": 4,
+      "cpu_only_required": true,
+      "physical_4gb_test_machine_verified": false,
+      "hardware": {
+        "machine_label": "MAC-ARM64-01",
+        "os_name": "macOS",
+        "os_version": "26.6.2",
+        "os_build": "25G83",
+        "machine_model": "MacBook Pro (Mac15,6)",
+        "cpu_model": "Apple M3 Pro",
+        "architecture": "arm64",
+        "physical_ram_gb": 18
+      },
+      "evidence": {
+        "os_name": "sw_vers: ProductName",
+        "os_version": "sw_vers: ProductVersion",
+        "os_build": "sw_vers: BuildVersion",
+        "machine_model": "sysctl -n hw.model was blocked; filtered system_profiler SPHardwareDataType: Model Name and Model Identifier",
+        "cpu_model": "filtered system_profiler SPHardwareDataType: Chip",
+        "architecture": "uname -m",
+        "physical_ram_gb": "filtered system_profiler SPHardwareDataType: Memory (installed physical memory)"
+      },
+      "notes": "Physical Apple Silicon host is available for macOS platform work. Its installed physical RAM is 18 GB, not 4 GB; it does not satisfy the physical 4 GB reference-machine requirement. sysctl hw.memsize, hw.model, and machdep.cpu.brand_string were blocked with Operation not permitted. No memory limit or simulation is treated as physical RAM."
+    },
+    {
+      "id": "macos_13_plus_intel_x64",
+      "target_os": "macOS",
+      "supported_version": "13+",
+      "architecture": "x64",
+      "support_tier": "Tier 2 — gated",
+      "availability": "UNAVAILABLE",
+      "required_physical_ram_gb": 4,
+      "cpu_only_required": true,
+      "physical_4gb_test_machine_verified": false,
+      "hardware": {
+        "machine_label": null,
+        "os_name": null,
+        "os_version": null,
+        "os_build": null,
+        "machine_model": null,
+        "cpu_model": null,
+        "architecture": null,
+        "physical_ram_gb": null
+      },
+      "evidence": {},
+      "notes": "No suitable Intel Mac test machine is available in the current task environment. Verify current macOS version eligibility, Intel CPU compatibility, CPU-only model performance, physical 4 GB behavior, installer, and interaction matrix."
+    },
+    {
+      "id": "windows_10_11_x64",
+      "target_os": "Windows",
+      "supported_version": "10/11",
+      "architecture": "x64",
+      "support_tier": "Tier 1",
+      "availability": "UNAVAILABLE",
+      "required_physical_ram_gb": 4,
+      "cpu_only_required": true,
+      "physical_4gb_test_machine_verified": false,
+      "hardware": {
+        "machine_label": null,
+        "os_name": null,
+        "os_version": null,
+        "os_build": null,
+        "machine_model": null,
+        "cpu_model": null,
+        "architecture": null,
+        "physical_ram_gb": null
+      },
+      "evidence": {},
+      "notes": "No suitable physical Windows x64 test machine is available in the current task environment. Acquire or identify 4 GB hardware and verify Windows build, CPU, WebView2/runtime, WASAPI, UIPI, installation, and focus-safe interaction."
+    },
+    {
+      "id": "ubuntu_family_x11_x64",
+      "target_os": "Ubuntu-family Linux with X11",
+      "supported_version": "Exact supported release not specified in TECH_STACK.md",
+      "architecture": "x64",
+      "support_tier": "Tier 1",
+      "availability": "UNAVAILABLE",
+      "required_physical_ram_gb": 4,
+      "cpu_only_required": true,
+      "physical_4gb_test_machine_verified": false,
+      "hardware": {
+        "machine_label": null,
+        "os_name": null,
+        "os_version": null,
+        "os_build": null,
+        "machine_model": null,
+        "cpu_model": null,
+        "architecture": null,
+        "physical_ram_gb": null
+      },
+      "evidence": {},
+      "notes": "No suitable physical Ubuntu-family X11 x64 test machine is available in the current task environment. Confirm the supported distro release, then verify its X11 session, audio, tray, package dependencies, and physical 4 GB CPU-only behavior."
+    },
+    {
+      "id": "fedora_family_x11_x64",
+      "target_os": "Fedora-family Linux with X11",
+      "supported_version": "Exact supported release not specified in TECH_STACK.md",
+      "architecture": "x64",
+      "support_tier": "Tier 2",
+      "availability": "UNAVAILABLE",
+      "required_physical_ram_gb": 4,
+      "cpu_only_required": true,
+      "physical_4gb_test_machine_verified": false,
+      "hardware": {
+        "machine_label": null,
+        "os_name": null,
+        "os_version": null,
+        "os_build": null,
+        "machine_model": null,
+        "cpu_model": null,
+        "architecture": null,
+        "physical_ram_gb": null
+      },
+      "evidence": {},
+      "notes": "No suitable physical Fedora-family X11 x64 test machine is available in the current task environment. Confirm the supported distro release and package/runtime naming, then verify X11, audio, tray, installation, and physical 4 GB CPU-only behavior."
+    },
+    {
+      "id": "gnome_kde_wayland_x64",
+      "target_os": "GNOME/KDE Linux with Wayland",
+      "supported_version": "Compositor- and portal-dependent; exact releases not specified",
+      "architecture": "x64",
+      "support_tier": "Best-effort",
+      "availability": "UNAVAILABLE",
+      "required_physical_ram_gb": 4,
+      "cpu_only_required": true,
+      "physical_4gb_test_machine_verified": false,
+      "hardware": {
+        "machine_label": null,
+        "os_name": null,
+        "os_version": null,
+        "os_build": null,
+        "machine_model": null,
+        "cpu_model": null,
+        "architecture": null,
+        "physical_ram_gb": null
+      },
+      "evidence": {},
+      "notes": "No suitable physical GNOME or KDE Wayland test machine is available in the current task environment. Test each compositor/portal combination separately; shortcut and insertion capabilities remain best-effort, with explicit Copy fallback where unavailable."
+    }
+  ]
+}

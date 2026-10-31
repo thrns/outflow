@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "language": "English",
+  "collection_status": "planned",
+  "reference_transcription_policy": "Store a human-verified verbatim reference for every audio fixture, including spoken words and intended punctuation. Keep references in the corresponding reference file; do not place transcript text in this manifest. Record the normalization version used for evaluation in benchmark evidence.",
+  "audio_integrity_requirements": {
+    "checksum_algorithm": "SHA-256",
+    "checksum_scope": "Hash the exact bytes of the repository-relative audio file.",
+    "missing_audio_policy": "An entry is not ready unless its referenced audio exists locally and matches its declared checksum."
+  },
+  "fixtures": [
+    {
+      "id": "short_speech_001",
+      "status": "planned",
+      "category": "short_speech",
+      "recording_condition": "Plan: one short English phrase in a quiet setting; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    },
+    {
+      "id": "long_speech_001",
+      "status": "planned",
+      "category": "long_speech",
+      "recording_condition": "Plan: a longer continuous English utterance in a quiet setting; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    },
+    {
+      "id": "quiet_environment_001",
+      "status": "planned",
+      "category": "quiet_environment",
+      "recording_condition": "Plan: English speech with low background noise; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    },
+    {
+      "id": "noisy_environment_001",
+      "status": "planned",
+      "category": "noisy_environment",
+      "recording_condition": "Plan: English speech with documented background noise; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    },
+    {
+      "id": "accented_english_001",
+      "status": "planned",
+      "category": "accented_english",
+      "recording_condition": "Plan: English speech with speaker variety documented from the source; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    },
+    {
+      "id": "proper_nouns_technical_001",
+      "status": "planned",
+      "category": "proper_nouns_technical_vocabulary",
+      "recording_condition": "Plan: English speech containing documented names or technical terms; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    },
+    {
+      "id": "numbers_001",
+      "status": "planned",
+      "category": "numbers",
+      "recording_condition": "Plan: English speech containing spoken numbers; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    },
+    {
+      "id": "silence_001",
+      "status": "planned",
+      "category": "silence",
+      "recording_condition": "Plan: a silence/no-speech control recording; no recording selected.",
+      "audio_file": null,
+      "audio_sha256": null,
+      "reference_file": null,
+      "provenance": {
+        "source": null,
+        "citation": null
+      },
+      "license_or_permission_status": "not_verified",
+      "license_or_permission_evidence": null,
+      "human_transcription_status": "not_verified"
+    }
+  ]
+}

@@ -1,12 +1,15 @@
-//! Explicit-path file loading and atomic persistence for the C-08 settings model.
+//! Explicit-path loading, user-directed reset, and atomic persistence for C-08 settings.
 //!
 //! The loader reads only a caller-supplied regular file, caps input at
 //! [`MAX_SETTINGS_FILE_BYTES`], and validates through [`Settings::from_json`].
 //! The writer validates and encodes through [`Settings::to_json`], creates a
 //! same-directory temporary file, synchronizes it, and atomically renames it
-//! over the destination. Unix files use mode `0600`; non-Unix writer targets
-//! fail closed until an approved owner-only ACL implementation is available.
-//! This module does not discover paths, migrate versions, or access the network.
+//! over the destination. A confirmed reset requires an existing regular file
+//! and writes validated defaults through that same path. Unix files use mode
+//! `0600`; non-Unix writer targets fail closed until an approved owner-only ACL
+//! implementation is available. Filesystem snapshots and OS backups may retain
+//! prior settings; replacement is not secure erasure. This module does not
+//! discover paths, migrate versions, or access the network.
 
 use crate::{Settings, SettingsError, SettingsJsonError};
 use std::error::Error;
@@ -72,6 +75,10 @@ pub enum SettingsStorageError {
     SerializationFailed,
     /// The destination path does not name a file entry.
     InvalidDestinationPath,
+    /// No existing settings file was available to reset; reset never creates one.
+    DestinationMissing,
+    /// The caller did not confirm the requested settings reset.
+    ResetNotConfirmed,
     /// The supplied source path does not name a file entry.
     InvalidFilePath,
     /// The destination parent does not exist.
@@ -131,6 +138,12 @@ impl Display for SettingsStorageError {
             Self::SerializationFailed => formatter.write_str("settings serialization failed"),
             Self::InvalidDestinationPath => {
                 formatter.write_str("destination path must name a file")
+            }
+            Self::DestinationMissing => {
+                formatter.write_str("settings file does not exist; reset did not create one")
+            }
+            Self::ResetNotConfirmed => {
+                formatter.write_str("settings reset was not confirmed")
             }
             Self::InvalidFilePath => formatter.write_str("settings path must name a file"),
             Self::MissingParentDirectory => {
@@ -330,7 +343,10 @@ mod load_tests {
     use super::{
         MAX_SETTINGS_FILE_BYTES, SettingsStorageError, SettingsStorageOperation, load_settings,
     };
-    use crate::{Settings, SettingsError, SettingsInitialization, initialize_settings};
+    use crate::{
+        Settings, SettingsError, SettingsInitialization, initialize_settings,
+        reset_settings_to_defaults,
+    };
     use std::fs;
     use std::io;
     use std::path::{Path, PathBuf};
@@ -775,6 +791,242 @@ mod load_tests {
         assert!(error.to_string().contains("inspect settings file"));
         assert!(!error.to_string().contains("not-a-directory-private-name"));
     }
+
+    #[test]
+    fn reset_without_confirmation_does_not_modify_the_file_or_disclose_content() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let prior = br#"{"vocabulary":[{"spoken":"private reset phrase"}]}"#;
+        fs::write(&path, prior).expect("write synthetic settings");
+
+        let error = reset_settings_to_defaults(&path, false)
+            .expect_err("unconfirmed reset must be cancelled");
+
+        assert_eq!(error, SettingsStorageError::ResetNotConfirmed);
+        assert!(!error.to_string().contains("private reset phrase"));
+        assert_eq!(fs::read(path).expect("read unchanged settings"), prior);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn confirmed_reset_replaces_vocabulary_and_preferences_with_defaults() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let custom = Settings {
+            cleanup: crate::CleanupSettings {
+                mode: crate::CleanupMode::Verbatim,
+                remove_fillers: false,
+            },
+            startup: crate::StartupSettings { run_at_login: true },
+            vocabulary: vec![crate::VocabularyEntry {
+                id: "synthetic-reset-entry".to_owned(),
+                spoken: "synthetic reset phrase".to_owned(),
+                written: "Synthetic Reset Phrase".to_owned(),
+            }],
+            ..Settings::default()
+        };
+        fs::write(&path, custom.to_json().expect("encode synthetic settings"))
+            .expect("write custom settings");
+
+        reset_settings_to_defaults(&path, true).expect("confirmed reset succeeds");
+
+        let restored = load_settings(&path)
+            .expect("reset file loads and validates")
+            .expect("reset file exists");
+        assert_eq!(restored, Settings::default());
+        assert_eq!(restored.schema_version, 1);
+        assert!(restored.vocabulary.is_empty());
+        assert_eq!(restored.cleanup, crate::CleanupSettings::default());
+        assert_eq!(restored.startup, crate::StartupSettings::default());
+        assert_eq!(
+            fs::metadata(path)
+                .expect("inspect reset file permissions")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn malformed_configuration_can_be_reset_to_valid_defaults() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        fs::write(&path, b"{ malformed private settings")
+            .expect("write malformed synthetic settings");
+
+        reset_settings_to_defaults(&path, true).expect("explicit reset recovers malformed JSON");
+
+        assert_eq!(load_settings(&path), Ok(Some(Settings::default())));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unsupported_schema_configuration_can_be_reset_explicitly() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let mut document: serde_json::Value = serde_json::from_str(
+            &Settings::default()
+                .to_json()
+                .expect("encode synthetic defaults"),
+        )
+        .expect("decode synthetic defaults");
+        document["schema_version"] = serde_json::json!(88);
+        fs::write(
+            &path,
+            serde_json::to_vec(&document).expect("encode unsupported schema fixture"),
+        )
+        .expect("write unsupported synthetic settings");
+
+        reset_settings_to_defaults(&path, true).expect("explicit reset replaces unsupported JSON");
+
+        assert_eq!(load_settings(&path), Ok(Some(Settings::default())));
+    }
+
+    #[test]
+    fn confirmed_reset_does_not_create_a_missing_configuration() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("missing-settings.json");
+
+        assert_eq!(
+            reset_settings_to_defaults(&path, true),
+            Err(SettingsStorageError::DestinationMissing)
+        );
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reset_rejects_a_symbolic_link_without_changing_its_target() {
+        use std::os::unix::fs::symlink;
+
+        let directory = TestDirectory::new();
+        let target = directory.path().join("real-settings.json");
+        let link = directory.path().join("settings.json");
+        let prior = b"synthetic symlink target";
+        fs::write(&target, prior).expect("write synthetic target");
+        symlink(&target, &link).expect("create destination symlink");
+
+        assert_eq!(
+            reset_settings_to_defaults(&link, true),
+            Err(SettingsStorageError::UnsafeDestination)
+        );
+        assert_eq!(fs::read(target).expect("target remains unchanged"), prior);
+        assert!(
+            fs::symlink_metadata(link)
+                .expect("link remains present")
+                .file_type()
+                .is_symlink()
+        );
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn confirmed_reset_fails_closed_without_changing_files_on_non_unix() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let prior = b"synthetic prior settings";
+        fs::write(&path, prior).expect("write synthetic settings");
+
+        assert_eq!(
+            reset_settings_to_defaults(&path, true),
+            Err(SettingsStorageError::UnsupportedPlatform)
+        );
+        assert_eq!(fs::read(path).expect("settings remain unchanged"), prior);
+    }
+
+    #[test]
+    fn initialization_does_not_reset_invalid_configuration_automatically() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let prior = b"{ private malformed settings";
+        fs::write(&path, prior).expect("write malformed settings");
+
+        assert!(initialize_settings(&path).is_err());
+        assert_eq!(fs::read(path).expect("read preserved settings"), prior);
+    }
+}
+
+/// Replaces an existing settings file with validated schema v1 defaults after
+/// the caller explicitly confirms the reset.
+///
+/// `confirmed` represents caller intent only. A future native UI must obtain
+/// the user's confirmation before invoking this function. When false, this
+/// function returns [`SettingsStorageError::ResetNotConfirmed`] without
+/// inspecting or changing the filesystem. When true, `path` must name an
+/// existing regular file and must not be a symbolic link. The file's current
+/// contents are not read, so malformed JSON and unsupported schema versions
+/// can be deliberately replaced. The replacement uses
+/// [`save_settings_atomic`], including its Unix owner-only mode and durability
+/// behavior; non-Unix writes continue to fail closed.
+///
+/// Reset removes Outflow's previously stored settings and vocabulary from the
+/// replaced file. Filesystem snapshots and operating-system backups may still
+/// retain older data, so this operation does not claim secure erasure. It does
+/// not create backup copies or automatically retry a result whose replacement
+/// durability is uncertain.
+///
+/// # Errors
+///
+/// Returns a redacted error if confirmation is absent, the destination is
+/// missing or unsafe, defaults fail validation, replacement fails, or the
+/// platform lacks the existing atomic writer guarantees. If
+/// [`SettingsStorageError::ReplacementDurabilityUncertain`] is returned, the
+/// replacement is already visible but crash durability could not be confirmed;
+/// callers must not automatically retry it.
+pub fn reset_settings_to_defaults(
+    path: &Path,
+    confirmed: bool,
+) -> Result<(), SettingsStorageError> {
+    reset_settings_to_defaults_with_hooks(
+        path,
+        confirmed,
+        |file, json| file.write_all(json),
+        File::sync_all,
+        || Ok(()),
+        File::sync_all,
+    )
+}
+
+fn reset_settings_to_defaults_with_hooks<W, S, B, P>(
+    path: &Path,
+    confirmed: bool,
+    write_json: W,
+    synchronize_file: S,
+    before_replace: B,
+    synchronize_parent: P,
+) -> Result<(), SettingsStorageError>
+where
+    W: FnOnce(&mut File, &[u8]) -> io::Result<()>,
+    S: FnOnce(&File) -> io::Result<()>,
+    B: FnOnce() -> io::Result<()>,
+    P: FnOnce(&File) -> io::Result<()>,
+{
+    if !confirmed {
+        return Err(SettingsStorageError::ResetNotConfirmed);
+    }
+
+    // Reset must never turn a missing configuration into a newly created file.
+    // The writer checks this condition again immediately before replacement.
+    inspect_destination(path, true)?;
+
+    let defaults = Settings::default();
+    defaults
+        .validate()
+        .map_err(SettingsStorageError::InvalidSettings)?;
+
+    save_settings_atomic_with_destination_policy(
+        path,
+        &defaults,
+        true,
+        write_json,
+        synchronize_file,
+        before_replace,
+        synchronize_parent,
+    )
 }
 
 /// Validates and atomically writes schema v1 settings to `path`.
@@ -822,6 +1074,32 @@ where
     B: FnOnce() -> io::Result<()>,
     P: FnOnce(&File) -> io::Result<()>,
 {
+    save_settings_atomic_with_destination_policy(
+        path,
+        settings,
+        false,
+        write_json,
+        synchronize_file,
+        before_replace,
+        synchronize_parent,
+    )
+}
+
+fn save_settings_atomic_with_destination_policy<W, S, B, P>(
+    path: &Path,
+    settings: &Settings,
+    require_existing_destination: bool,
+    write_json: W,
+    synchronize_file: S,
+    before_replace: B,
+    synchronize_parent: P,
+) -> Result<(), SettingsStorageError>
+where
+    W: FnOnce(&mut File, &[u8]) -> io::Result<()>,
+    S: FnOnce(&File) -> io::Result<()>,
+    B: FnOnce() -> io::Result<()>,
+    P: FnOnce(&File) -> io::Result<()>,
+{
     settings
         .validate()
         .map_err(SettingsStorageError::InvalidSettings)?;
@@ -832,6 +1110,7 @@ where
         save_json_unix(
             path,
             json.as_bytes(),
+            require_existing_destination,
             write_json,
             synchronize_file,
             before_replace,
@@ -844,6 +1123,7 @@ where
         let _ = (
             path,
             json,
+            require_existing_destination,
             write_json,
             synchronize_file,
             before_replace,
@@ -866,6 +1146,7 @@ fn map_json_error(error: SettingsJsonError) -> SettingsStorageError {
 fn save_json_unix<W, S, B, P>(
     path: &Path,
     json: &[u8],
+    require_existing_destination: bool,
     write_json: W,
     synchronize_file: S,
     before_replace: B,
@@ -902,7 +1183,7 @@ where
         )
     })?;
 
-    check_destination(path)?;
+    inspect_destination(path, require_existing_destination)?;
 
     // Time and process identifiers make names hard to collide in practice;
     // create_new is the actual exclusivity guarantee and retries collisions.
@@ -983,7 +1264,7 @@ where
 
         // Re-check immediately before rename. On Unix rename replaces a
         // destination symlink entry itself rather than following its target.
-        check_destination(path)?;
+        inspect_destination(path, require_existing_destination)?;
         let current_parent_metadata = fs::symlink_metadata(parent).map_err(map_parent_error)?;
         let opened_parent_metadata = parent_directory.metadata().map_err(|error| {
             map_io_error(
@@ -1021,19 +1302,28 @@ where
     result
 }
 
-#[cfg(unix)]
-fn check_destination(path: &Path) -> Result<(), SettingsStorageError> {
+fn inspect_destination(path: &Path, require_existing: bool) -> Result<(), SettingsStorageError> {
+    if path.file_name().filter(|name| !name.is_empty()).is_none() {
+        return Err(SettingsStorageError::InvalidDestinationPath);
+    }
+
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
             Err(SettingsStorageError::UnsafeDestination)
         }
         Ok(_) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound && require_existing => {
+            Err(SettingsStorageError::DestinationMissing)
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(map_io_error(
-            error,
-            SettingsStorageError::UnsafeDestination,
-            SettingsStorageOperation::InspectDestination,
-        )),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            Err(SettingsStorageError::PermissionDenied {
+                operation: SettingsStorageOperation::InspectDestination,
+            })
+        }
+        // Keep the existing writer's redacted fallback category for metadata
+        // errors that do not provide a safe, more specific classification.
+        Err(_) => Err(SettingsStorageError::UnsafeDestination),
     }
 }
 
@@ -1110,8 +1400,8 @@ impl Drop for TemporaryFileGuard {
 #[cfg(all(test, unix))]
 mod tests {
     use super::{
-        SettingsStorageError, SettingsStorageOperation, save_settings_atomic,
-        save_settings_atomic_with_hooks,
+        SettingsStorageError, SettingsStorageOperation, reset_settings_to_defaults_with_hooks,
+        save_settings_atomic, save_settings_atomic_with_hooks,
     };
     use crate::{Settings, SettingsError, VocabularyEntry};
     use std::fs::{self, File};
@@ -1454,6 +1744,63 @@ mod tests {
             Settings::from_json(&stored).expect("decode replacement"),
             settings
         );
+        assert!(temporary_files(directory.path()).is_empty());
+    }
+
+    #[test]
+    fn reset_pre_replacement_failure_preserves_original_and_redacts_hook_error() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let prior = b"synthetic private configuration phrase";
+        fs::write(&path, prior).expect("write prior settings");
+
+        let error = reset_settings_to_defaults_with_hooks(
+            &path,
+            true,
+            |file, json| file.write_all(json),
+            File::sync_all,
+            || Err(io::Error::other("private configuration phrase")),
+            File::sync_all,
+        )
+        .expect_err("simulated pre-replacement interruption");
+
+        assert_eq!(error, SettingsStorageError::ReplacementFailed);
+        assert!(!error.to_string().contains("private configuration phrase"));
+        assert_eq!(fs::read(path).expect("original file remains"), prior);
+        assert!(temporary_files(directory.path()).is_empty());
+    }
+
+    #[test]
+    fn reset_post_replacement_sync_failure_is_uncertain_and_not_retried() {
+        use std::cell::Cell;
+
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        fs::write(
+            &path,
+            valid_settings()
+                .to_json()
+                .expect("encode synthetic custom settings"),
+        )
+        .expect("write custom settings");
+        let parent_sync_calls = Cell::new(0);
+
+        let error = reset_settings_to_defaults_with_hooks(
+            &path,
+            true,
+            |file, json| file.write_all(json),
+            File::sync_all,
+            || Ok(()),
+            |_| {
+                parent_sync_calls.set(parent_sync_calls.get() + 1);
+                Err(io::Error::other("synthetic directory sync failure"))
+            },
+        )
+        .expect_err("post-replacement directory sync is uncertain");
+
+        assert_eq!(error, SettingsStorageError::ReplacementDurabilityUncertain);
+        assert_eq!(parent_sync_calls.get(), 1);
+        assert_eq!(super::load_settings(&path), Ok(Some(Settings::default())));
         assert!(temporary_files(directory.path()).is_empty());
     }
 
