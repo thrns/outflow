@@ -81,7 +81,7 @@ Each task includes the primary feature/acceptance link and concrete completion a
 
 ### M0 — Research, feasibility and security proof (no product release)
 
-- [ ] **T-001 — Initialize repository policies.** Deps: none. Create Rust workspace shell, contribution rules, `.editorconfig`, license/notice templates; pass formatting sanity. [F-01/C-01/AC-01]
+- [x] **T-001 — Initialize repository policies.** Deps: none. Create Rust workspace shell, contribution rules, `.editorconfig`, license/notice templates; pass formatting sanity. [F-01/C-01/AC-01]
 - [ ] **T-002 — Confirm supported OS/CPU matrix.** Deps: T-001. List physical 4 GB target machines and exact OS/build; capture machine/CPU IDs with no personal data. [F-01/C-01/AC-01]
 - [ ] **T-003 — Define benchmark fixture manifest.** Deps: T-001. Record audio corpus provenance, human references, normalization and 100+ speech phrases; version fixture hashes. [F-06/C-05/AC-06]
 - [ ] **T-004 — Implement process-tree RSS sampler.** Deps: T-002. Sample 100 ms, sum all app-owned PIDs including webview helpers; record native PSS/private where possible; unit-test aggregation. [F-01/C-10/AC-01]

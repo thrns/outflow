@@ -5,3 +5,32 @@ coverage/
 *.tsbuildinfo
 target/
 .DS_Store
+
+# Local environment files and signing credentials.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Machine-specific caches and temporary test output.
+.cache/
+.tmp/
+tmp/
+temp/
+
+# Personal dictation content must never enter the repository.
+recordings/
+transcripts/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.caf
+*.aiff
+*.transcript
+*.srt
+*.vtt
