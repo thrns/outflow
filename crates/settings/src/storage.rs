@@ -330,7 +330,7 @@ mod load_tests {
     use super::{
         MAX_SETTINGS_FILE_BYTES, SettingsStorageError, SettingsStorageOperation, load_settings,
     };
-    use crate::{Settings, SettingsError};
+    use crate::{Settings, SettingsError, SettingsInitialization, initialize_settings};
     use std::fs;
     use std::io;
     use std::path::{Path, PathBuf};
@@ -402,6 +402,205 @@ mod load_tests {
 
         assert_eq!(load_settings(&path), Ok(None));
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn initialization_returns_valid_schema_v1_defaults_without_creating_a_file() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("missing-settings.json");
+
+        let initialization = initialize_settings(&path).expect("missing file is first run");
+        let SettingsInitialization::FirstRun(settings) = initialization else {
+            panic!("missing file must return first-run defaults");
+        };
+
+        assert_eq!(settings.schema_version, crate::CURRENT_SCHEMA_VERSION);
+        assert_eq!(settings.schema_version, 1);
+        assert!(settings.validate().is_ok());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn initialization_loads_existing_custom_settings_without_changing_the_file() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let original = valid_settings();
+        let contents = original.to_json().expect("encode synthetic settings");
+        fs::write(&path, contents.as_bytes()).expect("write synthetic file");
+
+        assert_eq!(
+            initialize_settings(&path),
+            Ok(SettingsInitialization::Loaded(original))
+        );
+        assert_eq!(
+            fs::read(path).expect("source file remains readable"),
+            contents.as_bytes()
+        );
+    }
+
+    #[test]
+    fn initialization_rejects_and_preserves_invalid_configurations() {
+        #[derive(Clone, Copy)]
+        enum InvalidFixture {
+            MalformedJson,
+            UnsupportedVersion,
+            InvalidSettings,
+            InvalidUtf8,
+            Oversized,
+        }
+
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let mut unsupported: serde_json::Value = serde_json::from_str(
+            &Settings::default()
+                .to_json()
+                .expect("encode default settings"),
+        )
+        .expect("decode synthetic settings");
+        unsupported["schema_version"] = serde_json::json!(7);
+        unsupported["vocabulary"] = serde_json::json!([{
+            "id": "private-config-value",
+            "spoken": "private spoken phrase",
+            "written": "private written phrase"
+        }]);
+        let mut invalid_settings: serde_json::Value = serde_json::from_str(
+            &Settings::default()
+                .to_json()
+                .expect("encode default settings"),
+        )
+        .expect("decode synthetic settings");
+        invalid_settings["language"] = serde_json::json!("private-config-value");
+
+        let fixtures = [
+            (
+                InvalidFixture::MalformedJson,
+                br#"{"private":"private-config-value", broken}"#.to_vec(),
+            ),
+            (
+                InvalidFixture::UnsupportedVersion,
+                serde_json::to_vec(&unsupported).expect("encode unsupported fixture"),
+            ),
+            (
+                InvalidFixture::InvalidSettings,
+                serde_json::to_vec(&invalid_settings).expect("encode invalid fixture"),
+            ),
+            (
+                InvalidFixture::InvalidUtf8,
+                b"\xffprivate-config-value".to_vec(),
+            ),
+            (
+                InvalidFixture::Oversized,
+                vec![b'x'; (MAX_SETTINGS_FILE_BYTES + 1) as usize],
+            ),
+        ];
+
+        for (fixture, original_bytes) in fixtures {
+            fs::write(&path, &original_bytes).expect("write synthetic invalid configuration");
+            let error = initialize_settings(&path)
+                .expect_err("invalid existing configuration must not become defaults");
+
+            match fixture {
+                InvalidFixture::MalformedJson => {
+                    assert!(matches!(
+                        error,
+                        SettingsStorageError::InvalidDocument { .. }
+                    ));
+                }
+                InvalidFixture::UnsupportedVersion => {
+                    assert_eq!(
+                        error,
+                        SettingsStorageError::InvalidSettings(
+                            SettingsError::UnsupportedSchemaVersion { found: 7 }
+                        )
+                    );
+                }
+                InvalidFixture::InvalidSettings => {
+                    assert_eq!(
+                        error,
+                        SettingsStorageError::InvalidSettings(SettingsError::UnsupportedLanguage)
+                    );
+                }
+                InvalidFixture::InvalidUtf8 => {
+                    assert_eq!(error, SettingsStorageError::InvalidUtf8);
+                }
+                InvalidFixture::Oversized => {
+                    assert_eq!(
+                        error,
+                        SettingsStorageError::FileTooLarge {
+                            max_bytes: MAX_SETTINGS_FILE_BYTES,
+                        }
+                    );
+                }
+            }
+
+            assert!(!error.to_string().contains("private-config-value"));
+            if let Ok(original_json) = std::str::from_utf8(&original_bytes) {
+                assert!(!error.to_string().contains(original_json));
+            }
+            assert_eq!(
+                fs::read(&path).expect("invalid source remains readable"),
+                original_bytes
+            );
+        }
+    }
+
+    #[test]
+    fn initialization_preserves_filesystem_failures_as_errors() {
+        let directory = TestDirectory::new();
+        let parent_file = directory.path().join("not-a-directory");
+        fs::write(&parent_file, b"synthetic").expect("create non-directory parent");
+        let path = parent_file.join("settings.json");
+
+        assert_eq!(
+            initialize_settings(&path),
+            Err(SettingsStorageError::ReadFailed {
+                operation: SettingsStorageOperation::InspectSource,
+            })
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn initialization_reports_permission_denial_without_returning_defaults() {
+        use std::fs::File;
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDirectory::new();
+        let path = directory.path().join("settings.json");
+        let contents = Settings::default()
+            .to_json()
+            .expect("encode synthetic defaults");
+        fs::write(&path, contents.as_bytes()).expect("write synthetic file");
+        let mut permissions = fs::metadata(&path)
+            .expect("inspect synthetic file")
+            .permissions();
+        permissions.set_mode(0o000);
+        fs::set_permissions(&path, permissions).expect("deny file read access");
+
+        // Privileged test runners may bypass mode bits; skip the filesystem
+        // denial assertion there because no portable permission fixture exists.
+        if File::open(&path).is_ok() {
+            let mut permissions = fs::metadata(&path)
+                .expect("inspect synthetic file")
+                .permissions();
+            permissions.set_mode(0o600);
+            fs::set_permissions(&path, permissions).expect("restore synthetic file access");
+            return;
+        }
+
+        let result = initialize_settings(&path);
+        let mut permissions = fs::metadata(&path)
+            .expect("inspect synthetic file")
+            .permissions();
+        permissions.set_mode(0o600);
+        fs::set_permissions(&path, permissions).expect("restore synthetic file access");
+
+        assert!(matches!(
+            result,
+            Err(SettingsStorageError::PermissionDenied {
+                operation: SettingsStorageOperation::ReadSettingsFile,
+            })
+        ));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path file loading, and an atomic JSON writer on Unix. The Tauri desktop shell, microphone and dictation flows, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path file loading and safe initialization, and an atomic JSON writer on Unix. The Tauri desktop shell, microphone and dictation flows, Windows owner-only ACL writing, and release packaging have not been implemented.
 
 ## Prerequisites
 
@@ -28,7 +28,8 @@ crates/
     ├── examples/defaults.rs
     ├── examples/json_roundtrip.rs
     ├── examples/version_compatibility.rs
-    └── examples/load_settings.rs
+    ├── examples/load_settings.rs
+    └── examples/initialize_settings.rs
 ```
 
 The `outflow-core` library currently provides a development-only status function. Run its example from the project root:
@@ -57,7 +58,7 @@ These are development checks only; the examples are not application runtime feat
 
 ## Native Rust settings schema v1
 
-The independent `outflow-settings` crate under `crates/settings/` defines local configuration data, JSON serialization, validation, an explicit-path read-only loader, and an explicit-path atomic writer. It uses `serde = 1.0.229` with derive support and `serde_json = 1.0.154`. It has no Tauri or operating-system integration dependency and performs no network operations. The loader uses standard-library filesystem APIs; the writer is currently implemented on Unix and neither API connects to the React preview.
+The independent `outflow-settings` crate under `crates/settings/` defines local configuration data, JSON serialization, validation, an explicit-path read-only loader and initializer, and an explicit-path atomic writer. It uses `serde = 1.0.229` with derive support and `serde_json = 1.0.154`. It has no Tauri or operating-system integration dependency and performs no network operations. The loader uses standard-library filesystem APIs; the writer is currently implemented on Unix and these APIs do not connect to the React preview.
 
 Schema version **1** is the only version supported by this model. Defaults are:
 
@@ -181,6 +182,45 @@ Run loader and atomic-writer regression tests with:
 ```sh
 RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
 ```
+
+### Safe settings initialization
+
+`outflow_settings::initialize_settings(&path)` uses the explicit-path loader and returns one of two results:
+
+- `SettingsInitialization::Loaded(settings)` when an existing schema v1 file is valid. The file is left unchanged.
+- `SettingsInitialization::FirstRun(settings)` when the file is missing. The compiled-in defaults are validated and returned in memory; no file is created.
+
+Malformed JSON, unsupported schema versions, invalid values, invalid UTF-8, oversized files, unsafe paths, permission denials, and other filesystem failures return the existing structured `SettingsStorageError`. Initialization never turns a loading error into defaults and never repairs, deletes, renames, backs up, or overwrites a file. Error text contains safe error categories and parser locations, not raw JSON or vocabulary/shortcut values.
+
+Initialization does not save defaults automatically so first-run does not silently create persistent settings, and a damaged or newer configuration cannot be silently replaced. A future caller may choose when to persist settings through the existing `save_settings_atomic()` API. Current recovery is detection and reporting only: there is no user-directed reset, backup restore, schema migration, configuration-directory discovery, Tauri command, or frontend synchronization in this slice. Keep an invalid source file intact for future user-directed recovery.
+
+Run the synthetic temporary-directory example and the Rust tests from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-settings --example initialize_settings
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+```
+
+The example removes its temporary directory on exit and prints:
+
+```text
+Outflow settings initialization ready
+Missing configuration: defaults initialized
+Valid configuration: loaded
+Invalid configuration: recovery required
+Original invalid file: preserved
+```
+
+The verified run on macOS 26.6.2 arm64 passed all **63 Rust workspace tests** (61 settings and 2 core). The existing **16 frontend tests** also passed; no frontend source changed.
+
+Troubleshooting:
+
+- **First run returns defaults:** this is expected when the explicit path is missing; defaults remain in memory until an approved caller saves them.
+- **Malformed JSON, unsupported version, or invalid settings:** initialization stops with a redacted error and leaves the original file unchanged. Preserve it for future user-directed recovery; no automatic repair or migration is available.
+- **Invalid UTF-8 or file too large:** the loader rejects the file before decoding and does not truncate or replace it.
+- **Permission or filesystem error:** initialization returns the loader's structured failure instead of defaults. Check that the supplied path is a readable regular file and that the parent is accessible. Error messages omit paths and operating-system error text.
+
+These behaviors were exercised on macOS 26.6.2 arm64 only. Linux and Windows were not tested in this task; the existing writer remains Unix-only.
 
 ### Atomic settings file writing
 
@@ -465,4 +505,4 @@ The running page was visually inspected in the browser at **1440×900**, **390×
 
 ## Current implementation status
 
-The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading, and explicit-path atomic writes on Unix. Loading was filesystem-tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Home features, reusable component library, Tauri shell, microphone capture, or dictation behavior is included yet. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.
+The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading and safe initialization, and explicit-path atomic writes on Unix. Settings initialization and filesystem loading were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, user-directed recovery, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Home features, reusable component library, Tauri shell, microphone capture, or dictation behavior is included yet. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.

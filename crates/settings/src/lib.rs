@@ -1,8 +1,8 @@
 //! Typed model, JSON codec, and validation for Outflow's local settings schema v1.
 //!
-//! This crate owns configuration values, an in-memory schema v1 JSON codec, an
-//! explicit-path read-only settings loader, and an explicit-path atomic file
-//! writer. It performs no migration, networking, or operating system
+//! This crate owns configuration values, an in-memory schema v1 JSON codec,
+//! read-only settings loading and initialization, and an explicit-path atomic
+//! file writer. It performs no migration, networking, or operating system
 //! integration. Its reader accepts schema v1 only, rejects unknown fields, and
 //! validates decoded values. Schema v0 is unsupported because no historical v0
 //! shape exists; every other unknown version is also rejected until an explicit,
@@ -14,6 +14,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
+use std::path::Path;
 
 pub mod storage;
 
@@ -21,6 +22,44 @@ pub use storage::{
     MAX_SETTINGS_FILE_BYTES, SettingsStorageError, SettingsStorageOperation, load_settings,
     save_settings_atomic,
 };
+
+/// Whether settings were loaded from an existing file or are available as
+/// validated in-memory defaults for a first run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingsInitialization {
+    /// A valid existing schema v1 configuration was loaded.
+    Loaded(Settings),
+    /// No configuration file existed; defaults are available in memory only.
+    FirstRun(Settings),
+}
+
+/// Loads settings from `path`, or returns validated defaults when the file is
+/// missing.
+///
+/// Existing files are read and validated by [`load_settings`]. Missing files
+/// produce [`SettingsInitialization::FirstRun`] without creating or modifying
+/// a file. Invalid or unreadable files return their existing structured,
+/// redacted storage error; they are never replaced with defaults or repaired.
+///
+/// # Errors
+///
+/// Returns the same redacted errors as [`load_settings`] for unsafe paths,
+/// filesystem failures, oversized or non-UTF-8 files, invalid JSON, unsupported
+/// schema versions, or invalid settings. It also returns
+/// [`SettingsStorageError::InvalidSettings`] if the compiled-in defaults ever
+/// fail validation.
+pub fn initialize_settings(path: &Path) -> Result<SettingsInitialization, SettingsStorageError> {
+    match load_settings(path)? {
+        Some(settings) => Ok(SettingsInitialization::Loaded(settings)),
+        None => {
+            let settings = Settings::default();
+            settings
+                .validate()
+                .map_err(SettingsStorageError::InvalidSettings)?;
+            Ok(SettingsInitialization::FirstRun(settings))
+        }
+    }
+}
 
 /// The only settings schema version currently supported by Outflow.
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
