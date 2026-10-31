@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "upstream_repository": "moonshine-ai/moonshine",
+  "upstream_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+  "source_inventory": "docs/moonshine-third-party.json",
+  "redistribution_approval": "undetermined",
+  "dependencies": [
+    {
+      "dependency_id": "moonshine-eigen",
+      "component_name": "Eigen",
+      "license_expression": "MPL-2.0",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/Eigen/COPYING.MPL2",
+      "build_use_classification": "confirmed-build-input",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "blocked",
+      "status_explanation": "The applicable Eigen file set and MPL-2.0 source-availability and notice obligations must be confirmed for the selected build before a notice can be planned.",
+      "outstanding_questions": [
+        "Confirm the exact Eigen files compiled for each selected platform and whether every Eigen-consuming translation unit is constrained to the MPL-2.0 subset.",
+        "Determine the source-availability and notice packaging needed for the exact linked or copied files."
+      ],
+      "redistribution_approval": "undetermined"
+    },
+    {
+      "dependency_id": "moonshine-doctest",
+      "component_name": "doctest",
+      "license_expression": "MIT",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/doctest/LICENSE.txt",
+      "build_use_classification": "test-only",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "planned",
+      "status_explanation": "The MIT notice requirement is identified if doctest ships; the release build and package have not been checked for test executables or headers.",
+      "outstanding_questions": [
+        "Confirm that release build targets and package manifests exclude test executables and doctest source."
+      ],
+      "redistribution_approval": "undetermined"
+    },
+    {
+      "dependency_id": "moonshine-kaldi-native-fbank",
+      "component_name": "kaldi-native-fbank",
+      "license_expression": "Apache-2.0",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/kaldi-native-fbank/LICENSE",
+      "build_use_classification": "confirmed-build-input",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "planned",
+      "status_explanation": "Apache-2.0 notice requirements are identified; applicability of upstream NOTICE materials and the selected package contents remain unverified.",
+      "outstanding_questions": [
+        "Check any upstream NOTICE or bundled component notices for the exact source snapshot and preserve them where required.",
+        "Confirm the selected platform target and package include the compiled files and relevant license materials."
+      ],
+      "redistribution_approval": "undetermined"
+    },
+    {
+      "dependency_id": "moonshine-kissfft",
+      "component_name": "KISS FFT",
+      "license_expression": "BSD-3-Clause",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/kissfft/COPYING",
+      "build_use_classification": "confirmed-build-input",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "blocked",
+      "status_explanation": "The bundled COPYING identifies BSD-3-Clause but refers to a full license text that still needs complete-text reconciliation.",
+      "outstanding_questions": [
+        "Reconcile the COPYING reference to LICENSES/BSD-3-Clause with the exact license text distributed in the selected source and binary package.",
+        "Confirm platform packaging preserves the BSD-3-Clause notices."
+      ],
+      "redistribution_approval": "undetermined"
+    },
+    {
+      "dependency_id": "moonshine-nlohmann-json",
+      "component_name": "JSON for Modern C++ (nlohmann/json)",
+      "license_expression": "MIT",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/nlohmann/LICENSE.MIT",
+      "build_use_classification": "conditional",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "planned",
+      "status_explanation": "The MIT notice requirement is identified if nlohmann/json ships; Outflow's conditional TTS/G2P build selection has not been determined.",
+      "outstanding_questions": [
+        "Record whether the eventual Outflow build disables TTS/G2P or includes the conditional target.",
+        "If included, verify the exact copied header and package the applicable MIT notice."
+      ],
+      "redistribution_approval": "undetermined"
+    },
+    {
+      "dependency_id": "moonshine-onnxruntime",
+      "component_name": "ONNX Runtime",
+      "license_expression": "MIT",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/onnxruntime/LICENSE.txt",
+      "build_use_classification": "confirmed-build-input",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "blocked",
+      "status_explanation": "The source-tree MIT license does not establish the notice set, provenance, version, or contents of an eventual platform ONNX Runtime binary.",
+      "outstanding_questions": [
+        "Identify the exact per-platform ORT binary or source build, immutable provenance, version, checksums and final dynamic or static linkage for Outflow.",
+        "Obtain and review the ThirdPartyNotices and any license files shipped with each selected ORT binary; the Moonshine MIT license file does not establish those binary-level notices.",
+        "Reconcile selected ORT library and required system frameworks with each installer and notice bundle."
+      ],
+      "redistribution_approval": "undetermined"
+    },
+    {
+      "dependency_id": "moonshine-utf8-cpp",
+      "component_name": "UTF8-CPP",
+      "license_expression": "BSL-1.0",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/utf-8/LICENSE.txt",
+      "build_use_classification": "confirmed-build-input",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "planned",
+      "status_explanation": "The Boost Software License terms and notice are identified; exact source and binary distribution materials have not been verified.",
+      "outstanding_questions": [
+        "Confirm exact UTF8-CPP headers used and preserve the copyright and Boost license text in the release source and notice materials where required.",
+        "Reconcile the Boost Software License's generated-object-code exception with the actual source and binary distribution."
+      ],
+      "redistribution_approval": "undetermined"
+    },
+    {
+      "dependency_id": "moonshine-utf8proc",
+      "component_name": "utf8proc",
+      "license_expression": "MIT AND Unicode-3.0",
+      "license_evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/utf8proc/LICENSE.md",
+      "build_use_classification": "conditional",
+      "notice_required_if_shipped": true,
+      "planned_notice_destination": null,
+      "notice_verification_status": "blocked",
+      "status_explanation": "The applicable Unicode-derived data notice depends on the selected files; the actual utf8proc files in an Outflow package have not been established.",
+      "outstanding_questions": [
+        "Record whether the eventual Outflow build disables TTS/G2P or includes this target.",
+        "If included, verify whether utf8proc_data.c is present in the selected binary and package the separate Unicode data notice as required."
+      ],
+      "redistribution_approval": "undetermined"
+    }
+  ]
+}

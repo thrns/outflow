@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "result_type": "synthetic",
+  "samples": [
+    {
+      "id": "synthetic-001",
+      "reference_words": 1,
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "id": "synthetic-002",
+      "reference_words": 9,
+      "substitutions": 0,
+      "deletions": 0,
+      "insertions": 0
+    }
+  ],
+  "totals": {
+    "utterances": 2,
+    "reference_words": 10,
+    "substitutions": 1,
+    "deletions": 0,
+    "insertions": 0,
+    "wer": 0.1
+  }
+}

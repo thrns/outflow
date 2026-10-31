@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-10-31",
+  "redistribution_approval": "undetermined",
+  "model_file_integrity_status": "not-verified",
+  "runtime_binary_integrity_status": "not-verified",
+  "claims": [
+    {
+      "claim_id": "moonshine-english-small-streaming-mit",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-english-small-streaming",
+      "claimed_license_or_boundary": "The Moonshine AI model catalog labels English Small Streaming as MIT, and the license policy states that all streaming speech-to-text models are MIT.",
+      "evidence_status": "upstream-documented",
+      "evidence_scope": "model-family-documentation",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/models/available-models.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/models/available-models.md",
+          "relevant_section": "Current models table: English / Small Streaming / MIT; introductory licensing statement.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        },
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/license.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/license.md",
+          "relevant_section": "Opening model policy and enumerated legacy non-commercial exception list.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "This is evidence for the named model family, not the identity, revision, file list, or checksum of a separately distributed quantized artifact.",
+        "No model artifact or local file was inspected, and commercial redistribution approval remains undetermined."
+      ]
+    },
+    {
+      "claim_id": "moonshine-english-tiny-streaming-mit",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-english-tiny-streaming",
+      "claimed_license_or_boundary": "The Moonshine AI model catalog labels English Tiny Streaming as MIT, and the license policy states that all streaming speech-to-text models are MIT.",
+      "evidence_status": "upstream-documented",
+      "evidence_scope": "model-family-documentation",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/models/available-models.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/models/available-models.md",
+          "relevant_section": "Current models table: English / Tiny Streaming / MIT; introductory licensing statement.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        },
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/license.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/license.md",
+          "relevant_section": "Opening model policy and enumerated legacy non-commercial exception list.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "This is evidence for the named model family, not the identity, revision, file list, or checksum of a separately distributed quantized artifact.",
+        "No model artifact or local file was inspected, and commercial redistribution approval remains undetermined."
+      ]
+    },
+    {
+      "claim_id": "moonshine-streaming-versus-legacy-model-boundary",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-stt-model-license-policy",
+      "claimed_license_or_boundary": "The upstream policy says all streaming STT models are MIT. Its non-commercial Community License exception is limited to named legacy non-streaming models for languages other than English; the catalog separately lists English Base and English Tiny as MIT.",
+      "evidence_status": "upstream-documented",
+      "evidence_scope": "repository-license-policy",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/license.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/license.md",
+          "relevant_section": "All-STT policy, legacy non-English non-streaming exception table, and deprecation statement.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        },
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/models/available-models.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/models/available-models.md",
+          "relevant_section": "Current models table: English Base and English Tiny entries are MIT; streaming rows are separate architectures.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "The policy statement does not identify the exact files or revision of the quantized Small or Tiny Streaming distributions considered for Outflow."
+      ]
+    },
+    {
+      "claim_id": "moonshine-authored-source-code-license-scope",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-authored-source-code",
+      "claimed_license_or_boundary": "Moonshine states that repository code outside core/third-party is licensed under MIT; the repository LICENSE supplies the MIT terms and copyright notice.",
+      "evidence_status": "upstream-documented",
+      "evidence_scope": "repository-license-policy",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/license.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/license.md",
+          "relevant_section": "Opening code license statement, including the core/third-party exclusion.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        },
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "LICENSE",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/LICENSE",
+          "relevant_section": "Opening scope statement and Section 1 MIT License.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "The repository-level code license does not determine the license of third-party code, model data, generated artifacts, or a bundled runtime binary."
+      ]
+    },
+    {
+      "claim_id": "moonshine-third-party-source-license-boundary",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-core-third-party-source",
+      "claimed_license_or_boundary": "Moonshine says core/third-party code is licensed under its originating open-source projects, with a LICENSE file in each subfolder. The reviewed directory listing contains Eigen, doctest, kaldi-native-fbank, kissfft, nlohmann, onnxruntime, utf-8, and utf8proc directories. Moonshine separately states that its compiled Eigen subset is MPL-2.0 only.",
+      "evidence_status": "upstream-documented",
+      "evidence_scope": "third-party-source-directory",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/license.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/license.md",
+          "relevant_section": "core/third-party paragraph: per-subfolder LICENSE files and Eigen MPL-2.0 subset statement.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        },
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "core/third-party",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/tree/main/core/third-party",
+          "relevant_section": "Directory listing of third-party source subdirectories.",
+          "source_revision": {
+            "status": "unverified",
+            "commit": null,
+            "note": "The directory was inspected through the mutable main URL; a commit-specific directory listing was not verified."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "No per-subfolder license file was reviewed in this task, and the directory listing does not prove which sources are included in any selected runtime build.",
+        "The complete native runtime and transitive dependency inventory, binary contents, and supplier-specific notice obligations remain unverified."
+      ]
+    },
+    {
+      "claim_id": "moonshine-mit-copyright-and-permission-notice",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-mit-licensed-materials",
+      "claimed_license_or_boundary": "Section 1 of the upstream LICENSE states that copies or substantial portions of MIT-licensed Software must include the copyright notice and permission notice. The displayed notice identifies Useful Sensors, Inc. (dba Moonshine AI), copyright 2025.",
+      "evidence_status": "upstream-documented",
+      "evidence_scope": "license-text",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "LICENSE",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/LICENSE",
+          "relevant_section": "Section 1 MIT License: copyright line and condition requiring inclusion of the copyright and permission notices.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "The notice condition must be evaluated for each exact item actually copied or redistributed; other suppliers may impose different or additional terms.",
+        "No Outflow third-party notices file was prepared or checked in this review."
+      ]
+    },
+    {
+      "claim_id": "streaming-model-artifact-provenance-not-established",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-english-streaming-quantized-artifacts",
+      "claimed_license_or_boundary": "The reviewed upstream policy and catalog document the English Small Streaming and Tiny Streaming model families as MIT, but do not establish the exact quantized files intended for Outflow, their artifact-specific license metadata, complete file list, immutable artifact revision, or SHA-256 values.",
+      "evidence_status": "unverified",
+      "evidence_scope": "model-artifact",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/models/available-models.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/models/available-models.md",
+          "relevant_section": "Current English streaming model family rows and repository model-format description; these are not artifact manifests.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "No model weights or model binaries were downloaded or opened. Exact quantized artifact revisions, files, license metadata, checksums, and locally verified paths remain unknown."
+      ]
+    },
+    {
+      "claim_id": "tokenizer-and-supporting-model-data-license-unverified",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-tokenizer-and-supporting-model-data",
+      "claimed_license_or_boundary": "The reviewed model catalog describes model formats and architecture families but does not identify the exact tokenizer, configuration, or supporting files to be packaged with Outflow or provide per-file license metadata for those artifacts.",
+      "evidence_status": "unverified",
+      "evidence_scope": "model-artifact",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/models/available-models.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/models/available-models.md",
+          "relevant_section": "Opening format description and current model catalog; no Outflow package-specific tokenizer/file manifest is provided there.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "Exact supporting data files, source suppliers, revisions, checksums, license texts, and redistribution terms have not been identified."
+      ]
+    },
+    {
+      "claim_id": "moonshine-native-runtime-and-transitive-licenses-unverified",
+      "review_date": "2026-10-31",
+      "component_or_model_id": "moonshine-native-runtime-and-transitive-libraries",
+      "claimed_license_or_boundary": "The C API reference describes a portable ABI and model loading/streaming functions; it does not establish licenses or redistribution rights for a particular native runtime package or platform binary. The third-party source tree is separately licensed under upstream component terms.",
+      "evidence_status": "unverified",
+      "evidence_scope": "runtime-artifact",
+      "sources": [
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "core/third-party",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/tree/main/core/third-party",
+          "relevant_section": "Directory listing; upstream license policy says each third-party subfolder carries its originating project license.",
+          "source_revision": {
+            "status": "unverified",
+            "commit": null,
+            "note": "The directory listing was inspected through mutable main; its exact revision was not verified."
+          }
+        },
+        {
+          "source_organization": "Moonshine Voice documentation",
+          "source_repository": "moonshine-ai/moonshine documentation on Read the Docs",
+          "source_document_path": "api/c-api/",
+          "evidence_url": "https://moonshine-voice.readthedocs.io/en/stable/api/c-api/",
+          "relevant_section": "C API overview, version constant, file/memory model loaders, and streaming speech-to-text API.",
+          "source_revision": {
+            "status": "unverified",
+            "commit": null,
+            "note": "The stable documentation URL does not expose a verified immutable source commit in the reviewed page."
+          }
+        },
+        {
+          "source_organization": "Moonshine AI (Useful Sensors, Inc.)",
+          "source_repository": "moonshine-ai/moonshine",
+          "source_document_path": "docs/license.md",
+          "evidence_url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/license.md",
+          "relevant_section": "Repository policy for separate core/third-party licensing and per-subfolder LICENSE files.",
+          "source_revision": {
+            "status": "verified",
+            "commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+            "note": "Resolved from the upstream main commit history and inspected through this commit-specific permalink."
+          }
+        }
+      ],
+      "remaining_limitations": [
+        "No native runtime package or binary was downloaded, inspected, or compiled. The platform-specific binary contents and complete transitive dependency inventory are unknown.",
+        "Supplier-specific license files and notices, inclusion in a release build, and redistribution permission remain unverified."
+      ]
+    }
+  ]
+}

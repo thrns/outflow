@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-10-31",
+  "upstream_repository": "moonshine-ai/moonshine",
+  "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+  "evidence_scope": "pinned-source-tree-only",
+  "binary_verification_status": "not-verified",
+  "redistribution_approval": "undetermined",
+  "dependencies": [
+    {
+      "dependency_id": "moonshine-eigen",
+      "upstream_directory": "core/third-party/Eigen",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "Eigen",
+      "supplier": "Eigen project",
+      "dependency_category": "linear-algebra",
+      "license_status": "verified",
+      "license_identifiers": ["MPL-2.0"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/Eigen/COPYING.MPL2"
+      ],
+      "attribution_or_notice_requirements": "Retain the MPL-2.0 license and notices. For executable-form distribution, make the MPL-covered source available and tell recipients how to obtain it; determine the exact covered files and source offer for the product package.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt"
+      ],
+      "build_use_classification": "confirmed-build-input",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The pinned core CMake file adds cpp-annote source files to the Moonshine target and applies EIGEN_MPL2_ONLY=1 to that source list. This establishes source build inclusion; it does not verify a selected Outflow binary or that every Eigen consumer uses only the allowed subset.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Confirm the exact Eigen files compiled for each selected platform and whether every Eigen-consuming translation unit is constrained to the MPL-2.0 subset.",
+        "Determine the source-availability and notice packaging needed for the exact linked or copied files."
+      ]
+    },
+    {
+      "dependency_id": "moonshine-doctest",
+      "upstream_directory": "core/third-party/doctest",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "doctest",
+      "supplier": "Viktor Kirilov / doctest project",
+      "dependency_category": "test-framework",
+      "license_status": "verified",
+      "license_identifiers": ["MIT"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/doctest/LICENSE.txt"
+      ],
+      "attribution_or_notice_requirements": "If doctest code is redistributed, retain its copyright and MIT permission notice in copies or substantial portions. The reviewed build references use it from test targets.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/ort-utils/CMakeLists.txt",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/bin-tokenizer/CMakeLists.txt"
+      ],
+      "build_use_classification": "test-only",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The inspected CMake references add doctest include paths to test executables; no production Moonshine target reference was identified. Verify release packaging excludes test executables and test headers.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Confirm that release build targets and package manifests exclude test executables and doctest source."
+      ]
+    },
+    {
+      "dependency_id": "moonshine-kaldi-native-fbank",
+      "upstream_directory": "core/third-party/kaldi-native-fbank",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "kaldi-native-fbank",
+      "supplier": "k2-fsa / kaldi-native-fbank project",
+      "dependency_category": "audio-feature-extraction",
+      "license_status": "verified",
+      "license_identifiers": ["Apache-2.0"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/kaldi-native-fbank/LICENSE"
+      ],
+      "attribution_or_notice_requirements": "Provide a copy of Apache-2.0, preserve applicable copyright, patent, trademark and attribution notices, mark modified files, and reproduce notices from any distributed NOTICE file where applicable.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt"
+      ],
+      "build_use_classification": "confirmed-build-input",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The core CMake source list compiles kaldi-native-fbank feature extraction files as part of cpp-annote, which is added to the Moonshine target. The diarization behavior may be unused at runtime, but the reviewed build configuration includes these source inputs.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Check any upstream NOTICE or bundled component notices for the exact source snapshot and preserve them where required.",
+        "Confirm the selected platform target and package include the compiled files and relevant license materials."
+      ]
+    },
+    {
+      "dependency_id": "moonshine-kissfft",
+      "upstream_directory": "core/third-party/kissfft",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "KISS FFT",
+      "supplier": "Mark Borgerding / kissfft project",
+      "dependency_category": "fft",
+      "license_status": "verified",
+      "license_identifiers": ["BSD-3-Clause"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/kissfft/COPYING"
+      ],
+      "attribution_or_notice_requirements": "The bundled COPYING records Mark Borgerding's copyright and identifies BSD-3-Clause. Preserve the copyright notice, conditions and disclaimer in source or binary redistribution materials, and do not use contributor names to endorse a product without permission. COPYING refers to LICENSES/BSD-3-Clause; confirm the complete license text is included in the release notice set.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt"
+      ],
+      "build_use_classification": "confirmed-build-input",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The core CMake source list compiles kiss_fft.c and kiss_fftr.c as part of cpp-annote, which is added to the Moonshine target. This is source build evidence, not a check of a packaged library.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Reconcile the COPYING reference to LICENSES/BSD-3-Clause with the exact license text distributed in the selected source and binary package.",
+        "Confirm platform packaging preserves the BSD-3-Clause notices."
+      ]
+    },
+    {
+      "dependency_id": "moonshine-nlohmann-json",
+      "upstream_directory": "core/third-party/nlohmann",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "JSON for Modern C++ (nlohmann/json)",
+      "supplier": "Niels Lohmann / nlohmann/json project",
+      "dependency_category": "json-library",
+      "license_status": "verified",
+      "license_identifiers": ["MIT"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/nlohmann/LICENSE.MIT"
+      ],
+      "attribution_or_notice_requirements": "Retain the nlohmann/json copyright and MIT permission notice in copies or substantial portions if redistributed.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt"
+      ],
+      "build_use_classification": "conditional",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The pinned CMake lists JSON configuration code in the TTS/G2P core. The Moonshine target links the ONNX TTS target only when MOONSHINE_TTS_BUILD_ONNX is enabled; that option defaults to ON in the TTS CMake file. Outflow has not selected or built this option.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Record whether the eventual Outflow build disables TTS/G2P or includes the conditional target.",
+        "If included, verify the exact copied header and package the applicable MIT notice."
+      ]
+    },
+    {
+      "dependency_id": "moonshine-onnxruntime",
+      "upstream_directory": "core/third-party/onnxruntime",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "ONNX Runtime",
+      "supplier": "Microsoft / ONNX Runtime project",
+      "dependency_category": "inference-runtime",
+      "license_status": "verified",
+      "license_identifiers": ["MIT"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/onnxruntime/LICENSE.txt"
+      ],
+      "attribution_or_notice_requirements": "The bundled MIT text requires retaining Microsoft's copyright and the permission notice in copies or substantial portions. Each exact prebuilt ORT binary may carry additional third-party notices and license terms that must be reviewed and included as applicable.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/ort-utils/CMakeLists.txt",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/onnxruntime/CMakeLists.txt",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/onnxruntime/find-ort-library-path.cmake",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt"
+      ],
+      "build_use_classification": "confirmed-build-input",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The core links ort-utils and the imported ONNX Runtime library. CMake selects shared libraries on Android, macOS, Linux and Windows, and static archives for iOS/Swift and WebAssembly; static Apple framework builds merge the selected archive. WebAssembly uses an archive built by a repository script. This identifies source-level build paths only; no runtime binary was inspected.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Identify the exact per-platform ORT binary or source build, immutable provenance, version, checksums and final dynamic or static linkage for Outflow.",
+        "Obtain and review the ThirdPartyNotices and any license files shipped with each selected ORT binary; the Moonshine MIT license file does not establish those binary-level notices.",
+        "Reconcile selected ORT library and required system frameworks with each installer and notice bundle."
+      ]
+    },
+    {
+      "dependency_id": "moonshine-utf8-cpp",
+      "upstream_directory": "core/third-party/utf-8",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "UTF8-CPP",
+      "supplier": "Nemanja Trifunovic / UTF8-CPP project",
+      "dependency_category": "utf8-library",
+      "license_status": "verified",
+      "license_identifiers": ["BSL-1.0"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/utf-8/LICENSE.txt"
+      ],
+      "attribution_or_notice_requirements": "The Boost Software License 1.0 requires the copyright notices and full license statement to accompany copies and derivative works, except copies solely in generated machine-executable object-code form. Confirm which source, documentation and binary notice materials are included in the selected distribution.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/transcriber.cpp"
+      ],
+      "build_use_classification": "confirmed-build-input",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The transcriber source includes utf8.h and the core target adds core/third-party/utf-8 to its include paths. This is a direct source-level input for transcription code; no Outflow binary was checked.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Confirm exact UTF8-CPP headers used and preserve the copyright and Boost license text in the release source and notice materials where required.",
+        "Reconcile the Boost Software License's generated-object-code exception with the actual source and binary distribution."
+      ]
+    },
+    {
+      "dependency_id": "moonshine-utf8proc",
+      "upstream_directory": "core/third-party/utf8proc",
+      "reviewed_moonshine_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+      "component_name": "utf8proc",
+      "supplier": "Julia language developers; originally Public Software Group e. V.",
+      "dependency_category": "unicode-processing",
+      "license_status": "verified",
+      "license_identifiers": ["MIT", "Unicode-3.0"],
+      "license_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/utf8proc/LICENSE.md"
+      ],
+      "attribution_or_notice_requirements": "The library code includes MIT copyright and permission notices. The separately identified Unicode data license applies to utf8proc_data.c and requires the Unicode copyright and permission text in copies and associated documentation, and a clear notice if the data is modified. Do not use Unicode names or marks to promote the product without authorization.",
+      "source_build_evidence_urls": [
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt",
+        "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt"
+      ],
+      "build_use_classification": "conditional",
+      "redistribution_review_status": "undetermined",
+      "runtime_use_assessment": "The TTS CMake file builds utf8proc.c and links it into the TTS/G2P core. The Moonshine CMake file links TTS into the Moonshine target only when MOONSHINE_TTS_BUILD_ONNX is enabled; the option defaults to ON. The selected Outflow target configuration has not been established.",
+      "binary_verification_status": "not-verified",
+      "outstanding_questions": [
+        "Record whether the eventual Outflow build disables TTS/G2P or includes this target.",
+        "If included, verify whether utf8proc_data.c is present in the selected binary and package the separate Unicode data notice as required."
+      ]
+    }
+  ]
+}

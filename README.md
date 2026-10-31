@@ -87,6 +87,126 @@ Code can also call `scripts.score_wer.calculate_wer(reference, prediction)`. The
 
 Normalization follows the fixture policy's NFC normalization, Unicode lowercase, collapsed whitespace, and punctuation-free lexical scoring. The policy does not define exact Unicode token boundaries. For this synthetic calculator only, the provisional `provisional-unicode-boundary-v1` tokenizer treats runs of Unicode letters, numbers, and combining marks as words, with punctuation and other characters separating tokens. It preserves token spellings, does not expand contractions or rewrite numbers, and does not apply vocabulary corrections. This provisional tokenizer is not a frozen benchmark rule; decide and document the exact tokenization policy before scoring any real corpus. Punctuation accuracy remains a separate evaluation and is not calculated here.
 
+### Aggregate corpus WER
+
+Individual WER describes one reference/prediction pair. Corpus WER combines all scored pairs by summing their alignment errors and reference words:
+
+```text
+Corpus WER = (total substitutions + total deletions + total insertions) / total reference words
+```
+
+This weights each utterance by its reference word count. Do not average individual WER percentages: the synthetic example below has individual WERs of 100% and 0%, whose arithmetic mean is 50%, while the single error is one of ten total reference words, so corpus WER is 10%.
+
+Run the aggregate demonstration from the repository root:
+
+```sh
+python3 scripts/score_corpus_wer.py --demo
+```
+
+Expected output:
+
+```text
+Outflow aggregate WER ready
+Utterances scored: 2
+Reference words: 10
+Substitutions: 1
+Deletions: 0
+Insertions: 0
+Corpus Word Error Rate: 10.00%
+```
+
+Code can call `scripts.score_corpus_wer.calculate_corpus_wer()` with an iterable of `(reference, prediction)` string pairs. Its `wer` is a fraction; the result also reports utterances scored, total reference words, and summed edit counts. It reuses `scripts.score_wer.calculate_wer()` for each pair and the same provisional normalization.
+
+The individual calculator preserves `wer=None` when a reference normalizes to no words. Corpus scoring rejects an empty collection and raises a clear error for any empty normalized reference; it never excludes such a sample or treats its undefined WER as 0%. Silence and no-speech detection must be evaluated separately from speech-recognition accuracy.
+
+Both WER demonstrations and their tests use synthetic strings only. They do not run speech recognition, read audio, model files, real fixture transcripts, or persist evaluation results. Passing synthetic scoring tests is not a real recognition benchmark; benchmark scoring still requires the frozen, licensed, human-verified corpus and the separate model/hardware gates.
+
+### Synthetic ASR results validation
+
+The results validator checks whether per-sample numerical error counts, declared aggregate totals, and corpus WER agree. It accepts only schema version 1 with `result_type: "synthetic"`; it does not process audio or run a recognition model.
+
+Run it from the repository root:
+
+```sh
+python3 scripts/validate_asr_results.py --file scripts/testdata/synthetic_asr_results.json
+```
+
+Expected output:
+
+```text
+Outflow ASR results validation passed
+Result type: SYNTHETIC
+Samples validated: 2
+Reference words: 10
+Substitutions: 1
+Deletions: 0
+Insertions: 0
+Corpus WER: 10.00%
+Real ASR benchmark status: NOT ASSESSED
+```
+
+See [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) for the schema and its limits. The validator rejects unknown fields, so result files cannot include transcripts, audio, model claims, or identifying metadata. It reports structural or arithmetic errors without printing input values and creates no output files. The complete test suite, including validator tests, runs with:
+
+```sh
+python3 -m unittest discover -s scripts/tests -v
+```
+
+A valid synthetic file demonstrates only arithmetic consistency. It does not verify how counts were obtained, run a real ASR model, certify benchmark performance, complete T-003 or T-010, or satisfy AC-06. Future measured results need a verified frozen corpus, fixed normalization, pinned model and licensing evidence, named hardware, and reproducible evaluation under the benchmark protocol. The manifest remains at 8 planned entries and 0 ready recordings.
+
+Troubleshooting:
+
+- **Unsupported result type:** only `synthetic` is accepted. Measured or certified results are outside this validator's scope.
+- **Totals do not match:** recompute each aggregate from the sample counts and calculate WER from total errors divided by total reference words.
+- **Declared WER does not match:** WER is a fraction in JSON (`0.1` means 10%), with a `1e-9` absolute comparison tolerance.
+- **Unknown field:** remove it; only the documented schema is accepted. Never add audio, transcript, or personal information to a result file.
+- **WER exceeds 100%:** this can be valid when insertions outnumber reference words; the validator does not cap WER at 100%.
+
+## Installed-byte counter
+
+[`scripts/count_installed_bytes.py`](scripts/count_installed_bytes.py) recursively measures logical file bytes in a directory supplied explicitly by the caller. It counts regular files without filtering filenames or extensions, reports symbolic links separately, and compares the aggregate logical size to the strict 950,000,000-byte decimal release threshold. See [`docs/INSTALLED_SIZE_MEASUREMENT.md`](docs/INSTALLED_SIZE_MEASUREMENT.md) for counting rules, platform limits, and the distinction between a directory measurement and release certification.
+
+Run the synthetic demonstration:
+
+```sh
+python3 scripts/count_installed_bytes.py --demo
+```
+
+Expected output:
+
+```text
+Outflow installed-byte counter ready
+Files counted: 3
+Total logical bytes: 112
+Limit bytes: 950000000
+Budget comparison: BELOW LIMIT
+Measurement type: SYNTHETIC
+Release certification: NOT ASSESSED
+```
+
+Measure an installed application directory explicitly:
+
+```sh
+python3 scripts/count_installed_bytes.py --root <installation-directory>
+```
+
+The command prints structured JSON without the supplied path. Regular-file entries with hard links count once per directory name; symbolic-link entry lengths are reported separately and included in the aggregate total, while link targets are validated but never traversed. Missing, non-directory, or symlink roots; broken or escaping links; special entries; and unreadable metadata cause a controlled error.
+
+Run the focused or full Python test suite with:
+
+```sh
+python3 -m unittest scripts.tests.test_count_installed_bytes -v
+python3 -m unittest discover -s scripts/tests -v
+```
+
+The demo's 112 bytes come only from temporary synthetic placeholders. Neither the demo nor measuring an arbitrary directory certifies AC-01 or measures an actual Outflow installation. Actual release evidence requires installing the complete release on each target and counting its application directory, including the bundled model and native assets.
+
+Troubleshooting:
+
+- **Root error:** pass an existing directory with `--root`; the root itself cannot be a symbolic link.
+- **Link error:** repair broken links and ensure links resolve inside the supplied root. Internal links are measured as link entries; their targets are not counted again through the link.
+- **Special entry or permission error:** remove unsupported special entries from the measured tree or provide directory search/read and metadata access. Errors omit the path.
+- **At or above limit:** the comparison requires fewer than 950,000,000 bytes. Review the actual installed tree; the synthetic demonstration does not represent release size.
+
 Run the standard-library tests with:
 
 ```sh
@@ -649,3 +769,126 @@ The running page was visually inspected in the browser at **1440×900**, **390×
 ## Current implementation status
 
 The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading and safe initialization, explicit confirmed reset, and explicit-path atomic writes on Unix. The reset and settings filesystem behavior were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Reset button, confirmation dialog, Tauri command, Home features, reusable component library, Tauri shell, microphone capture, or dictation behavior is included yet. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.
+
+## Model asset inventory
+
+The planned ASR model and native runtime asset inventory is [`docs/model-asset-inventory.json`](docs/model-asset-inventory.json). Its schema, fields, provenance rules, licensing boundaries, and steps for adding concrete assets are documented in [`docs/MODEL_ASSET_INVENTORY.md`](docs/MODEL_ASSET_INVENTORY.md).
+
+Validate the planning inventory and run its focused tests from the repository root:
+
+```sh
+python3 scripts/validate_model_asset_inventory.py \
+  --manifest docs/model-asset-inventory.json
+python3 -m unittest scripts.tests.test_validate_model_asset_inventory -v
+```
+
+The validator prints a concise summary. For the initial planning inventory, the expected output is:
+
+```text
+Outflow model asset inventory valid
+Manifest version: 1
+Planned assets: 4
+File-verified assets: 0
+Redistribution approvals: 0
+Bundled model status: NOT VERIFIED
+T-009 licensing audit: INCOMPLETE
+```
+
+Add a planned asset by adding a unique row with one of the four supported categories and explicit `null` values for revision, file path, SHA-256, or license facts that are unknown. Set review fields to `not-reviewed`, `undetermined`, and `undetermined` until those decisions have evidence. A license identifier alone never records redistribution approval.
+
+To check real local files later, record each exact source revision, relative file path, SHA-256, and provenance reference; then pass the directory that contains those paths:
+
+```sh
+python3 scripts/validate_model_asset_inventory.py \
+  --manifest docs/model-asset-inventory.json \
+  --asset-root <local-asset-directory>
+```
+
+Only rows explicitly marked `file-verified` are opened and hashed. Paths must remain within the supplied root, including symlink targets. Hashing is read-only and incremental. This command does not download assets, prove installer inclusion, validate license evidence, approve redistribution, or complete T-009. The current inventory has no model revision or checksums, no verified native dependency list, and no completed redistribution or attribution review.
+
+Troubleshooting:
+
+- **Unknown metadata:** keep its field as `null`; do not use placeholders or infer model/runtime licenses from a project repository license.
+- **Unsafe path:** use a slash-separated relative path without `..`, absolute prefixes, or backslashes, and keep the target inside `--asset-root`.
+- **Missing or mismatched file:** confirm the root and relative path identify the exact local bytes, then recompute SHA-256 after any artifact change. Do not change an expected digest without source review.
+- **File integrity passes but T-009 remains incomplete:** expected. The validator does not establish commercial redistribution rights, third-party notice completeness, or installer contents.
+
+## Moonshine licensing review
+
+The source-backed preliminary review is [`docs/MOONSHINE_LICENSE_REVIEW.md`](docs/MOONSHINE_LICENSE_REVIEW.md), with claim-level provenance in [`docs/moonshine-license-review.json`](docs/moonshine-license-review.json). The official [Moonshine license policy](https://github.com/moonshine-ai/moonshine/blob/main/docs/license.md), [model catalog](https://github.com/moonshine-ai/moonshine/blob/main/docs/models/available-models.md), [repository LICENSE](https://github.com/moonshine-ai/moonshine/blob/main/LICENSE), [third-party source directory](https://github.com/moonshine-ai/moonshine/tree/main/core/third-party), and [C API reference](https://moonshine-voice.readthedocs.io/en/stable/api/c-api/) are listed with their reviewed scope and revision status in those records.
+
+The catalog labels English Small Streaming and Tiny Streaming as MIT, and Moonshine's policy says all streaming STT models are MIT. The policy separately identifies a limited set of legacy, non-English, non-streaming models under the Community License. Moonshine's own repository code excludes `core/third-party`; those subdirectories follow supplier terms. The review records 6 upstream-documented claims and 3 unverified items. It does not identify or hash a model artifact or native runtime, assemble the complete notices, or approve redistribution. Redistribution remains **undetermined**, and T-009 remains incomplete.
+
+Validate the local record and run its focused tests with Python's standard library:
+
+```sh
+python3 scripts/validate_moonshine_license_review.py
+python3 -m unittest scripts.tests.test_validate_moonshine_license_review -v
+python3 -m unittest discover -s scripts/tests -v
+```
+
+The validator makes no network requests. It checks local JSON structure, source URLs, revision representation, evidence status, and the separation between documentation and artifact integrity. The synthetic validation does not verify source truth, determine legal meaning, or inspect model/runtime assets.
+
+Before packaging, the project still needs the exact quantized model revisions and file list, per-file licenses and hashes, the complete platform runtime dependency tree and its notices, installer reconciliation, and final human/legal redistribution review.
+
+Troubleshooting:
+
+- **An upstream page is unavailable:** use the immutable commit-specific GitHub links in the review document where provided. The Read the Docs `stable` page and current third-party directory are mutable references; if they cannot be opened, retain their revision as unverified.
+- **A source revision cannot be resolved:** leave its commit explicitly unknown in the JSON (`status: "unverified"`, `commit: null`) and explain why. Do not substitute a guessed SHA, mirror, or model artifact revision.
+- **A model or runtime claim needs artifact proof:** this documentation validator cannot provide it. Only inspect an expressly authorized local asset and record its exact provenance, file path, and checksum in the asset inventory; documentation evidence alone does not verify file integrity.
+- **A license appears to allow use:** keep redistribution approval undetermined until exact shipped assets, third-party obligations, notice packaging, installers, and required human review have been checked.
+
+## Moonshine third-party source audit
+
+The source-only inventory is [`docs/moonshine-third-party.json`](docs/moonshine-third-party.json), with per-dependency terms, pinned source/build evidence, and remaining notice questions in [`docs/MOONSHINE_THIRD_PARTY_AUDIT.md`](docs/MOONSHINE_THIRD_PARTY_AUDIT.md). It reviews the eight direct `core/third-party` entries at Moonshine commit `234f60faa0eb388b01cdf7e60aca232af37aefda`. The source review classifies five entries as confirmed build inputs, two as conditional TTS/G2P inputs, and doctest as test-only. It does not establish what Outflow will ship: redistribution approval remains **undetermined**, and no runtime binary or model has been verified.
+
+Validate the local inventory and run its focused tests with Python's standard library:
+
+```sh
+python3 scripts/validate_moonshine_third_party.py
+python3 -m unittest scripts.tests.test_validate_moonshine_third_party -v
+python3 -m unittest discover -s scripts/tests -v
+```
+
+The validator performs no network requests. It checks the schema, all eight required directories, evidence URL/revision consistency, allowed classifications, unknown values, and the requirement that redistribution and binary review remain unresolved. The test suite covers malformed and incomplete records, explicit unknowns, unsupported approval claims, binary-verification scope, and stable summary output. Neither validator proves legal sufficiency or verifies binaries.
+
+Before any redistribution decision, identify the exact per-platform ORT library provenance and transitive notices, determine whether optional TTS/G2P is included, resolve KISS FFT's referenced full BSD-3-Clause text, review Eigen's covered files and MPL source obligations, reconcile all notices with installers, and obtain human/legal review. The inventory does not approve redistribution or complete T-009.
+
+Troubleshooting:
+
+- **Unsupported build-use value:** use `confirmed-build-input`, `conditional`, `test-only`, or `unknown`; leave uncertain build paths as `unknown`.
+- **Missing or mutable evidence link:** use an HTTPS GitHub blob/tree URL containing the recorded commit SHA and keep a license link inside that dependency's pinned directory.
+- **Unknown license fact:** set `license_status` to `unknown` with an empty identifier list; do not infer a license from Moonshine's repository-level license.
+- **The validator passes but release review is incomplete:** expected. It checks only local source inventory consistency; it does not fetch sources, inspect binaries, reconcile installers, or grant redistribution approval.
+
+## Third-party notice manifest
+
+The planned notice manifest is [`docs/third-party-notices.json`](docs/third-party-notices.json), based on the pinned source audit in [`docs/moonshine-third-party.json`](docs/moonshine-third-party.json). Read [`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md) for its fields, notice states, open questions, and release process. The manifest covers all eight audited source entries without assuming that test-only or conditional dependencies will ship.
+
+Validate the manifest and run its focused tests with Python's standard library:
+
+```sh
+python3 scripts/validate_third_party_notices.py
+python3 -m unittest scripts.tests.test_validate_third_party_notices -v
+```
+
+The current validator output is:
+
+```text
+Outflow third-party notice manifest valid
+Manifest version: 1
+Dependencies: 8
+Packaged notices: 0
+Redistribution approval: UNDETERMINED
+Notice readiness: INCOMPLETE
+Notice states: 4 planned, 4 blocked
+```
+
+Run all Python checks with `python3 -m unittest discover -s scripts/tests -v`. The validator reads the local audit inventory, performs no network requests or intentional file writes, and does not prove package contents or legal permission. T-009 remains incomplete.
+
+Troubleshooting:
+
+- **License or build-use mismatch:** copy the verified expression and classification from `docs/moonshine-third-party.json`; this planning manifest does not revise the source audit.
+- **Evidence URL rejected:** use that dependency's immutable `blob/234f60faa0eb388b01cdf7e60aca232af37aefda/...` license-document URL from the inventory.
+- **Unsafe destination:** leave `planned_notice_destination` as `null` until a repository-relative destination is selected; absolute and traversal paths are invalid.
+- **Blocked notice or incomplete readiness:** keep the status blocked or planned until exact selected files, binaries, notices, and package placement have evidence. A passing validator is not packaging verification or redistribution approval.
