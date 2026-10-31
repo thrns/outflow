@@ -892,3 +892,52 @@ Troubleshooting:
 - **Evidence URL rejected:** use that dependency's immutable `blob/234f60faa0eb388b01cdf7e60aca232af37aefda/...` license-document URL from the inventory.
 - **Unsafe destination:** leave `planned_notice_destination` as `null` until a repository-relative destination is selected; absolute and traversal paths are invalid.
 - **Blocked notice or incomplete readiness:** keep the status blocked or planned until exact selected files, binaries, notices, and package placement have evidence. A passing validator is not packaging verification or redistribution approval.
+
+## Moonshine native build scope
+
+The source-backed build plan is [`docs/MOONSHINE_BUILD_SCOPE.md`](docs/MOONSHINE_BUILD_SCOPE.md), with its machine-readable checklist at [`docs/moonshine-build-scope.json`](docs/moonshine-build-scope.json). It describes Outflow's intended single English streaming STT runtime with CPU-only inference across the documented macOS, Windows, and Linux targets. Linux Wayland remains best-effort.
+
+Validate the pinned CMake evidence and the existing third-party dependency/notices inventory with Python's standard library:
+
+```sh
+python3 scripts/validate_moonshine_build_scope.py
+python3 -m unittest scripts.tests.test_validate_moonshine_build_scope -v
+```
+
+The manifest records 6 required features, 6 intended exclusions, 0 undetermined scope classifications, and 11 unresolved build questions. An intended exclusion is not a verified build exclusion: the pinned CMake source includes diarization and auxiliary model code in the main source list; adds the TTS subtree; and declares test, benchmark, and utility executables without a general disable option. `MOONSHINE_TTS_BUILD_ONNX` defaults to `ON`; setting it off only gates part of the TTS/G2P target graph. The exact CPU-only ONNX Runtime configuration and one English model's files/hashes are unresolved.
+
+Moonshine has not been configured, compiled, linked, measured, or runtime-tested for this plan. No model or native library was downloaded, and no binary contents are verified. T-009 remains unchecked; T-010, T-013, AC-01, and AC-06 remain incomplete.
+
+Troubleshooting:
+
+- **Mutable or malformed source URL:** use a GitHub `blob/234f60faa0eb388b01cdf7e60aca232af37aefda/...` URL with a line anchor; the validator rejects branch and tag references.
+- **Invented option or changed default:** compare the recorded name, default, and conditional expression with the pinned CMake source. The validator intentionally rejects undocumented switches.
+- **An excluded feature is reported as unresolved:** keep its `actual_compiled_status` at `not-tested` and add the source evidence and open question needed to resolve it; do not mark it absent without binary inspection.
+- **CPU-only build feasibility is unknown:** retain the unresolved status until the selected per-platform ONNX Runtime artifact/provider is identified and tested.
+- **Model asset revision is unknown:** retain it as undetermined until T-013 records the exact files and hashes. The validator does not download assets or inspect binaries.
+
+### Pinned CMake source probe
+
+[`docs/MOONSHINE_CMAKE_PROBE.md`](docs/MOONSHINE_CMAKE_PROBE.md) documents the read-only source probe for the six CMake files pinned to Moonshine revision `234f60faa0eb388b01cdf7e60aca232af37aefda`. It verifies Git blob IDs before checking a narrow set of source behaviors. It does not prove a minimal STT build or inspect compiled/package contents.
+
+Verify an existing source checkout without network access:
+
+```sh
+python3 scripts/probe_moonshine_cmake.py \
+  --source-dir /path/to/pinned/moonshine-source
+```
+
+Fetch only the six pinned CMake text files over HTTPS, in memory, for explicit upstream verification:
+
+```sh
+python3 scripts/probe_moonshine_cmake.py --verify-upstream
+```
+
+The upstream mode needs a trusted CA bundle available to Python. If certificate verification fails, set `SSL_CERT_FILE` to a trusted bundle; do not disable HTTPS verification. The local mode never makes network requests. A successful probe reports the TTS ONNX default and source-list relationships, then keeps minimal STT exclusions, CMake configure, native compilation, and binary contents explicitly unproven or unverified.
+
+Troubleshooting:
+
+- **Missing file or Git blob mismatch:** use a complete checkout at the pinned revision. The probe rejects files with changed bytes; a source tree from another commit is not interchangeable.
+- **`BLOCKED: upstream source retrieval failed`:** check HTTPS access and Python's trusted CA configuration. Retry only after certificate trust is configured; the probe does not follow redirects or fetch additional files.
+- **CMake contract error:** compare the active, uncommented statements in the pinned source with the exact diagnostic. A changed default or source relationship requires reviewing the source contract; do not weaken the expected blob IDs.
+- **Minimal STT exclusions remain `NOT PROVEN`:** this is expected. Source analysis does not configure the project, compile target objects, or inspect binary/package contents.

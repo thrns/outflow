@@ -1,0 +1,560 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/moonshine-ai/moonshine",
+    "revision": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+    "review_scope": "Pinned CMake source configuration only; no configure, compile, link, package, or binary inspection was performed."
+  },
+  "application": {
+    "purpose": "English streaming speech-to-text",
+    "language": "English",
+    "recognition_mode": "streaming",
+    "models_per_installer": 1,
+    "cpu_only_requirement": "required",
+    "cpu_only_verification_status": "not-tested",
+    "target_operating_systems": [
+      {
+        "name": "macOS 13+",
+        "architectures": ["arm64", "x86_64"],
+        "support_intent": "target"
+      },
+      {
+        "name": "Windows 10/11",
+        "architectures": ["x86_64"],
+        "support_intent": "target"
+      },
+      {
+        "name": "Linux X11",
+        "architectures": ["x86_64"],
+        "support_intent": "target"
+      },
+      {
+        "name": "Linux Wayland",
+        "architectures": ["x86_64"],
+        "support_intent": "best-effort"
+      }
+    ],
+    "platform_verification_status": "not-tested",
+    "model_asset_revision_status": "undetermined",
+    "project_requirements": [
+      "docs/PRD.md §0 and §3.1 (F-06, AC-06)",
+      "docs/TECH_STACK.md §3.1–3.3 (TS-05)",
+      "docs/ARCHITECTURE.md C-05 and C-09",
+      "docs/BENCHMARK_MATRIX.md and docs/benchmark-matrix.json"
+    ]
+  },
+  "intended_build_target": {
+    "name": "moonshine",
+    "kind": "native library",
+    "definition_evidence_id": "core-library-target",
+    "configuration_status": "not-configured"
+  },
+  "source_evidence": [
+    {
+      "evidence_id": "core-subdirectories",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L110-L122",
+      "finding": "The core CMake root adds ort-utils, bin-tokenizer, and moonshine-tts subdirectories without a surrounding feature option."
+    },
+    {
+      "evidence_id": "core-main-sources",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L130-L151",
+      "finding": "MOONSHINE_SRC_FILES lists the C API, streaming model, transcriber, resampler, VAD, speaker diarizer, clone-clip, embedding, and text-embedder translation units."
+    },
+    {
+      "evidence_id": "core-diarization-inputs",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L153-L199",
+      "finding": "cpp-annote, KISS FFT, and kaldi-native-fbank sources are appended to MOONSHINE_SRC_FILES; the source list is used by the main library target."
+    },
+    {
+      "evidence_id": "core-library-target",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L223-L234",
+      "finding": "The moonshine target receives MOONSHINE_SRC_FILES; static versus shared selection depends on platform conditions and MOONSHINE_BUILD_SHARED."
+    },
+    {
+      "evidence_id": "core-ort-tokenizer-links",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L262-L287",
+      "finding": "The moonshine target includes ort-utils and tokenizer headers and links bin-tokenizer and ort-utils in the framework path."
+    },
+    {
+      "evidence_id": "core-runtime-links",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L342-L375",
+      "finding": "Non-framework builds link bin-tokenizer and ort-utils; MOONSHINE_TTS_BUILD_ONNX conditionally links moonshine_tts_ort and sets the TTS C API compile definition."
+    },
+    {
+      "evidence_id": "ort-utils-target",
+      "source_path": "core/ort-utils/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/ort-utils/CMakeLists.txt#L8-L27",
+      "finding": "ort-utils adds the vendored ONNX Runtime and Moonshine utilities subdirectories and defines the ort-utils static library."
+    },
+    {
+      "evidence_id": "ort-utils-links",
+      "source_path": "core/ort-utils/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/ort-utils/CMakeLists.txt#L33-L79",
+      "finding": "ort-utils includes the vendored ONNX Runtime headers and links the selected ONNX Runtime library."
+    },
+    {
+      "evidence_id": "ort-utils-tests",
+      "source_path": "core/ort-utils/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/ort-utils/CMakeLists.txt#L81-L104",
+      "finding": "ort-utils-test and ort-utils-ep-test are separate executables with doctest include paths."
+    },
+    {
+      "evidence_id": "tokenizer-target",
+      "source_path": "core/bin-tokenizer/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/bin-tokenizer/CMakeLists.txt#L4-L26",
+      "finding": "bin-tokenizer is a static library linked with moonshine-utils and is always added by the core CMake root."
+    },
+    {
+      "evidence_id": "tokenizer-test",
+      "source_path": "core/bin-tokenizer/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/bin-tokenizer/CMakeLists.txt#L27-L44",
+      "finding": "bin-tokenizer-test is a separate executable and uses the vendored doctest include directory."
+    },
+    {
+      "evidence_id": "tts-core",
+      "source_path": "core/moonshine-tts/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt#L6-L73",
+      "finding": "The TTS subdirectory unconditionally defines the utf8proc target and moonshine_tts_core with TTS/G2P sources before the ONNX option."
+    },
+    {
+      "evidence_id": "tts-tools-tests-option",
+      "source_path": "core/moonshine-tts/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt#L77-L143",
+      "finding": "TTS/G2P command-line utilities and core test executables are declared before MOONSHINE_TTS_BUILD_ONNX; that option defaults to ON."
+    },
+    {
+      "evidence_id": "tts-onnx-targets",
+      "source_path": "core/moonshine-tts/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt#L142-L228",
+      "finding": "The ONNX option guards moonshine_tts_ort, its TTS/G2P source list, command-line executables, and additional ONNX tests."
+    },
+    {
+      "evidence_id": "core-test-executables",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L395-L467",
+      "finding": "Native C API tests, memory tests, and the model-download smoke utility are declared as executable targets outside a global test-build option."
+    },
+    {
+      "evidence_id": "core-benchmark-target",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L518-L543",
+      "finding": "The C++ API test and benchmark executable are separate targets; benchmark links the main library and Moonshine utilities."
+    },
+    {
+      "evidence_id": "core-transcriber-tests",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L795-L892",
+      "finding": "Transcriber, streaming smoke, and streaming-memory test executables are declared with test-only include paths and support inputs."
+    },
+    {
+      "evidence_id": "core-extra-benchmarks",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L952-L991",
+      "finding": "Word-alignment and speculative-decode benchmark executables are declared independently of the production library target."
+    },
+    {
+      "evidence_id": "reliability-option",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L48-L100",
+      "finding": "MOONSHINE_RELIABILITY defaults OFF and gates sanitizer settings; MOONSHINE_SANITIZER is a cache string defaulting to address,undefined."
+    },
+    {
+      "evidence_id": "reliability-only-test",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L925-L947",
+      "finding": "The reliability option gates a concurrency test target; it is not a global switch for the other test and benchmark executables."
+    },
+    {
+      "evidence_id": "model-source-boundary",
+      "source_path": "core/CMakeLists.txt",
+      "url": "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt#L130-L151",
+      "finding": "The CMake source list contains streaming, model-catalog, cloning, embedding, and text-embedding code, but does not identify Outflow's model weight file set or language selection."
+    }
+  ],
+  "build_options": [
+    {
+      "name": "MOONSHINE_TTS_BUILD_ONNX",
+      "kind": "option",
+      "declaration_status": "verified",
+      "default": "ON",
+      "conditional_expression": "if(MOONSHINE_TTS_BUILD_ONNX)",
+      "effect": "When ON, defines the TTS ONNX library and TTS/G2P ONNX tools, links moonshine_tts_ort into moonshine, and sets the TTS C API definition. When OFF, it does not gate moonshine_tts_core, utf8proc, or the utility and core-test targets declared before the condition.",
+      "evidence_ids": ["tts-tools-tests-option", "tts-onnx-targets", "core-runtime-links"]
+    },
+    {
+      "name": "MOONSHINE_RELIABILITY",
+      "kind": "option",
+      "declaration_status": "verified",
+      "default": "OFF",
+      "conditional_expression": "if (MOONSHINE_RELIABILITY)",
+      "effect": "Enables sanitizer/reliability instrumentation and gates selected reliability-only targets; it is not a general test or benchmark disable switch.",
+      "evidence_ids": ["reliability-option", "reliability-only-test"]
+    },
+    {
+      "name": "MOONSHINE_SANITIZER",
+      "kind": "cache-string",
+      "declaration_status": "verified",
+      "default": "address,undefined",
+      "conditional_expression": "if (MOONSHINE_RELIABILITY)",
+      "effect": "Selects the sanitizer set for reliability builds; it does not select an inference execution provider.",
+      "evidence_ids": ["reliability-option"]
+    },
+    {
+      "name": "MOONSHINE_BUILD_SHARED",
+      "kind": "referenced-variable",
+      "declaration_status": "referenced-default-unknown",
+      "default": null,
+      "conditional_expression": "if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32 OR EMSCRIPTEN))",
+      "effect": "Affects static versus shared library selection, but no declaration or default is present in the reviewed CMake files.",
+      "evidence_ids": ["core-library-target"]
+    },
+    {
+      "name": "MOONSHINE_BUILD_SWIFT",
+      "kind": "referenced-variable",
+      "declaration_status": "referenced-default-unknown",
+      "default": null,
+      "conditional_expression": "if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32 OR EMSCRIPTEN))",
+      "effect": "Affects the static framework path, but no declaration or default is present in the reviewed CMake files.",
+      "evidence_ids": ["core-library-target"]
+    }
+  ],
+  "features": [
+    {
+      "feature_id": "english-streaming-stt",
+      "name": "Core streaming STT",
+      "intended_scope": "required",
+      "source_evidence_status": "confirmed",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-main-sources", "core-library-target", "core-runtime-links"],
+      "build_control": {
+        "status": "required",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "The intended moonshine library target contains the streaming-model and transcriber source entries; no Outflow-specific target configuration has been run."
+      },
+      "unresolved_question_ids": ["BQ-ENGLISH-ASSETS", "BQ-MINIMAL-TARGET"],
+      "notes": "Required app capability. CMake source references establish source-level support, not an English-only or one-model binary."
+    },
+    {
+      "feature_id": "onnx-runtime",
+      "name": "ONNX Runtime inference",
+      "intended_scope": "required",
+      "source_evidence_status": "confirmed",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["ort-utils-target", "ort-utils-links", "core-runtime-links"],
+      "build_control": {
+        "status": "required",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "ort-utils includes and links the vendored ONNX Runtime library and the main target links ort-utils. The selected Outflow runtime binary/provider is not known."
+      },
+      "unresolved_question_ids": ["BQ-CPU-PROVIDER", "BQ-ORT-ARTIFACT", "BQ-MINIMAL-TARGET"],
+      "notes": "Required for the intended inference path; no CPU-only provider or artifact certification is inferred from these link declarations."
+    },
+    {
+      "feature_id": "tokenizer",
+      "name": "Binary tokenizer",
+      "intended_scope": "required",
+      "source_evidence_status": "confirmed",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-subdirectories", "tokenizer-target", "core-runtime-links"],
+      "build_control": {
+        "status": "required",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "The core root always adds bin-tokenizer and the main target links it. The selected English model's exact tokenizer assets remain unknown."
+      },
+      "unresolved_question_ids": ["BQ-ENGLISH-ASSETS", "BQ-MINIMAL-TARGET"],
+      "notes": "Source-level tokenizer library inclusion is confirmed; model-specific tokenizer files and package contents are not."
+    },
+    {
+      "feature_id": "audio-preprocessing",
+      "name": "Audio preprocessing",
+      "intended_scope": "required",
+      "source_evidence_status": "confirmed",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-main-sources"],
+      "build_control": {
+        "status": "required",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "The main source list contains resampler and VAD translation units. CMake does not establish which are needed by the selected Outflow path or which objects survive linking."
+      },
+      "unresolved_question_ids": ["BQ-MINIMAL-TARGET"],
+      "notes": "Audio conversion is part of the intended end-to-end stream; this source list is not a proof that every preprocessing module is needed."
+    },
+    {
+      "feature_id": "cpu-only-execution",
+      "name": "CPU-only inference configuration",
+      "intended_scope": "required",
+      "source_evidence_status": "unverified",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["ort-utils-links", "core-runtime-links"],
+      "build_control": {
+        "status": "undetermined",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "The reviewed CMake files link an ONNX Runtime library but do not declare a verified Outflow CPU-only provider-selection option or identify the selected platform runtime build."
+      },
+      "unresolved_question_ids": ["BQ-CPU-PROVIDER", "BQ-ORT-ARTIFACT", "BQ-PLATFORM-BUILDS"],
+      "notes": "CPU-only is an Outflow requirement; upstream build support and platform execution behavior remain unverified."
+    },
+    {
+      "feature_id": "speaker-diarization",
+      "name": "Speaker diarization",
+      "intended_scope": "excluded",
+      "source_evidence_status": "confirmed",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-main-sources", "core-diarization-inputs", "core-library-target"],
+      "build_control": {
+        "status": "none-verified",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "speaker-diarizer.cpp and cpp-annote/feature-extraction sources are appended to the main target source list without a diarization-disable condition in the reviewed CMake."
+      },
+      "unresolved_question_ids": ["BQ-DIARIZATION", "BQ-MINIMAL-TARGET"],
+      "notes": "Outflow does not require diarization. Source-list inclusion is confirmed; no compiled-binary or dead-stripping conclusion is made."
+    },
+    {
+      "feature_id": "tts-g2p",
+      "name": "Text-to-speech and grapheme-to-phoneme",
+      "intended_scope": "excluded",
+      "source_evidence_status": "conditional",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-subdirectories", "tts-core", "tts-tools-tests-option", "tts-onnx-targets", "core-runtime-links"],
+      "build_control": {
+        "status": "partial",
+        "option_name": "MOONSHINE_TTS_BUILD_ONNX",
+        "requested_value": "OFF",
+        "assessment": "The verified option defaults ON and OFF removes the ONNX TTS library/link path, but the TTS subdirectory, moonshine_tts_core, utf8proc target, and pre-option utilities/tests remain declared."
+      },
+      "unresolved_question_ids": ["BQ-TTS-G2P", "BQ-MINIMAL-TARGET"],
+      "notes": "TTS/G2P is outside Outflow's single-model dictation scope. Setting the known option OFF is not evidence that all TTS/G2P source and targets are excluded."
+    },
+    {
+      "feature_id": "test-executables",
+      "name": "Upstream test executables",
+      "intended_scope": "excluded",
+      "source_evidence_status": "conditional",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["ort-utils-tests", "tokenizer-test", "tts-tools-tests-option", "core-test-executables", "core-transcriber-tests"],
+      "build_control": {
+        "status": "none-verified",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "Test executables are declared in the reviewed subprojects; no global BUILD_TESTING or equivalent disable option was identified in the reviewed files."
+      },
+      "unresolved_question_ids": ["BQ-TEST-TARGETS", "BQ-MINIMAL-TARGET"],
+      "notes": "Tests remain necessary as a separate validation activity, but their executables and doctest support are not part of the intended release runtime."
+    },
+    {
+      "feature_id": "benchmark-tools",
+      "name": "Benchmark executables",
+      "intended_scope": "excluded",
+      "source_evidence_status": "conditional",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-benchmark-target", "core-extra-benchmarks"],
+      "build_control": {
+        "status": "none-verified",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "Benchmark targets are declared as executables; no reviewed build option gates the general benchmark targets."
+      },
+      "unresolved_question_ids": ["BQ-BENCHMARK-TARGETS", "BQ-MINIMAL-TARGET"],
+      "notes": "Benchmark tools are useful for development but are not required in the shipped runtime."
+    },
+    {
+      "feature_id": "optional-utilities",
+      "name": "Optional utilities",
+      "intended_scope": "excluded",
+      "source_evidence_status": "conditional",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-test-executables", "tts-tools-tests-option", "tts-onnx-targets"],
+      "build_control": {
+        "status": "partial",
+        "option_name": "MOONSHINE_TTS_BUILD_ONNX",
+        "requested_value": "OFF",
+        "assessment": "The TTS option gates ONNX-dependent TTS/G2P utilities, but the model-download smoke tool and other non-TTS utilities are declared outside that gate."
+      },
+      "unresolved_question_ids": ["BQ-OPTIONAL-UTILITIES", "BQ-TTS-G2P"],
+      "notes": "Development utilities, model-download smoke tooling, and optional command-line programs are not part of the Outflow runtime."
+    },
+    {
+      "feature_id": "auxiliary-model-code",
+      "name": "Auxiliary model and voice-cloning code",
+      "intended_scope": "excluded",
+      "source_evidence_status": "confirmed",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["core-main-sources", "model-source-boundary", "core-library-target"],
+      "build_control": {
+        "status": "none-verified",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "The main target source list includes clone-clip, Gemma embedding, and text-embedding translation units; no verified option gates these entries."
+      },
+      "unresolved_question_ids": ["BQ-AUXILIARY-SOURCES", "BQ-MINIMAL-TARGET"],
+      "notes": "The source configuration includes code beyond streaming STT. This does not establish that any corresponding extra model weights are packaged."
+    },
+    {
+      "feature_id": "english-model-assets",
+      "name": "One English streaming model asset set",
+      "intended_scope": "required",
+      "source_evidence_status": "unverified",
+      "actual_compiled_status": "not-tested",
+      "evidence_ids": ["model-source-boundary"],
+      "build_control": {
+        "status": "undetermined",
+        "option_name": null,
+        "requested_value": null,
+        "assessment": "The inspected CMake files do not select model weights, model language, tokenizer/config files, or package contents. The project model inventory remains planned."
+      },
+      "unresolved_question_ids": ["BQ-ENGLISH-ASSETS", "BQ-ORT-ARTIFACT"],
+      "notes": "One English streaming model per installer is the product intent; the exact model revision, companion files, and hashes remain for T-013."
+    }
+  ],
+  "third_party_dependencies": [
+    {
+      "dependency_id": "moonshine-eigen",
+      "build_use_classification": "confirmed-build-input",
+      "scope_relationship": "source-input-for-diarization",
+      "notes": "Included in the inspected cpp-annote source path; binary presence is not verified."
+    },
+    {
+      "dependency_id": "moonshine-doctest",
+      "build_use_classification": "test-only",
+      "scope_relationship": "test-support-only",
+      "notes": "Referenced by test targets; no production package exclusion has been verified."
+    },
+    {
+      "dependency_id": "moonshine-kaldi-native-fbank",
+      "build_use_classification": "confirmed-build-input",
+      "scope_relationship": "source-input-for-diarization",
+      "notes": "Included in the inspected cpp-annote source path; binary presence is not verified."
+    },
+    {
+      "dependency_id": "moonshine-kissfft",
+      "build_use_classification": "confirmed-build-input",
+      "scope_relationship": "source-input-for-diarization",
+      "notes": "Included in the inspected cpp-annote source path; binary presence is not verified."
+    },
+    {
+      "dependency_id": "moonshine-nlohmann-json",
+      "build_use_classification": "conditional",
+      "scope_relationship": "conditional-tts-g2p-path",
+      "notes": "Retain the existing conditional classification; disabling the ONNX TTS link does not remove every TTS core target from the CMake project."
+    },
+    {
+      "dependency_id": "moonshine-onnxruntime",
+      "build_use_classification": "confirmed-build-input",
+      "scope_relationship": "required-inference-runtime",
+      "notes": "The core target links ort-utils, which links the selected ONNX Runtime library; exact platform artifacts remain unknown."
+    },
+    {
+      "dependency_id": "moonshine-utf8-cpp",
+      "build_use_classification": "confirmed-build-input",
+      "scope_relationship": "transcriber-support-input",
+      "notes": "Retain the existing source audit classification; this checklist does not inspect selected objects or binaries."
+    },
+    {
+      "dependency_id": "moonshine-utf8proc",
+      "build_use_classification": "conditional",
+      "scope_relationship": "conditional-tts-g2p-path",
+      "notes": "Retain the existing conditional classification; the TTS utf8proc target is declared before the ONNX option."
+    }
+  ],
+  "unresolved_build_questions": [
+    {
+      "question_id": "BQ-CPU-PROVIDER",
+      "status": "unresolved",
+      "question": "Which ONNX Runtime build and execution-provider configuration will provide CPU-only inference on each Outflow target without GPU providers?",
+      "affected_feature_ids": ["onnx-runtime", "cpu-only-execution"],
+      "resolution_evidence": "Record the selected provider configuration, platform artifact provenance, and CPU-only runtime test results after an approved native build."
+    },
+    {
+      "question_id": "BQ-ENGLISH-ASSETS",
+      "status": "unresolved",
+      "question": "Which exact English streaming model revision and tokenizer/config/supporting files form the single installer asset set?",
+      "affected_feature_ids": ["english-streaming-stt", "tokenizer", "english-model-assets"],
+      "resolution_evidence": "T-013 must record the immutable model revision, exact file list, and SHA-256 values; no files are downloaded by this task."
+    },
+    {
+      "question_id": "BQ-DIARIZATION",
+      "status": "unresolved",
+      "question": "Can speaker-diarizer.cpp, cpp-annote, KISS FFT, kaldi-native-fbank, and related include paths be removed or isolated without breaking the selected STT target?",
+      "affected_feature_ids": ["speaker-diarization"],
+      "resolution_evidence": "A future approved CMake change must be followed by target dependency review and compilation; no change is made here."
+    },
+    {
+      "question_id": "BQ-TTS-G2P",
+      "status": "unresolved",
+      "question": "How can the full moonshine-tts subdirectory, its core targets, utilities, and tests be omitted from the Outflow build while preserving required STT targets?",
+      "affected_feature_ids": ["tts-g2p", "optional-utilities"],
+      "resolution_evidence": "The existing MOONSHINE_TTS_BUILD_ONNX option only gates part of the subtree; any wider gate requires upstream CMake design and review."
+    },
+    {
+      "question_id": "BQ-TEST-TARGETS",
+      "status": "unresolved",
+      "question": "How should upstream test executables and doctest references be gated or omitted from the production build graph?",
+      "affected_feature_ids": ["test-executables"],
+      "resolution_evidence": "No global test-disable option was found in the reviewed CMake files; verify the selected target build and package separately."
+    },
+    {
+      "question_id": "BQ-BENCHMARK-TARGETS",
+      "status": "unresolved",
+      "question": "How should benchmark executables be gated so they are not part of an all-target production build?",
+      "affected_feature_ids": ["benchmark-tools"],
+      "resolution_evidence": "The benchmark targets are declared directly; introduce no new option until upstream ownership and target semantics are reviewed."
+    },
+    {
+      "question_id": "BQ-OPTIONAL-UTILITIES",
+      "status": "unresolved",
+      "question": "Which non-product utilities remain in a default all-target build, and what explicit target set should Outflow build?",
+      "affected_feature_ids": ["optional-utilities"],
+      "resolution_evidence": "Review target dependency graphs and packaging rules after a separately approved native build configuration exists."
+    },
+    {
+      "question_id": "BQ-AUXILIARY-SOURCES",
+      "status": "unresolved",
+      "question": "Can auxiliary clone, embedding, catalog, and text-embedding translation units be separated from the main streaming STT library?",
+      "affected_feature_ids": ["auxiliary-model-code"],
+      "resolution_evidence": "Confirm source dependencies and exported C API requirements before proposing source-list changes."
+    },
+    {
+      "question_id": "BQ-PLATFORM-BUILDS",
+      "status": "unresolved",
+      "question": "Which supported OS/architecture configurations and minimum CPU instruction sets will be built and verified for Outflow?",
+      "affected_feature_ids": ["cpu-only-execution"],
+      "resolution_evidence": "Use the project target matrix and native platform build evidence; CMake source conditionals alone are not platform certification."
+    },
+    {
+      "question_id": "BQ-ORT-ARTIFACT",
+      "status": "unresolved",
+      "question": "What exact ONNX Runtime binary or source build, checksum, ABI, transitive notices, and link mode will each installer use?",
+      "affected_feature_ids": ["onnx-runtime", "cpu-only-execution", "english-model-assets"],
+      "resolution_evidence": "Resolve artifact provenance and notices through the dependency audit before compiling or packaging."
+    },
+    {
+      "question_id": "BQ-MINIMAL-TARGET",
+      "status": "unresolved",
+      "question": "After configuration, which objects and transitive dependencies are actually compiled and retained in the selected moonshine target and installer?",
+      "affected_feature_ids": ["english-streaming-stt", "onnx-runtime", "tokenizer", "audio-preprocessing", "speaker-diarization", "tts-g2p", "test-executables", "benchmark-tools", "auxiliary-model-code"],
+      "resolution_evidence": "Only an approved configure/build followed by link-map, package, binary, size, and runtime inspection can answer this."
+    }
+  ],
+  "execution": {
+    "cmake_configuration": "NOT_RUN",
+    "compilation": "NOT_RUN",
+    "linking": "NOT_RUN",
+    "runtime_tests": "NOT_RUN",
+    "resource_measurements": "NOT_RUN",
+    "model_download": "NOT_RUN",
+    "binary_contents": "NOT_VERIFIED",
+    "minimal_runtime_feasibility": "NOT_ASSESSED"
+  }
+}
