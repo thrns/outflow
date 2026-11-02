@@ -4,6 +4,9 @@
 //! `docs/ARCHITECTURE.md`. It intentionally has no frontend, Tauri, operating
 //! system, or external-service dependencies.
 
+/// Pure validation for the spoken and written sides of a vocabulary entry.
+pub mod vocabulary;
+
 /// Returns a development-only status message for the foundation smoke test.
 pub const fn foundation_status() -> &'static str {
     "Outflow Rust foundation ready"

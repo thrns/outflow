@@ -569,7 +569,7 @@ The foundation screen displays:
 
 In Settings, use the six section tabs—General, Microphone, Shortcuts, Text & Vocabulary, Privacy, and About & Diagnostics—to change the displayed section. General is selected each time the preview opens. Use **Back** to return to the foundation screen. The tabs support Up/Down arrow keys, Home, and End, with visible keyboard focus.
 
-General contains **Launch at Login**, which defaults to **Off**. Use the switch with a mouse or focus it and press Space. The visible On/Off state and accessible switch state update immediately. The preference is kept only in React memory: it remains selected while changing sections or closing and reopening Settings in the same mounted session, and resets to Off after a full page reload. The other five sections still show their title, description, and placeholder note.
+General contains **Launch at Login**, which defaults to **Off**. Use the switch with a mouse or focus it and press Space. The visible On/Off state and accessible switch state update immediately. The preference is kept only in React memory: it remains selected while changing sections or closing and reopening Settings in the same mounted session, and resets to Off after a full page reload. Text & Vocabulary includes a frontend-only vocabulary draft form and live synthetic example. Privacy shows a static overview of intended protections and preview limitations; Microphone and Shortcuts show their existing preview status messages, and About & Diagnostics remains a placeholder.
 
 The General section displays: **“Start Outflow automatically when you sign in to your computer.”** and **“Preview only — this setting does not change your computer's startup behavior yet.”** No operating-system login item is registered, and the preference is not written to a configuration file, localStorage, or sessionStorage. The section selection is not persisted. Microphone access, shortcut settings, diagnostics, native Tauri tray/window behavior, and all other dictation features remain unimplemented. The browser preview does not complete F-11, AC-11, T-051, or native startup integration in [`docs/TASKS.md`](docs/TASKS.md). The Rust schema contributes to T-017 but does not complete its migration behavior or its T-001 prerequisite.
 
@@ -941,3 +941,341 @@ Troubleshooting:
 - **`BLOCKED: upstream source retrieval failed`:** check HTTPS access and Python's trusted CA configuration. Retry only after certificate trust is configured; the probe does not follow redirects or fetch additional files.
 - **CMake contract error:** compare the active, uncommented statements in the pinned source with the exact diagnostic. A changed default or source relationship requires reviewing the source contract; do not weaken the expected blob IDs.
 - **Minimal STT exclusions remain `NOT PROVEN`:** this is expected. Source analysis does not configure the project, compile target objects, or inspect binary/package contents.
+
+## Moonshine CMake configure experiment
+
+[`docs/MOONSHINE_CMAKE_CONFIGURE.md`](docs/MOONSHINE_CMAKE_CONFIGURE.md) records the isolated configure runner and the actual Task 25 attempt. The runner accepts only a clean Git checkout at Moonshine revision `234f60faa0eb388b01cdf7e60aca232af37aefda`, verifies the six pinned CMake files with the Task 24 probe, checks upstream's CMake minimum, and configures into a temporary out-of-source directory. It uses Python's standard library and removes the temporary build tree after inspecting the cache, target graph, compiler selections, and ONNX Runtime library path.
+
+When the exact checkout and compatible CMake are available, run:
+
+```sh
+python3 scripts/try_moonshine_cmake_configure.py \
+  --source-dir /path/to/pinned/moonshine
+```
+
+The runner supplies `CMAKE_BUILD_TYPE=Release`, `MOONSHINE_TTS_BUILD_ONNX=OFF`, `MOONSHINE_RELIABILITY=OFF`, and `FETCHCONTENT_FULLY_DISCONNECTED=ON`. It does not build, install, or test Moonshine targets. `CONFIGURED` (exit 0) reports CMake generation only; it does not prove a minimal STT binary, working native linkage, runtime compatibility, or release readiness. `BLOCKED` (exit 2) means the pinned source, CMake, a required dependency, or an environmental capability is unavailable. `FAILED` (exit 1) means source integrity or an unexpected configure assumption failed.
+
+Task 25 is currently **BLOCKED**: Git could not resolve `github.com` while preparing the source-only checkout, and CMake is not installed. No source revision, target graph, or ONNX Runtime library was verified during this attempt. Network isolation also remains unverified because `FETCHCONTENT_FULLY_DISCONNECTED=ON` does not disable every possible configure-time network request.
+
+Troubleshooting:
+
+- **`BLOCKED: Source directory is unavailable` or revision mismatch:** prepare a clean checkout at the exact commit above with `GIT_LFS_SKIP_SMUDGE=1`; do not substitute a package subdirectory, another revision, or an LFS pointer.
+- **`BLOCKED: CMake executable is not available` or unsupported version:** use a CMake installation that meets the minimum read from the pinned `core/CMakeLists.txt`; do not install dependencies as part of the experiment without authorization.
+- **`BLOCKED` for a missing dependency:** read the bounded CMake diagnostics. Supply only already-approved source dependencies; do not fetch ONNX Runtime binaries or model weights for this task.
+- **ONNX Runtime path is missing or an LFS pointer:** the configure result does not make that file usable. The runner reports LFS pointers as non-binaries and never treats their pointer text as a native library.
+- **CMake reports `CONFIGURED`:** inspect the target list and cache, but keep binary contents and minimal STT exclusions unproven. The TTS subtree, tests, benchmarks, utilities, diarization, and auxiliary sources have no verified general exclusion control in the reviewed source.
+
+## Task 26 — Home page preview
+
+Start the React/Vite preview from the repository root:
+
+```sh
+npm run dev
+```
+
+Open the local URL printed by Vite (usually `http://localhost:5173/`). Home is the first view. Open Settings with the button in the header or **Open Settings** in the Getting started panel. Use **Home** at the top of Settings to return. These views switch inside the frontend without a full page reload. Settings values, including the Launch at Login preview switch, live only in memory and do not change operating-system behavior.
+
+`src/app/AppHeader.tsx` contains the shared Outflow identity and Home/Settings navigation. `App.tsx` owns the active page and destination-heading focus; both Home and Settings render the same header, with the current page marked for assistive technology.
+
+Home identifies this as a development preview and says native dictation is not connected. It explains Outflow's goal of offline desktop dictation and the planned local speech and text workflow. The preview does not request microphone access, record audio, run speech recognition, or include a model-download or transcript-history interface. Tauri integration, microphone capture, speech recognition, native shortcuts, and backend behavior are not implemented here.
+
+Run the frontend checks from the repository root:
+
+```sh
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+To verify navigation and layout, start the dev server, use Tab and Enter/Space to move between Home and Settings and operate the preview switch, then resize the browser to about 320px and 900px. Check a 200% zoom/reflow view when browser zoom is available, and confirm the content wraps without horizontal scrolling. Narrow viewport testing does not replace a browser-zoom check. The Home and Settings controls are native buttons with visible keyboard focus.
+
+Troubleshooting:
+
+- **Unsupported Node version:** the frontend requires Node.js `>=22.12.0`; check with `node --version`.
+- **Dependencies are missing:** run `npm ci` from the repository root to install the versions in `package-lock.json`.
+- **Port 5173 is already in use:** use the alternate local URL printed by Vite.
+- **Navigation does not change views:** check `activeView` and `navigateTo` in `src/app/App.tsx`; the preview uses in-memory state and does not change the URL.
+- **Focus does not move after navigation:** check the destination heading refs and focus effect in `src/app/App.tsx` and the `tabIndex={-1}` headings in both views.
+- **The preview switch resets after a page refresh:** this is expected; preview settings are in-memory only.
+- **The microphone or Dictate action is missing:** native recording and recognition are not part of this frontend preview.
+
+The Home page preview does not complete Tauri-dependent acceptance criteria; `AC-11` remains unverified for the native application.
+
+See [Task 26 frontend evidence](evidence/frontend-home-preview-task-26.md) for the exact commands and manual browser results.
+See [Task 27 shared-header evidence](evidence/frontend-shared-header-task-27.md) for the extraction, verification results, and accessibility limitations.
+
+## Task 28 — Shared page container
+
+[`src/app/PageContainer.tsx`](src/app/PageContainer.tsx) provides the neutral wrapper shared by Home and Settings. Its `.page-container` rule in [`src/styles/global.css`](src/styles/global.css) owns the centered 56rem content maximum, responsive horizontal gutters, and page spacing. The header remains inside this wrapper, matching the existing page structure. Settings keeps its internal navigation and panel layout: one column below 48rem and a fixed navigation column beside flexible content above that breakpoint. Each active view still has one `main` landmark.
+
+Start the application using the [development server instructions](#development-server), and run the frontend commands under [Testing and checks](#testing-and-checks). For a layout check, inspect Home and Settings at about 320px and 900px, navigate in both directions with the keyboard, and confirm the destination heading receives focus. At the narrow width, Settings sections should stack; at the wider width, its navigation and panel should sit side by side. The page should not scroll horizontally. A viewport-width check is not a substitute for a literal 200% browser zoom check.
+
+Troubleshooting:
+
+- **Horizontal overflow:** inspect long content inside `.page-container`, ensure flex/grid children can shrink with `min-width: 0`, and compare `document.documentElement.scrollWidth` with the viewport width. Keep page width and gutters in `.page-container` instead of adding a second page shell.
+- **Settings navigation or panel crowds the content:** check the 48rem `.settings-layout` breakpoint in `src/styles/global.css`; the single-column layout is intentional below it.
+- **Page spacing differs between Home and Settings:** check that both still render `PageContainer` and remove any duplicate outer width or gutter rule added to a page-specific wrapper.
+
+See [Task 28 frontend evidence](evidence/frontend-page-container-task-28.md) for implementation details, verification results, and remaining accessibility checks. This frontend Task 28 is separate from repository task T-028 (the bounded SPSC buffer); `docs/TASKS.md` and AC-11 completion status were not changed.
+
+## Task 29 — Reusable Settings section
+
+[`src/app/SettingsSection.tsx`](src/app/SettingsSection.tsx) owns the active Settings panel wrapper, heading, optional description, and child content. `App.tsx` supplies the selected section's existing copy and controls; only one tab panel is mounted at a time. Panel borders, surface, padding, heading, and description styles remain in the existing `.settings-panel` and `.settings-panel-heading` rules in [`src/styles/global.css`](src/styles/global.css), so this refactor does not add new styling rules.
+
+Run the preview and frontend checks with the existing [development server](#development-server) and [testing commands](#testing-and-checks). For visual verification, open Settings, inspect General and each tab through About & Diagnostics, and check the layout at 320px and 900px. Use the arrow keys within the section tabs, confirm visible focus, and verify the Launch at Login preview value survives Home → Settings navigation. Check literal 200% browser zoom separately when available.
+
+Troubleshooting:
+
+- **The panel has no accessible name:** verify `SettingsSection`'s `aria-labelledby` points to its visible `h2` ID, and that the tab's `aria-controls` still points to the active panel ID.
+- **Panel spacing or surface changes:** inspect the shared `.settings-panel` and `.settings-panel-heading` rules instead of adding styles to individual section content.
+- **Keyboard section navigation or focus fails:** check the tab IDs and `aria-controls` in `App.tsx`, the arrow-key handler, and the active tab's `tabIndex`; keep the panel heading hierarchy at `h2` under the Settings `h1`.
+- **Home/Settings focus or preview state changes:** check `navigateTo`, destination heading focus, and the in-memory state in `App.tsx` before changing panel rendering.
+
+See [Task 29 frontend evidence](evidence/frontend-settings-section-task-29.md) for test results, visual checks, and remaining accessibility limitations. This frontend Task 29 does not mark AC-11 complete.
+
+## Task 30 — Reusable Settings row
+
+[`src/app/SettingsRow.tsx`](src/app/SettingsRow.tsx) presents a setting title and optional description beside its control. General Settings uses it for Launch at Login; `App.tsx` still owns the preview boolean in React memory, so it survives view and tab navigation and resets on refresh. The row renders visible text IDs supplied by its owner; controls use `aria-labelledby` and, when applicable, `aria-describedby` to preserve their accessible name and description without wrapping a non-labelable control in `<label>`.
+
+Run the frontend with `npm run dev` and open General Settings. Verify the title, description, switch alignment, keyboard focus and Space activation at about 320px and 900px; confirm there is no horizontal overflow. Check literal 200% browser zoom separately when available. Run the frontend commands in [Testing and checks](#testing-and-checks), including `npm run test -- --run`.
+
+Troubleshooting:
+
+- **Row copy or switch alignment changes:** inspect `.settings-row`, `.settings-row-copy`, and `.settings-field-control` in `src/styles/global.css` and compare them with the existing spacing tokens.
+- **The switch loses its accessible name or description:** keep its `aria-labelledby` and `aria-describedby` IDs aligned with `SettingsRow`'s `titleId` and `descriptionId`.
+- **Focus or switching regresses:** check the switch's native button, Space key handling, and state ownership in `src/app/App.tsx`; do not move the preview value into `SettingsRow`.
+
+See [Task 30 frontend evidence](evidence/frontend-settings-row-task-30.md) for exact verification results and any checks not run. This task does not mark AC-11 complete.
+
+## Reusable SettingsSwitch (frontend Task 31)
+
+[`src/app/SettingsSwitch.tsx`](src/app/SettingsSwitch.tsx) is a controlled native-button switch for an immediate binary preference. It accepts `checked`, `onCheckedChange`, `labelledBy`, and optional `describedBy` props; it keeps no internal value and does not persist settings or call native APIs. Compose it inside [`SettingsRow`](src/app/SettingsRow.tsx): the row owns the title and description IDs, and the switch references those IDs for its accessible name and description. `App.tsx` owns the Launch at Login preview value in React memory, so it survives Home/Settings and Settings-section navigation and resets to Off after refresh.
+
+Run the preview with `npm run dev`, open General Settings, and inspect the row and switch at about 320px and 900px. Check mouse activation, Space and Enter keyboard activation, visible focus, state across navigation, and reset after refresh. A viewport-width check is not a substitute for literal 200% browser zoom.
+
+Run the focused component test with `npm run test -- --run src/app/SettingsSwitch.test.tsx`, or all frontend tests with `npm run test -- --run`. For accessible-name regressions, confirm `labelledBy` matches the SettingsRow `titleId`; for description regressions, confirm `describedBy` includes the row description ID; for keyboard regressions, preserve native button activation and the Space key repeat guard. For appearance regressions, inspect `.settings-switch`, `.settings-switch-track`, and `.settings-switch-thumb` in `src/styles/global.css` and retain the existing design tokens and focus ring.
+
+See [frontend Task 31 evidence](evidence/frontend-settings-switch-task-31.md) for exact verification results and checks not run. This task does not mark AC-11 complete.
+
+## Task 32 — Reusable Settings status message
+
+[`src/app/SettingsStatusMessage.tsx`](src/app/SettingsStatusMessage.tsx) presents a concise title and explanatory React children in a neutral Settings message. Its props are `title: string` and `children: ReactNode`. It is static explanatory copy: it has no state, native calls, controls, alert role, or live-region announcement. The Microphone preview uses it to explain that native selection is not connected, no audio is captured, device availability and permissions have not been checked, and input selection needs future native integration.
+
+Run the preview with `npm run dev`, open Settings → Microphone, and inspect the message at about 320px and 900px. Confirm that the copy wraps without horizontal scrolling, other sections remain available, and keyboard navigation still moves between tabs and returns focus to the destination heading when switching Home/Settings. In General, toggle Launch at Login and confirm it retains its in-memory state when navigating between Settings sections. A viewport-width check is not a substitute for literal 200% browser zoom; test screen-reader behavior separately with VoiceOver or another supported reader.
+
+Run the frontend checks from the repository root:
+
+```sh
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+Troubleshooting:
+
+- **Message text overflows:** inspect `.settings-status-message` and `.settings-status-message-description` in `src/styles/global.css`; keep the message shrinkable and allow long text to wrap.
+- **The title or explanation is missing from the accessibility tree:** preserve the level-three heading and paragraph markup. Keep static copy out of `role="alert"` and live regions unless it becomes a newly changing runtime status.
+- **The preview implies a real microphone state:** keep the text explicit that this development preview does not connect native microphone selection or check device availability and permissions.
+- **Settings focus or Launch at Login state regresses:** check the navigation and state ownership in `src/app/App.tsx` and rerun the App integration tests.
+
+See [frontend Task 32 evidence](evidence/frontend-settings-status-task-32.md) for exact results and checks not run. This task does not mark AC-11 complete.
+
+## Task 33 — Shortcuts status message
+
+Settings → Shortcuts reuses [`SettingsStatusMessage`](src/app/SettingsStatusMessage.tsx), matching the Microphone preview's existing static heading, explanation, and neutral styling. It explains that global keyboard shortcuts are not connected in this development preview, that no system-wide shortcuts are registered or monitored, and that configuration needs future native integration. The preview does not record shortcuts, check keyboard permissions, or install native hooks. No shortcut-related acceptance criterion or AC-11 is complete.
+
+Run `npm run dev` and open Settings → Shortcuts. Compare its message with Settings → Microphone, visit all six Settings sections, and use the section arrow keys plus Tab/Enter to check navigation and visible focus. In General, turn Launch at Login on, navigate away and back, and confirm it remains on. Inspect around 320px and 900px for readable wrapping and no horizontal overflow; check literal 200% zoom separately from viewport resizing. Run all frontend checks listed under [Testing and checks](#testing-and-checks), including `npm run test -- --run`.
+
+Troubleshooting:
+
+- **Shortcuts shows the generic placeholder:** check the `shortcuts` branch in `src/app/App.tsx` and keep the existing section heading and description.
+- **Message spacing or colors differ from Microphone:** reuse the `.settings-status-message` rules in `src/styles/global.css`; do not add per-section styles.
+- **The message is announced as an alert or becomes keyboard-focusable:** preserve its normal heading and paragraph in `SettingsStatusMessage`; do not add alert/live-region roles, controls, or `tabIndex`.
+- **Tab focus or Launch at Login state changes:** check the existing tab handler, destination heading focus, and app-owned in-memory state in `src/app/App.tsx`.
+
+See [frontend Task 33 evidence](evidence/frontend-shortcuts-status-task-33.md) for exact verification results and checks not run.
+
+## Task 34 — Text cleanup mode preview
+
+Settings → Text & Vocabulary offers **Clean** (the intended default, to remove supported filler words and apply deterministic cleanup) and **Verbatim** (intended to preserve filler words), as defined by PRD F-07. The selector is a frontend-only development preview held in React memory: it survives Settings-section and Home/Settings navigation, resets to Clean after refresh, and is not connected to dictation or text processing. The Custom Vocabulary draft form is documented in Task 35; it is not saved or applied.
+
+Run `npm run dev`, open Settings → Text & Vocabulary, and use the mouse or radio arrow keys to choose each option. Confirm the selected radio and focus are visible, visit another Settings section and Home, then return to confirm the selection remains. Refresh and confirm Clean is selected again. Check the layout around 320px and 900px when viewport resizing is available; perform a separate literal 200% zoom check when available.
+
+Run `npm run typecheck`, `npm run test -- --run`, `npm run lint`, and `npm run build` from the repository root. Troubleshooting: if the option label or description is missing to assistive technology, preserve the fieldset/legend, native radio labels, and description IDs in [`TextCleanupModeSelector.tsx`](src/app/TextCleanupModeSelector.tsx); if selection resets during navigation, keep its state in `App.tsx`. This preview does not complete AC-07, AC-08, AC-11, T-035, T-038, or T-053. See [Task 34 evidence](evidence/frontend-text-cleanup-mode-task-34.md) for verification and remaining checks.
+
+## Task 35 — Custom vocabulary entry form preview
+
+Settings → Text & Vocabulary now has **Spoken phrase** and **Written replacement** text fields after the Clean/Verbatim selector. Each field accepts Unicode text, including accented characters, emoji, and combining sequences. After a field is touched, validation reports empty or whitespace-only input, invalid unpaired UTF-16 surrogates, and values longer than 128 Unicode scalar values. Values are not normalized or truncated. The draft stays in React memory while switching Settings sections or navigating Home/Settings, and resets after a refresh or fresh app mount.
+
+This is a preview only: entries are not saved, edited, deleted, exported, or applied to dictated text. There is no vocabulary list, duplicate detection, 500-entry enforcement, or replacement processing.
+
+Run `npm run dev`, open Settings → Text & Vocabulary, and type or paste into both fields. Blur an empty field to see its error, then correct it and confirm the error clears. Check the layout around 320px and 900px, visible keyboard focus, switching sections and Home/Settings, then refresh to confirm the draft resets. A viewport-width check is not a substitute for literal 200% browser zoom.
+
+Run the frontend checks from the repository root:
+
+```sh
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+Troubleshooting:
+
+- **A label or helper text is missing to assistive technology:** keep the native `<label>` associated with its input and preserve the description/error IDs in `src/app/VocabularyEntryForm.tsx`.
+- **A field stays invalid after correction:** check that `App.tsx` passes the updated controlled draft back through the component's `value` prop.
+- **A phrase is rejected at the boundary:** the limit counts Unicode scalar values, not UTF-16 code units or grapheme clusters; one emoji counts as one scalar, and `e` plus a combining accent counts as two.
+- **Draft data survives a full refresh:** inspect `App.tsx` for accidental persistence; this preview stores no vocabulary in localStorage, sessionStorage, files, or a backend.
+
+See [Task 35 evidence](evidence/frontend-vocabulary-form-task-35.md) for exact verification results and checks not run. This task does not mark AC-08, AC-11, T-038, T-039, or T-053 complete.
+
+## Task 36 — Live vocabulary draft preview
+
+[`VocabularyDraftPreview`](src/app/VocabularyDraftPreview.tsx) receives the same `VocabularyDraft` value as [`VocabularyEntryForm`](src/app/VocabularyEntryForm.tsx). It reuses the form's `validateVocabularyValue` function and has no draft state of its own. For a valid pair, it interpolates the entered phrases into the fixed synthetic sentences `I mentioned “<spoken phrase>” today.` and `I mentioned “<written replacement>” today.` React renders the values as text. The example is not produced by a replacement engine and does not read transcripts, save entries, or process speech.
+
+Both empty fields show a neutral prompt; a missing field asks for both values. Whitespace-only, overlength, or invalid-Unicode values hide the completed example until corrected. The form continues to show its existing field validation after blur. Draft and preview state last only for the current app mount and reset after refresh.
+
+Run `npm run dev`, open Settings → Text & Vocabulary, and enter both values. Edit each field, try an empty or invalid value, then correct it. Confirm the example updates, wraps at about 320px and 900px, renders HTML-like and Unicode text literally, and offers no Save or Apply action. Check keyboard focus and Settings/Home navigation. Test literal 200% browser zoom separately from viewport resizing.
+
+Run the frontend checks with `npm run typecheck`, `npm run test -- --run`, `npm run lint`, and `npm run build`. Troubleshooting: if the example is hidden, check both fields against the shared validator; if it does not update, confirm `App.tsx` passes the current draft as the preview's `value`; if markup appears interpreted, keep draft text in normal React children. This display-only feature does not complete AC-08, AC-11, T-038, T-039, or T-053. See [Task 36 evidence](evidence/frontend-vocabulary-preview-task-36.md) for results and checks not run.
+
+## Task 37 — Clear vocabulary draft
+
+The **Clear draft** button is enabled while either vocabulary field contains any text, including whitespace or an invalid value, and disabled when both fields are empty. It resets both in-memory fields and their validation presentation, returns the synthetic preview to its empty guidance, and moves focus to **Spoken phrase**. Clean/Verbatim, Launch at Login, and other Settings state are unaffected. This form is an unsaved frontend preview with no connection to settings storage, so clearing it cannot save, modify, or delete any saved vocabulary.
+
+Run `npm run dev`, open Settings → Text & Vocabulary, enter a draft, and activate Clear draft with a mouse, Enter, or Space. Verify the empty fields, preview guidance, and focus return; blur an invalid field first to check that its error clears. Check approximately 320px and 900px widths, then navigate between Settings sections and Home to confirm other Settings state remains intact.
+
+Run the frontend checks with `npm run typecheck`, `npm run test -- --run`, `npm run lint`, and `npm run build`. Troubleshooting: if errors remain after clearing, confirm the form resets its touched state and App clears the controlled draft; if focus is lost, keep focus directed to the Spoken phrase input before the now-empty button is disabled; if the button state is wrong, check that it uses raw field lengths so whitespace and invalid text still enable it.
+
+See [Task 37 evidence](evidence/frontend-vocabulary-clear-task-37.md) for test results and accessibility checks not run. AC-08, AC-11, T-038, T-039, and T-053 remain incomplete.
+
+## Task 38 — Privacy Settings overview
+
+[`src/app/PrivacyOverview.tsx`](src/app/PrivacyOverview.tsx) provides four read-only disclosures in Settings → Privacy: intended offline processing; content the product requirements prohibit retaining; the distinction between local settings/vocabulary and speech content; and clipboard, operating-system, and update boundaries. It reuses `SettingsStatusMessage` to state that native recording, offline recognition, clipboard behavior, network isolation, and retention safeguards are not fully implemented and verified. The disclosures describe requirements, not completed or audited protections.
+
+The current React preview does not record audio or recognize speech. Launch at Login and Clean/Verbatim are in-memory values, the vocabulary draft is unsaved, and a refresh resets them. No privacy setting, persistence, network monitoring, clipboard operation, update check, or diagnostics export is added. The Rust settings schema and writer described above remain separate from this frontend.
+
+Open the frontend using the [development server instructions](#development-server), then choose **Settings → Privacy**. Check all six Settings tabs, switch to another section and back, and confirm the active panel remains linked to its selected tab. Test the layout at approximately 320px and 900px, check keyboard navigation and Home/Settings heading focus, and look for horizontal overflow or clipped text. Literal 200% zoom and screen-reader checks must be performed separately; resizing the viewport does not substitute for zoom.
+
+Run the frontend checks from the repository root:
+
+```sh
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+Troubleshooting:
+
+- **Privacy is still a placeholder:** check that `App.tsx` selects `PrivacyOverview` for the existing `privacy` section and keeps `SettingsSection` as the panel wrapper.
+- **Text clips or overflows:** inspect the `.privacy-overview*` rules in `src/styles/global.css`; retain `min-width: 0`, wrapping, and the shared Settings panel gutter.
+- **The panel heading, tab, or destination focus is wrong:** check the existing tab IDs and `aria-controls` plus the Home/Settings heading refs in `src/app/App.tsx`; Privacy must not add a second Settings heading.
+- **Preview values change after visiting Privacy:** keep Launch at Login, cleanup mode, and vocabulary draft state owned by `App.tsx`; do not add storage to the informational component.
+
+Task 38 verification passed frontend typecheck, lint, build, and all 122 tests; the 320px/900px overflow and keyboard navigation checks also passed. Literal 200% zoom and screen-reader checks are **NOT RUN**; see the evidence file below.
+
+See [Task 38 evidence](evidence/frontend-privacy-overview-task-38.md) for commands, visual results, and accessibility checks not run. T-061, T-062, T-063, T-077, AC-11, and AC-12 remain incomplete; this frontend page does not verify native privacy safeguards.
+
+## Task 39 — About & Diagnostics overview
+
+[`src/app/AboutDiagnosticsOverview.tsx`](src/app/AboutDiagnosticsOverview.tsx) adds a static **About & Diagnostics** overview inside the existing Settings panel. It describes Outflow and identifies the current interface as a development preview, lists the troubleshooting cases the finished application is intended to handle, explains future diagnostic-export fields and privacy exclusions, and summarizes the planned explicit signed full-application update flow.
+
+The page does not show a version. `package.json` contains `0.1.0`, but that is frontend package metadata, not verified native release metadata. The page does not claim a native, model, or runtime version. Troubleshooting, diagnostic collection/export, and update checking are described as planned capabilities; they are not implemented or detected by this preview. No diagnostic report can be generated here, and update checking is not implemented. The overview itself does not initiate network requests, invoke native commands, create files, or access persistent storage, and it collects no device or diagnostic data. It offers no Export diagnostics or Check for Updates control.
+
+Open the frontend with the [development server instructions](#development-server), choose **Settings → About & Diagnostics**, and use the existing Settings tabs to return to another section. The page shares the existing neutral Settings styles and status message. All six sections and existing Settings state remain owned by `App.tsx`.
+
+Run frontend verification from the repository root:
+
+```sh
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+For manual verification, open the local Vite URL, navigate to About & Diagnostics, read each section, and confirm there are no export or update controls or fabricated runtime values. Use the Settings tabs and Home/Settings navigation with the keyboard; confirm the destination page heading receives focus and Launch at Login, Clean/Verbatim, and vocabulary drafts remain unchanged. Inspect about 320px and 900px widths for readable wrapping and horizontal overflow. Test literal 200% browser zoom and a screen reader separately; resizing the viewport is not a substitute.
+
+Troubleshooting:
+
+- **The tab still shows a placeholder:** check the `about-diagnostics` branch in `src/app/App.tsx` and keep `SettingsSection` as the only panel heading wrapper.
+- **Text clips or overflows:** inspect the shared `.privacy-overview*`, `.settings-preview-note`, and `.settings-status-message` rules in `src/styles/global.css`; keep the Settings content min-width and text wrapping behavior.
+- **Navigation or preview values change:** check the existing tab handler, destination-heading focus effect, and state ownership in `src/app/App.tsx`; the overview itself should remain presentational.
+- **An export or update action appears:** remove it from this static overview. Diagnostic export and update checking remain native work for their own tasks.
+
+This frontend page does not complete repository T-039 (vocabulary hints and post-correction), T-019, T-064, T-072, T-077, AC-11, or AC-13. The task ledger remains unchanged. See [frontend Task 39 evidence](evidence/frontend-about-diagnostics-task-39.md) for exact verification results, visual checks, and remaining accessibility checks.
+
+## Task 40 — Settings UI quality verification
+
+Start the preview using the existing [development server instructions](#development-server), then open **Settings** and inspect General, Microphone, Shortcuts, Text & Vocabulary, Privacy, and About & Diagnostics. The preview switch, cleanup mode, and vocabulary draft are in-memory only; section and Home/Settings navigation preserve them, while refreshing restores Off, Clean, and an empty draft. Microphone and global shortcuts are unavailable, Privacy describes requirements separately from verified protections, and diagnostics export/update checking are not implemented.
+
+For a keyboard walkthrough, use Tab to reach Settings, Enter or Space to open it, and Up/Down arrows to move through the vertical Settings tabs. Tab enters the selected panel; Shift+Tab returns to the preceding control. Check that Home/Settings navigation focuses its destination heading and that keyboard focus remains visible. On Text & Vocabulary, use the radio arrow keys, enter both phrases, review the synthetic preview, and use Clear draft to check error reset and focus return.
+
+Use the browser's responsive viewport controls to inspect Home and all six panels at **320×900** and **900×900 CSS px**. Check wrapping, controls near the viewport edges, vertical scrolling, and horizontal overflow; the browser console can compare `document.documentElement.scrollWidth` with `document.documentElement.clientWidth`. A 320px viewport check does not replace literal 200% browser zoom.
+
+Literal 200% zoom, increased text spacing, reduced-motion and forced-colors emulation, and VoiceOver/screen-reader operation remain **NOT RUN**. No WCAG 2.2 AA claim is made; AC-11 and native/release acceptance criteria remain incomplete. See the [Task 40 QA report](evidence/frontend-settings-quality-task-40.md) for the verification matrix and exact command results. For layout issues, inspect page gutters, `min-width: 0`, and scroll widths; for panel or focus issues, check the active tab ID, `aria-controls`, panel `aria-labelledby`, and destination heading refs in `src/app/App.tsx` and `src/app/SettingsSection.tsx`.
+
+## Focused Task 41 — Rust custom vocabulary validation
+
+The dependency-free `outflow-core` crate exposes `outflow_core::vocabulary::validate_vocabulary_entry(spoken, written)`. It returns `Result<(), VocabularyValidationError>`; the error identifies `VocabularyField::Spoken` or `Written` and whether the value was `Empty` or `TooLong`. Each field must contain a non-whitespace Unicode scalar and may contain at most 128 scalars. The validator uses Rust `str::chars()`: a multibyte emoji counts as one scalar, while `e` plus a combining accent counts as two. It does not trim, normalize, case-fold, or rewrite accepted text.
+
+Rust `&str` is valid UTF-8 and cannot contain unpaired surrogates. A JavaScript UTF-16 string with malformed surrogate code units must be rejected during conversion to Rust text, such as with `String::from_utf16`, before calling this API. FR-08.4 also calls for rejecting pathological input, but the repository defines no embedded-control policy; that rule remains unresolved and this validator adds none. The function is not connected to the React form or settings schema. Vocabulary CRUD, the 500-entry cap, duplicate/conflict policy, persistence, editing/deletion, and text replacement remain separate work. This does not complete AC-08 or repository T-038.
+
+Run the focused and workspace Rust tests and the synthetic demo from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_validation --locked
+```
+
+The focused tests cover empty and Unicode whitespace-only fields, field/reason reporting, both-field ASCII and emoji boundaries, accented text, combining marks, unchanged accepted values, redacted errors, and deterministic results. The full workspace run passed **87 Rust tests** (15 added; all 72 previously existing tests remain passing). Frontend checks passed with 136 tests, and the Python suite passed 226 tests. See [Task 41 evidence](evidence/rust-vocabulary-validation-task-41.md) for all commands and results.
+
+Expected demo output:
+
+```text
+Outflow vocabulary validation demo
+Valid vocabulary mapping: PASS
+Empty spoken phrase: REJECTED
+Overlong written replacement: REJECTED
+Unicode scalar boundary: PASS
+Vocabulary persistence: NOT IMPLEMENTED
+Text replacement: NOT IMPLEMENTED
+```
+
+If a phrase is rejected at the length boundary, count Unicode scalar values: each emoji counts once, and a base character plus combining mark counts twice. If malformed UTF-16 is involved, validate the UTF-16-to-UTF-8 conversion before calling Rust; such malformed data cannot be passed as `&str`. The repository task ledger already uses T-041 for the onboarding permission checklist, so this focused request does not change that entry or any task status. T-017 and T-018 remain incomplete, and their prerequisite work for T-038 is still outstanding.
+
+## Focused Task 42 — Rust vocabulary collection validation
+
+`outflow_core::vocabulary::validate_vocabulary_collection(&[VocabularyEntryRef])` validates a borrowed, read-only collection and returns `Result<(), VocabularyCollectionError>`. It accepts zero through `MAX_VOCABULARY_ENTRIES` (500) entries and rejects a larger collection with its supplied count and the maximum. Each entry is checked by the existing `validate_vocabulary_entry`, preserving its nonempty and 128 Unicode scalar-value rules. Invalid-entry errors carry the zero-based index and typed `VocabularyValidationError`; validation errors report either the size, invalid entry, or both conflicting spoken-entry indices without including phrase text. Validation order is size, per-entry checks in input order, then duplicate checks in input order.
+
+Spoken phrases are provisionally compared with `spoken.to_lowercase()`; written replacements do not determine uniqueness. This is Rust lowercase mapping only, without trimming or normalization, and is **not complete Unicode case folding**. For example, the current rule detects `CAFÉ` / `café` but does not equate `straße` / `STRASSE`. The final production uniqueness and replacement-matching policy remains undecided. This function does not persist entries or perform replacement or word-boundary matching.
+
+Run the focused tests and synthetic example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary --locked
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_validation --locked
+```
+
+Expected example output:
+
+```text
+Outflow vocabulary validation demo
+Valid vocabulary mapping: PASS
+Empty spoken phrase: REJECTED
+Overlong written replacement: REJECTED
+Unicode scalar boundary: PASS
+Vocabulary collection validation
+500 entries: PASS
+501 entries: REJECTED
+Duplicate spoken phrase: REJECTED
+Case-insensitive ASCII conflict: REJECTED
+Unicode matching policy: PROVISIONAL
+Vocabulary persistence: NOT IMPLEMENTED
+Text replacement: NOT IMPLEMENTED
+```
+
+See [Task 42 evidence](evidence/rust-vocabulary-collection-task-42.md) for full verification results. This work does not complete AC-08, T-038, or T-039, and it does not change the separate repository T-042 target-identity task. T-017 and T-018 remain incomplete prerequisites for T-038.

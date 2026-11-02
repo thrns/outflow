@@ -1,5 +1,19 @@
 import "../styles/global.css";
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import AppHeader, { type AppPage } from "./AppHeader";
+import HomePage from "./HomePage";
+import { PageContainer } from "./PageContainer";
+import { SettingsRow } from "./SettingsRow";
+import { SettingsSwitch } from "./SettingsSwitch";
+import { SettingsSection } from "./SettingsSection";
+import { SettingsStatusMessage } from "./SettingsStatusMessage";
+import TextCleanupModeSelector, {
+  type CleanupMode,
+} from "./TextCleanupModeSelector";
+import VocabularyEntryForm, { type VocabularyDraft } from "./VocabularyEntryForm";
+import VocabularyDraftPreview from "./VocabularyDraftPreview";
+import PrivacyOverview from "./PrivacyOverview";
+import AboutDiagnosticsOverview from "./AboutDiagnosticsOverview";
 
 const settingsSections = [
   {
@@ -37,34 +51,38 @@ const settingsSections = [
 type SettingsSectionId = (typeof settingsSections)[number]["id"];
 
 export default function App() {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeView, setActiveView] = useState<AppPage>("home");
+  const previousView = useRef(activeView);
+  const homeHeading = useRef<HTMLHeadingElement | null>(null);
+  const settingsHeading = useRef<HTMLHeadingElement | null>(null);
   const [selectedSection, setSelectedSection] =
     useState<SettingsSectionId>("general");
   const [startup, setStartup] = useState({ run_at_login: false });
+  const [cleanupMode, setCleanupMode] = useState<CleanupMode>("clean");
+  const [vocabularyDraft, setVocabularyDraft] = useState<VocabularyDraft>({
+    spoken: "",
+    written: "",
+  });
   const sectionTabs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedIndex = settingsSections.findIndex(
     (section) => section.id === selectedSection,
   );
   const selectedDetails = settingsSections[selectedIndex];
 
-  function openSettings() {
-    setSelectedSection("general");
-    setIsSettingsOpen(true);
-  }
+  useEffect(() => {
+    if (previousView.current === activeView) return;
 
-  function toggleRunAtLogin() {
-    setStartup((current) => ({
-      ...current,
-      run_at_login: !current.run_at_login,
-    }));
-  }
+    previousView.current = activeView;
+    const heading =
+      activeView === "home" ? homeHeading.current : settingsHeading.current;
+    heading?.focus();
+  }, [activeView]);
 
-  function handleRunAtLoginKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key !== " ") return;
+  function navigateTo(page: AppPage) {
+    if (page === activeView) return;
 
-    // Prevent the native keyup click so holding Space changes the switch once.
-    event.preventDefault();
-    if (!event.repeat) toggleRunAtLogin();
+    if (page === "settings") setSelectedSection("general");
+    setActiveView(page);
   }
 
   function handleTabKeyDown(
@@ -97,31 +115,21 @@ export default function App() {
     sectionTabs.current[nextIndex]?.focus();
   }
 
-  if (isSettingsOpen) {
+  if (activeView === "settings") {
     return (
-      <main className="settings-page">
-        <div className="settings-shell">
-          <header className="settings-header">
-            <div className="settings-topline">
-              <button
-                className="back-button"
-                type="button"
-                onClick={() => setIsSettingsOpen(false)}
-              >
-                <span aria-hidden="true" className="back-arrow">
-                  ←
-                </span>
-                Back
-              </button>
-              <p className="settings-app-name">Outflow</p>
-            </div>
+      <main>
+        <PageContainer>
+          <div className="settings-header">
+            <AppHeader currentPage="settings" onNavigate={navigateTo} />
             <div className="settings-heading-group">
-              <h1 id="settings-heading">Settings</h1>
+              <h1 id="settings-heading" ref={settingsHeading} tabIndex={-1}>
+                Settings
+              </h1>
               <p className="settings-description">
                 Configure your offline dictation experience.
               </p>
             </div>
-          </header>
+          </div>
 
           <div className="settings-layout">
             <nav
@@ -160,62 +168,37 @@ export default function App() {
               </div>
             </nav>
 
-            <section
-              aria-labelledby={`settings-tab-${selectedDetails.id}`}
-              className="settings-panel"
+            <SettingsSection
               id="settings-panel"
-              role="tabpanel"
-              tabIndex={0}
+              labelledBy={`settings-tab-${selectedSection}`}
+              title={selectedDetails.title}
+              description={selectedDetails.description}
             >
-              <div className="settings-panel-heading">
-                <h2>{selectedDetails.title}</h2>
-                <p>{selectedDetails.description}</p>
-              </div>
               {selectedSection === "general" ? (
                 <div className="settings-preferences">
-                  <div
-                    aria-labelledby="launch-at-login-label"
-                    className="settings-field"
-                    role="group"
+                  <SettingsRow
+                    title="Launch at Login"
+                    titleId="launch-at-login-label"
+                    description="Start Outflow automatically when you sign in to your computer."
+                    descriptionId="launch-at-login-description"
                   >
-                    <div className="settings-field-copy">
-                      <p
-                        className="settings-field-label"
-                        id="launch-at-login-label"
-                      >
-                        Launch at Login
-                      </p>
-                      <p
-                        className="settings-field-description"
-                        id="launch-at-login-description"
-                      >
-                        Start Outflow automatically when you sign in to your
-                        computer.
-                      </p>
-                    </div>
                     <div className="settings-field-control">
                       <span className="settings-switch-state">
                         {startup.run_at_login ? "On" : "Off"}
                       </span>
-                      <button
-                        aria-checked={startup.run_at_login}
-                        aria-describedby="launch-at-login-description launch-at-login-preview-note"
-                        aria-labelledby="launch-at-login-label"
-                        className="settings-switch"
-                        onClick={toggleRunAtLogin}
-                        onKeyDown={handleRunAtLoginKeyDown}
-                        role="switch"
-                        type="button"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="settings-switch-track"
-                        >
-                          <span className="settings-switch-thumb" />
-                        </span>
-                      </button>
+                      <SettingsSwitch
+                        checked={startup.run_at_login}
+                        onCheckedChange={(checked) =>
+                          setStartup((current) => ({
+                            ...current,
+                            run_at_login: checked,
+                          }))
+                        }
+                        labelledBy="launch-at-login-label"
+                        describedBy="launch-at-login-description launch-at-login-preview-note"
+                      />
                     </div>
-                  </div>
+                  </SettingsRow>
                   <p
                     className="settings-preview-note"
                     id="launch-at-login-preview-note"
@@ -225,30 +208,63 @@ export default function App() {
                     startup behavior yet.
                   </p>
                 </div>
+              ) : selectedSection === "microphone" ? (
+                <SettingsStatusMessage title="Microphone setup unavailable">
+                  Microphone selection is not connected in this development
+                  preview. No audio is captured, and device availability and
+                  microphone permissions have not been checked. Selecting an
+                  input will require future native integration.
+                </SettingsStatusMessage>
+              ) : selectedSection === "shortcuts" ? (
+                <SettingsStatusMessage title="Keyboard shortcuts unavailable">
+                  Global keyboard shortcuts are not connected in this development
+                  preview. No system-wide shortcuts are registered or monitored.
+                  Shortcut configuration will become available after native
+                  integration.
+                </SettingsStatusMessage>
+              ) : selectedSection === "text-vocabulary" ? (
+                <div className="text-vocabulary-settings">
+                  <TextCleanupModeSelector
+                    value={cleanupMode}
+                    onChange={setCleanupMode}
+                  />
+                  <section
+                    aria-labelledby="custom-vocabulary-heading"
+                    className="custom-vocabulary-preview"
+                  >
+                    <h3 id="custom-vocabulary-heading">Custom vocabulary</h3>
+                    <VocabularyEntryForm
+                      onClearDraft={() =>
+                        setVocabularyDraft({ spoken: "", written: "" })
+                      }
+                      onChange={setVocabularyDraft}
+                      value={vocabularyDraft}
+                    />
+                    <VocabularyDraftPreview value={vocabularyDraft} />
+                  </section>
+                </div>
+              ) : selectedSection === "privacy" ? (
+                <PrivacyOverview />
+              ) : selectedSection === "about-diagnostics" ? (
+                <AboutDiagnosticsOverview />
               ) : (
                 <p className="settings-placeholder">
                   Settings controls will be added in a later step.
                 </p>
               )}
-            </section>
+            </SettingsSection>
           </div>
-        </div>
+        </PageContainer>
       </main>
     );
   }
 
   return (
-    <main className="foundation-page">
-      <section className="foundation-card" aria-labelledby="foundation-heading">
-        <p className="application-name">Outflow</p>
-        <h1 id="foundation-heading">Foundation ready</h1>
-        <p className="foundation-description">
-          Your application is set up and ready for development.
-        </p>
-        <button className="primary-button" onClick={openSettings} type="button">
-          Settings
-        </button>
-      </section>
-    </main>
+    <HomePage
+      headingRef={(heading) => {
+        homeHeading.current = heading;
+      }}
+      onNavigate={navigateTo}
+    />
   );
 }
