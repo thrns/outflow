@@ -18,6 +18,10 @@ Shipped files / purpose:
 Redistribution review:
 ```
 
-No third-party Rust crate dependencies are introduced by the initial
-`outflow-core` foundation. This statement is not a license audit of the
-frontend, build tools, future native libraries, or model assets.
+Task 45 adds `icu_casemap` 2.4.0 and `icu_normalizer` 2.4.0 to `outflow-core`,
+along with resolved ICU4X and Unicode-data dependencies. Cargo metadata reports
+Unicode-3.0 for ICU4X and Unicode-derived crates; the full locked license list
+and required notice-review scope are recorded in
+`evidence/rust-vocabulary-icu4x-task-45.md`. This template is still not a
+completed attribution inventory or a packaged notice bundle. The frontend,
+build tools, native libraries, and model assets require their own review.

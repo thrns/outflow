@@ -16,6 +16,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+use crate::vocabulary_matching::{CURRENT_VOCABULARY_MATCHING_VERSION, comparison_key};
+
 /// Maximum number of Unicode scalar values in either vocabulary phrase.
 pub const MAX_VOCABULARY_FIELD_SCALARS: usize = 128;
 
@@ -95,7 +97,7 @@ pub enum VocabularyCollectionError {
         /// Redacted field and validation reason.
         source: VocabularyValidationError,
     },
-    /// Two spoken phrases have the same provisional lowercase key.
+    /// Two spoken phrases have the same versioned canonical-caseless key.
     DuplicateSpoken {
         /// Zero-based index of the first matching entry.
         first_index: usize,
@@ -144,15 +146,14 @@ impl Error for VocabularyCollectionError {
 /// and only after all entries are valid are spoken phrases checked for
 /// conflicts in input order. The first error in that order is returned.
 ///
-/// Spoken phrase conflicts use the provisional key `spoken.to_lowercase()`.
-/// This is Rust's Unicode lowercase mapping, without trimming, normalization,
-/// locale-sensitive behavior, or changes to accepted input. Lowercasing is
-/// not full Unicode case folding or normalization: for example, `straße` and
-/// `STRASSE` produce different keys and are not reported as a conflict. The
-/// product's final uniqueness and replacement-matching policy remains open.
-/// Written phrases do not determine uniqueness. This function does not
-/// perform text replacement or word-boundary matching, persist values, or
-/// retain phrase references beyond this call.
+/// Spoken phrase conflicts use the key identified by
+/// [`CURRENT_VOCABULARY_MATCHING_VERSION`], currently Unicode 18.0.0 canonical
+/// caseless matching (D145). This applies NFD, default full case folding, and
+/// NFD again. It does not trim, use locale-specific folding, apply compatibility
+/// normalization, strip accents, or change accepted input. Written phrases do
+/// not determine uniqueness. This function does not perform text replacement
+/// or word-boundary matching, persist values, or retain phrase references
+/// beyond this call.
 ///
 /// # Errors
 ///
@@ -178,14 +179,14 @@ pub fn validate_vocabulary_collection(
 
     let mut first_index_by_key = HashMap::<String, usize>::with_capacity(entries.len());
     for (index, entry) in entries.iter().enumerate() {
-        let comparison_key = entry.spoken.to_lowercase();
-        if let Some(&first_index) = first_index_by_key.get(&comparison_key) {
+        let key = comparison_key(entry.spoken, CURRENT_VOCABULARY_MATCHING_VERSION);
+        if let Some(&first_index) = first_index_by_key.get(&key) {
             return Err(VocabularyCollectionError::DuplicateSpoken {
                 first_index,
                 duplicate_index: index,
             });
         }
-        first_index_by_key.insert(comparison_key, index);
+        first_index_by_key.insert(key, index);
     }
 
     Ok(())
@@ -694,7 +695,7 @@ mod tests {
     }
 
     #[test]
-    fn lowercase_comparison_does_not_claim_full_unicode_case_folding() {
+    fn full_unicode_case_folding_detects_sharp_s_duplicates() {
         let entries = [
             VocabularyEntryRef {
                 spoken: "straße",
@@ -706,9 +707,106 @@ mod tests {
             },
         ];
 
-        // Simple lowercase produces "straße" and "strasse"; a fuller
-        // case-folding policy could treat these values as equivalent.
-        assert_eq!(validate_vocabulary_collection(&entries), Ok(()));
+        assert_eq!(
+            validate_vocabulary_collection(&entries),
+            Err(VocabularyCollectionError::DuplicateSpoken {
+                first_index: 0,
+                duplicate_index: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn collection_validator_uses_the_task_43_comparison_matrix() {
+        let cases = [
+            ("rust", "Rust", true),
+            ("CAFÉ", "café", true),
+            ("straße", "STRASSE", true),
+            ("é", "e\u{301}", true),
+            ("Σ", "σ", true),
+            ("σ", "ς", true),
+            ("North Parkade", "north parkade", true),
+            ("north parkade", "north parkade ", false),
+            ("I", "ı", false),
+            ("İ", "i", false),
+            ("①", "1", false),
+            ("a", "а", false),
+        ];
+
+        for (first, second, expected_duplicate) in cases {
+            let entries = [
+                VocabularyEntryRef {
+                    spoken: first,
+                    written: "first replacement",
+                },
+                VocabularyEntryRef {
+                    spoken: second,
+                    written: "second replacement",
+                },
+            ];
+            let result = validate_vocabulary_collection(&entries);
+            if expected_duplicate {
+                assert_eq!(
+                    result,
+                    Err(VocabularyCollectionError::DuplicateSpoken {
+                        first_index: 0,
+                        duplicate_index: 1,
+                    }),
+                    "expected a duplicate for {first:?} and {second:?}"
+                );
+            } else {
+                assert_eq!(
+                    result,
+                    Ok(()),
+                    "expected distinct spoken phrases for {first:?} and {second:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unicode_duplicate_with_different_replacements_is_rejected() {
+        let entries = [
+            VocabularyEntryRef {
+                spoken: "é",
+                written: "first replacement",
+            },
+            VocabularyEntryRef {
+                spoken: "e\u{301}",
+                written: "different replacement",
+            },
+        ];
+
+        assert_eq!(
+            validate_vocabulary_collection(&entries),
+            Err(VocabularyCollectionError::DuplicateSpoken {
+                first_index: 0,
+                duplicate_index: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn unicode_duplicate_at_the_end_of_a_500_entry_collection_is_reported() {
+        let mut owned_entries = Vec::with_capacity(MAX_VOCABULARY_ENTRIES);
+        owned_entries.push((String::from("straße"), String::from("first replacement")));
+        for index in 1..MAX_VOCABULARY_ENTRIES - 1 {
+            owned_entries.push((format!("entry-{index}"), format!("replacement-{index}")));
+        }
+        owned_entries.push((String::from("STRASSE"), String::from("last replacement")));
+        let entries = owned_entries
+            .iter()
+            .map(|(spoken, written)| VocabularyEntryRef { spoken, written })
+            .collect::<Vec<_>>();
+
+        assert_eq!(entries.len(), MAX_VOCABULARY_ENTRIES);
+        assert_eq!(
+            validate_vocabulary_collection(&entries),
+            Err(VocabularyCollectionError::DuplicateSpoken {
+                first_index: 0,
+                duplicate_index: MAX_VOCABULARY_ENTRIES - 1,
+            })
+        );
     }
 
     #[test]

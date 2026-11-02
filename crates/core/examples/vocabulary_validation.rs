@@ -1,10 +1,10 @@
-use std::process::ExitCode;
-
 use outflow_core::vocabulary::{
     MAX_VOCABULARY_ENTRIES, MAX_VOCABULARY_FIELD_SCALARS, VocabularyCollectionError,
     VocabularyEntryRef, VocabularyField, VocabularyValidationError, validate_vocabulary_collection,
     validate_vocabulary_entry,
 };
+use outflow_core::vocabulary_matching::{CURRENT_VOCABULARY_MATCHING_VERSION, comparison_key};
+use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let valid_mapping = validate_vocabulary_entry("north parkade", "North Parkade").is_ok();
@@ -16,9 +16,6 @@ fn main() -> ExitCode {
         validate_vocabulary_entry("source", &"x".repeat(MAX_VOCABULARY_FIELD_SCALARS + 1)),
         Err(VocabularyValidationError::TooLong(VocabularyField::Written))
     );
-    let unicode_scalar_boundary =
-        validate_vocabulary_entry(&"😀".repeat(MAX_VOCABULARY_FIELD_SCALARS), "replacement")
-            .is_ok();
 
     let owned_collection = (0..=MAX_VOCABULARY_ENTRIES)
         .map(|index| (format!("spoken-{index}"), format!("written-{index}")))
@@ -28,25 +25,8 @@ fn main() -> ExitCode {
     let exactly_500_accepted = validate_vocabulary_collection(&entries_500).is_ok();
     let over_limit_rejected = matches!(
         validate_vocabulary_collection(&entries_501),
-        Err(VocabularyCollectionError::TooManyEntries {
-            count,
-            maximum,
-        }) if count == MAX_VOCABULARY_ENTRIES + 1 && maximum == MAX_VOCABULARY_ENTRIES
-    );
-
-    let exact_duplicate = [
-        VocabularyEntryRef {
-            spoken: "north parkade",
-            written: "North Parkade",
-        },
-        VocabularyEntryRef {
-            spoken: "north parkade",
-            written: "Northern Parking Area",
-        },
-    ];
-    let exact_duplicate_rejected = matches!(
-        validate_vocabulary_collection(&exact_duplicate),
-        Err(VocabularyCollectionError::DuplicateSpoken { .. })
+        Err(VocabularyCollectionError::TooManyEntries { count, maximum })
+            if count == MAX_VOCABULARY_ENTRIES + 1 && maximum == MAX_VOCABULARY_ENTRIES
     );
 
     let ascii_case_variation = [
@@ -59,22 +39,9 @@ fn main() -> ExitCode {
             written: "Rust Language",
         },
     ];
-    let ascii_case_conflict_rejected = matches!(
-        validate_vocabulary_collection(&ascii_case_variation),
-        Err(VocabularyCollectionError::DuplicateSpoken { .. })
-    );
+    let ascii_case_duplicate = is_duplicate(&ascii_case_variation);
 
-    let lowercase_unicode_pair = [
-        VocabularyEntryRef {
-            spoken: "CAFÉ",
-            written: "Cafe",
-        },
-        VocabularyEntryRef {
-            spoken: "café",
-            written: "Coffee Shop",
-        },
-    ];
-    let unicode_casefold_limitation = [
+    let sharp_s_pair = [
         VocabularyEntryRef {
             spoken: "straße",
             written: "street",
@@ -84,52 +51,67 @@ fn main() -> ExitCode {
             written: "Street",
         },
     ];
-    let unicode_policy_is_provisional =
-        matches!(
-            validate_vocabulary_collection(&lowercase_unicode_pair),
-            Err(VocabularyCollectionError::DuplicateSpoken { .. })
-        ) && validate_vocabulary_collection(&unicode_casefold_limitation).is_ok();
+    let sharp_s_full_fold_duplicate = is_duplicate(&sharp_s_pair);
+
+    let canonical_accent_pair = [
+        VocabularyEntryRef {
+            spoken: "é",
+            written: "accented form",
+        },
+        VocabularyEntryRef {
+            spoken: "e\u{301}",
+            written: "decomposed form",
+        },
+    ];
+    let canonical_accent_duplicate = is_duplicate(&canonical_accent_pair);
+
+    let original_spoken = String::from("  STRAẞE e\u{301}  ");
+    let original_written = String::from("Street and accent");
+    let entry = [VocabularyEntryRef {
+        spoken: &original_spoken,
+        written: &original_written,
+    }];
+    let key = comparison_key(&original_spoken, CURRENT_VOCABULARY_MATCHING_VERSION);
+    let original_text_preserved = validate_vocabulary_collection(&entry).is_ok()
+        && !key.is_empty()
+        && original_spoken == "  STRAẞE e\u{301}  "
+        && original_written == "Street and accent"
+        && entry[0].spoken == "  STRAẞE e\u{301}  "
+        && entry[0].written == "Street and accent";
+
+    let checks = [
+        ("Valid vocabulary mapping", valid_mapping),
+        ("Empty spoken phrase rejected", empty_spoken_phrase),
+        (
+            "Overlong written replacement rejected",
+            overlong_written_replacement,
+        ),
+        ("500-entry limit accepts 500", exactly_500_accepted),
+        ("500-entry limit rejects 501", over_limit_rejected),
+        ("ASCII case-insensitive duplicate", ascii_case_duplicate),
+        (
+            "German sharp-s full-fold duplicate",
+            sharp_s_full_fold_duplicate,
+        ),
+        ("Canonical accent duplicate", canonical_accent_duplicate),
+        (
+            "Original vocabulary text preserved",
+            original_text_preserved,
+        ),
+    ];
 
     println!("Outflow vocabulary validation demo");
-    print_case("Valid vocabulary mapping", valid_mapping, "PASS");
-    print_case("Empty spoken phrase", empty_spoken_phrase, "REJECTED");
-    print_case(
-        "Overlong written replacement",
-        overlong_written_replacement,
-        "REJECTED",
+    println!(
+        "Matching policy: {}",
+        CURRENT_VOCABULARY_MATCHING_VERSION.label()
     );
-    print_case("Unicode scalar boundary", unicode_scalar_boundary, "PASS");
-    println!("Vocabulary collection validation");
-    print_case("500 entries", exactly_500_accepted, "PASS");
-    print_case("501 entries", over_limit_rejected, "REJECTED");
-    print_case(
-        "Duplicate spoken phrase",
-        exact_duplicate_rejected,
-        "REJECTED",
-    );
-    print_case(
-        "Case-insensitive ASCII conflict",
-        ascii_case_conflict_rejected,
-        "REJECTED",
-    );
-    print_case(
-        "Unicode matching policy",
-        unicode_policy_is_provisional,
-        "PROVISIONAL",
-    );
+    for (label, passed) in checks {
+        print_check(label, passed);
+    }
     println!("Vocabulary persistence: NOT IMPLEMENTED");
     println!("Text replacement: NOT IMPLEMENTED");
 
-    if valid_mapping
-        && empty_spoken_phrase
-        && overlong_written_replacement
-        && unicode_scalar_boundary
-        && exactly_500_accepted
-        && over_limit_rejected
-        && exact_duplicate_rejected
-        && ascii_case_conflict_rejected
-        && unicode_policy_is_provisional
-    {
+    if checks.iter().all(|(_, passed)| *passed) {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
@@ -143,7 +125,13 @@ fn entry_refs(entries: &[(String, String)]) -> Vec<VocabularyEntryRef<'_>> {
         .collect()
 }
 
-fn print_case(label: &str, passed: bool, expected_result: &str) {
-    let result = if passed { expected_result } else { "FAIL" };
-    println!("{label}: {result}");
+fn is_duplicate(entries: &[VocabularyEntryRef<'_>]) -> bool {
+    matches!(
+        validate_vocabulary_collection(entries),
+        Err(VocabularyCollectionError::DuplicateSpoken { .. })
+    )
+}
+
+fn print_check(label: &str, passed: bool) {
+    println!("{label}: {}", if passed { "PASS" } else { "FAIL" });
 }

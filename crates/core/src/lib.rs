@@ -6,6 +6,10 @@
 
 /// Pure validation for the spoken and written sides of a vocabulary entry.
 pub mod vocabulary;
+/// Versioned Unicode canonical-caseless comparison keys for spoken phrases.
+pub mod vocabulary_matching;
+/// Read-only compatibility inspection before adopting a newer vocabulary policy.
+pub mod vocabulary_migration;
 
 /// Returns a development-only status message for the foundation smoke test.
 pub const fn foundation_status() -> &'static str {

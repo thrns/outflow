@@ -1254,14 +1254,6 @@ where
             )
         })?;
 
-        before_replace().map_err(|error| {
-            map_io_error(
-                error,
-                SettingsStorageError::ReplacementFailed,
-                SettingsStorageOperation::ReplaceDestination,
-            )
-        })?;
-
         // Re-check immediately before rename. On Unix rename replaces a
         // destination symlink entry itself rather than following its target.
         inspect_destination(path, require_existing_destination)?;
@@ -1280,6 +1272,16 @@ where
         {
             return Err(SettingsStorageError::InvalidParentDirectory);
         }
+
+        // Keep the private fault seam at the commit boundary; production
+        // supplies a no-op after the final path checks.
+        before_replace().map_err(|error| {
+            map_io_error(
+                error,
+                SettingsStorageError::ReplacementFailed,
+                SettingsStorageOperation::ReplaceDestination,
+            )
+        })?;
 
         fs::rename(temporary_guard.path(), path).map_err(|error| {
             map_io_error(
@@ -1403,7 +1405,8 @@ mod tests {
         SettingsStorageError, SettingsStorageOperation, reset_settings_to_defaults_with_hooks,
         save_settings_atomic, save_settings_atomic_with_hooks,
     };
-    use crate::{Settings, SettingsError, VocabularyEntry};
+    use crate::{Settings, SettingsError, VocabularyEntry, load_settings};
+    use std::cell::Cell;
     use std::fs::{self, File};
     use std::io::{self, Write};
     use std::path::{Path, PathBuf};
@@ -1640,6 +1643,112 @@ mod tests {
         assert_eq!(error, SettingsStorageError::ReplacementFailed);
         assert_eq!(fs::read(path).expect("read prior file"), prior);
         assert!(temporary_files(directory.path()).is_empty());
+    }
+
+    #[test]
+    fn atomic_writer_pre_replacement_failure_preserves_valid_settings_and_allows_retry() {
+        let directory = TestDirectory::new();
+        let test_directory_path = directory.path().to_path_buf();
+        let path = directory.path().join("settings.json");
+        let original = valid_settings();
+
+        save_settings_atomic(&path, &original).expect("write initial settings");
+
+        let loaded_initial = load_settings(&path).expect("load initial settings");
+        assert_eq!(loaded_initial.as_ref(), Some(&original));
+
+        let original_bytes = fs::read(&path).expect("read initial settings bytes");
+        let original_document: serde_json::Value =
+            serde_json::from_slice(&original_bytes).expect("parse initial settings document");
+        assert_eq!(original_document["schema_version"], 1);
+
+        let mut replacement = original.clone();
+        replacement.vocabulary[0].id = "synthetic-replacement-entry".to_owned();
+        replacement.vocabulary[0].spoken = "synthetic replacement phrase".to_owned();
+        replacement.vocabulary[0].written = "Synthetic Replacement Phrase".to_owned();
+        assert_ne!(replacement, original);
+
+        let failure_injected = Cell::new(false);
+        let error = save_settings_atomic_with_hooks(
+            &path,
+            &replacement,
+            |file, json| file.write_all(json),
+            File::sync_all,
+            || {
+                failure_injected.set(true);
+                Err(io::Error::other("synthetic pre-replacement failure"))
+            },
+            File::sync_all,
+        )
+        .expect_err("injected pre-replacement failure must reject the write");
+
+        assert!(failure_injected.get());
+
+        assert_eq!(error, SettingsStorageError::ReplacementFailed);
+        assert!(!error.to_string().contains("synthetic replacement phrase"));
+
+        assert!(
+            fs::symlink_metadata(&path)
+                .expect("original destination still exists")
+                .file_type()
+                .is_file()
+        );
+        assert_eq!(
+            fs::read(&path).expect("read destination after failure"),
+            original_bytes
+        );
+        assert!(temporary_files(directory.path()).is_empty());
+        assert_eq!(
+            fs::read_dir(directory.path())
+                .expect("read isolated directory after failure")
+                .count(),
+            1,
+            "only the original destination should remain"
+        );
+
+        let loaded_after_failure = load_settings(&path)
+            .expect("reload original settings after failed write")
+            .expect("original settings remain available");
+        assert_eq!(loaded_after_failure, original);
+        assert_eq!(loaded_after_failure.vocabulary, original.vocabulary);
+
+        save_settings_atomic(&path, &replacement).expect("retry normal settings write");
+        let loaded_after_retry = load_settings(&path)
+            .expect("load settings after normal retry")
+            .expect("retried settings remain available");
+        assert_eq!(loaded_after_retry, replacement);
+        assert!(temporary_files(directory.path()).is_empty());
+        assert_eq!(
+            fs::read_dir(directory.path())
+                .expect("read isolated directory after retry")
+                .count(),
+            1,
+            "retry should leave only the settings destination"
+        );
+        drop(directory);
+        assert!(
+            !test_directory_path.exists(),
+            "isolated test directory should be removed"
+        );
+
+        println!("Outflow atomic settings writer recovery test\n");
+        println!("Initial settings write: PASS");
+        println!("Original settings reload: PASS");
+        println!("Pre-replacement failure: INJECTED");
+        println!("Write rejected: PASS");
+        println!("Original bytes preserved: PASS");
+        println!("Original settings reload after failure: PASS");
+        println!("Subsequent normal write: PASS");
+
+        println!("\nSchema migration performed: NO");
+        println!("Real user settings accessed: NO");
+        println!("Power-loss recovery verified: NO");
+        println!("Windows ACL verification: NOT RUN");
+        if cfg!(target_os = "linux") {
+            println!("Linux filesystem verification: LOCAL HOST ONLY");
+        } else {
+            println!("Linux filesystem verification: NOT RUN");
+        }
     }
 
     #[test]

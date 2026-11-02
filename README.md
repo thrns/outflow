@@ -517,6 +517,41 @@ RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
 
 The storage tests cover schema v1 output and decoding, replacement, invalid and unsupported values, permission denial, simulated partial writes and file-sync failure, pre-replacement interruption, post-replacement durability uncertainty, temporary-file cleanup, missing and invalid parents, symbolic links, restrictive Unix mode, and redacted errors. They do not claim Windows ACL or Linux filesystem verification.
 
+### Task 55 pre-replacement failure recovery check
+
+The focused recovery test uses a private, deterministic hook after the replacement document has been written, flushed, and synchronized, and after the final destination and parent checks, immediately before `fs::rename`. It starts with valid schema-v1 settings created by `save_settings_atomic`, captures the exact on-disk bytes, injects `ReplacementFailed`, and verifies the original path, bytes, vocabulary, and successful reload remain intact. It also verifies the prepared temporary file is removed and a subsequent normal write can save and reload the replacement settings.
+
+Run the test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  atomic_writer_pre_replacement_failure_preserves_valid_settings_and_allows_retry \
+  --locked -- --nocapture
+```
+
+On the tested macOS host, the expected summary is:
+
+```text
+Outflow atomic settings writer recovery test
+
+Initial settings write: PASS
+Original settings reload: PASS
+Pre-replacement failure: INJECTED
+Write rejected: PASS
+Original bytes preserved: PASS
+Original settings reload after failure: PASS
+Subsequent normal write: PASS
+
+Schema migration performed: NO
+Real user settings accessed: NO
+Power-loss recovery verified: NO
+Windows ACL verification: NOT RUN
+Linux filesystem verification: NOT RUN
+```
+
+This proves one pre-replacement failure path on the local Unix filesystem. It does not prove power-loss or crash durability, actual disk-full recovery, temporary-file creation or rename failure handling, Windows ACL/replacement behavior, or Linux filesystem behavior. The writer synchronizes the parent directory after a successful rename, but this test does not simulate a crash around that metadata update. Task 54 cancellation is an in-memory review-draft operation; it is separate from this test's real filesystem preservation check and does not establish persistent migration rollback. T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete; no schema migration is implemented. See the [Task 55 audit evidence](evidence/rust-settings-writer-recovery-task-55.md) for the coverage matrix and full verification record.
+
 Run all requested local verification commands from the repository root:
 
 ```sh
@@ -1219,9 +1254,9 @@ Literal 200% zoom, increased text spacing, reduced-motion and forced-colors emul
 
 ## Focused Task 41 — Rust custom vocabulary validation
 
-The dependency-free `outflow-core` crate exposes `outflow_core::vocabulary::validate_vocabulary_entry(spoken, written)`. It returns `Result<(), VocabularyValidationError>`; the error identifies `VocabularyField::Spoken` or `Written` and whether the value was `Empty` or `TooLong`. Each field must contain a non-whitespace Unicode scalar and may contain at most 128 scalars. The validator uses Rust `str::chars()`: a multibyte emoji counts as one scalar, while `e` plus a combining accent counts as two. It does not trim, normalize, case-fold, or rewrite accepted text.
+`outflow-core` exposes `outflow_core::vocabulary::validate_vocabulary_entry(spoken, written)`. It returns `Result<(), VocabularyValidationError>`; the error identifies `VocabularyField::Spoken` or `Written` and whether the value was `Empty` or `TooLong`. Each field must contain a non-whitespace Unicode scalar and may contain at most 128 scalars. The validator uses Rust `str::chars()`: a multibyte emoji counts as one scalar, while `e` plus a combining accent counts as two. This per-entry validator does not trim, normalize, case-fold, or rewrite accepted text.
 
-Rust `&str` is valid UTF-8 and cannot contain unpaired surrogates. A JavaScript UTF-16 string with malformed surrogate code units must be rejected during conversion to Rust text, such as with `String::from_utf16`, before calling this API. FR-08.4 also calls for rejecting pathological input, but the repository defines no embedded-control policy; that rule remains unresolved and this validator adds none. The function is not connected to the React form or settings schema. Vocabulary CRUD, the 500-entry cap, duplicate/conflict policy, persistence, editing/deletion, and text replacement remain separate work. This does not complete AC-08 or repository T-038.
+Rust `&str` is valid UTF-8 and cannot contain unpaired surrogates. A JavaScript UTF-16 string with malformed surrogate code units must be rejected during conversion to Rust text, such as with `String::from_utf16`, before calling this API. FR-08.4 also calls for rejecting pathological input, but the repository defines no embedded-control policy; that rule remains unresolved and this validator adds none. The function is not connected to the React form or settings schema. Vocabulary CRUD, persistence, editing/deletion, and text replacement remain separate work. This does not complete AC-08 or repository T-038.
 
 Run the focused and workspace Rust tests and the synthetic demo from the repository root:
 
@@ -1233,7 +1268,7 @@ RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_validatio
 
 The focused tests cover empty and Unicode whitespace-only fields, field/reason reporting, both-field ASCII and emoji boundaries, accented text, combining marks, unchanged accepted values, redacted errors, and deterministic results. The full workspace run passed **87 Rust tests** (15 added; all 72 previously existing tests remain passing). Frontend checks passed with 136 tests, and the Python suite passed 226 tests. See [Task 41 evidence](evidence/rust-vocabulary-validation-task-41.md) for all commands and results.
 
-Expected demo output:
+Expected Task 41 demo output (historical snapshot):
 
 ```text
 Outflow vocabulary validation demo
@@ -1247,11 +1282,11 @@ Text replacement: NOT IMPLEMENTED
 
 If a phrase is rejected at the length boundary, count Unicode scalar values: each emoji counts once, and a base character plus combining mark counts twice. If malformed UTF-16 is involved, validate the UTF-16-to-UTF-8 conversion before calling Rust; such malformed data cannot be passed as `&str`. The repository task ledger already uses T-041 for the onboarding permission checklist, so this focused request does not change that entry or any task status. T-017 and T-018 remain incomplete, and their prerequisite work for T-038 is still outstanding.
 
-## Focused Task 42 — Rust vocabulary collection validation
+## Vocabulary collection validation
 
-`outflow_core::vocabulary::validate_vocabulary_collection(&[VocabularyEntryRef])` validates a borrowed, read-only collection and returns `Result<(), VocabularyCollectionError>`. It accepts zero through `MAX_VOCABULARY_ENTRIES` (500) entries and rejects a larger collection with its supplied count and the maximum. Each entry is checked by the existing `validate_vocabulary_entry`, preserving its nonempty and 128 Unicode scalar-value rules. Invalid-entry errors carry the zero-based index and typed `VocabularyValidationError`; validation errors report either the size, invalid entry, or both conflicting spoken-entry indices without including phrase text. Validation order is size, per-entry checks in input order, then duplicate checks in input order.
+`outflow_core::vocabulary::validate_vocabulary_collection(&[VocabularyEntryRef])` validates a borrowed, read-only collection and returns `Result<(), VocabularyCollectionError>`. It accepts zero through `MAX_VOCABULARY_ENTRIES` (500) entries and rejects a larger collection with its supplied count and the maximum. Each entry is checked by the existing `validate_vocabulary_entry`, preserving its nonempty and 128 Unicode scalar-value rules. Validation errors report the size, first invalid entry, or first duplicate pair without including phrase text. Validation order remains size, per-entry checks in input order, then duplicate checks in input order.
 
-Spoken phrases are provisionally compared with `spoken.to_lowercase()`; written replacements do not determine uniqueness. This is Rust lowercase mapping only, without trimming or normalization, and is **not complete Unicode case folding**. For example, the current rule detects `CAFÉ` / `café` but does not equate `straße` / `STRASSE`. The final production uniqueness and replacement-matching policy remains undecided. This function does not persist entries or perform replacement or word-boundary matching.
+The `outflow-core` collection validator uses the versioned Unicode 18.0.0 canonical-caseless key documented below. Written replacements do not determine uniqueness. Original text remains unchanged. The core collection validator does not persist entries or perform transcript replacement or word-boundary matching. The existing `outflow-settings` schema validator remains lowercase-only; wiring it to this policy is a separate C-08 integration task. The initial collection work and its verification remain documented in [Task 42 evidence](evidence/rust-vocabulary-collection-task-42.md); current Unicode matching implementation and verification are in [Task 45 evidence](evidence/rust-vocabulary-icu4x-task-45.md).
 
 Run the focused tests and synthetic example from the repository root:
 
@@ -1260,22 +1295,256 @@ RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary --locked
 RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_validation --locked
 ```
 
-Expected example output:
+The example reports validation outcomes from actual calls. Its output is:
 
 ```text
 Outflow vocabulary validation demo
+Matching policy: Unicode 18.0.0 canonical caseless V1
 Valid vocabulary mapping: PASS
-Empty spoken phrase: REJECTED
-Overlong written replacement: REJECTED
-Unicode scalar boundary: PASS
-Vocabulary collection validation
-500 entries: PASS
-501 entries: REJECTED
-Duplicate spoken phrase: REJECTED
-Case-insensitive ASCII conflict: REJECTED
-Unicode matching policy: PROVISIONAL
+Empty spoken phrase rejected: PASS
+Overlong written replacement rejected: PASS
+500-entry limit accepts 500: PASS
+500-entry limit rejects 501: PASS
+ASCII case-insensitive duplicate: PASS
+German sharp-s full-fold duplicate: PASS
+Canonical accent duplicate: PASS
+Original vocabulary text preserved: PASS
 Vocabulary persistence: NOT IMPLEMENTED
 Text replacement: NOT IMPLEMENTED
 ```
 
-See [Task 42 evidence](evidence/rust-vocabulary-collection-task-42.md) for full verification results. This work does not complete AC-08, T-038, or T-039, and it does not change the separate repository T-042 target-identity task. T-017 and T-018 remain incomplete prerequisites for T-038.
+Task 45 does not complete AC-08, T-017, T-018, T-038, or T-039; those remain incomplete.
+
+## Vocabulary Unicode matching policy
+
+The Rust collection validator now uses versioned Unicode 18.0.0 canonical-caseless matching: `NFD(toCasefold(NFD(input)))`, following D145. It uses ICU4X 2.4.0 compiled data with full default folding. Keys are temporary and do not change original vocabulary text. Matching does not trim whitespace, strip accents, apply NFKC, or perform transcript replacement. See the [policy decision record](docs/VOCABULARY_UNICODE_POLICY.md) for the comparison matrix, limits, and migration considerations.
+
+Run the standard-library reference demonstration and its focused tests:
+
+```sh
+python3 scripts/check_vocabulary_unicode_policy.py --demo
+python3 -m unittest scripts.tests.test_check_vocabulary_unicode_policy -v
+```
+
+The Python demonstration is a development reference only: it reports the running Python Unicode data version and does not supply the production Unicode 18.0.0 data. Task 45 replaces the former lowercase-only Rust comparator with ICU4X 2.4.0 and adds matching regression tests. This does not implement vocabulary persistence or text replacement. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
+
+## Focused Task 45 — ICU4X vocabulary matching
+
+The core crate pins `icu_casemap = "=2.4.0"` and `icu_normalizer = "=2.4.0"`, both with `default-features = false` and `compiled_data`. The versioned API derives keys using Unicode 18.0.0 D145: `NFD(toCasefold(NFD(input)))`. It uses full default, non-Turkic folding and preserves original values. The verified ASCII fast path is tested against ICU for every pair of ASCII scalars. The existing settings-schema validator still uses lowercase-only matching; reconciling that stored-settings path is a separate task. No vocabulary collection persistence, CRUD, transcript replacement, or frontend integration is included here.
+
+Run the release benchmark with synthetic data:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_matching_benchmark --release --locked
+```
+
+On macOS 26.6.2 arm64 with Rust 1.99.1, the paired release benchmark measured:
+
+| Metric | Lowercase reference | ICU4X | Change |
+|---|---:|---:|---:|
+| ASCII key generation | 40.20 ns | 40.26 ns | +0.15% |
+| Multilingual key generation | 541.03 ns | 1,528.89 ns | +182.59% (2.83×) |
+| 500-entry ASCII validation | 44,933.33 ns | 43,420.62 ns | −3.37% |
+| 500-entry multilingual validation | 202,558.33 ns | 642,786.88 ns | +217.33% (3.17×) |
+
+The pre-change `vocabulary_validation` release executable was **457,104 bytes**; the same target after ICU4X integration is **564,192 bytes** (+107,088 bytes, 23.43%). Synthetic benchmark-process peak RSS changed from **2,228,224 bytes** to **2,293,760 bytes** (+65,536 bytes, 2.94%). These are example measurements, not packaged app or aggregate process-tree release results. The Task 45 evidence records the separately captured pre-edit baseline, all benchmark workloads, test results, dependency graph, license review, and limitations. The release gates remain unmeasured.
+
+## Focused Task 44 — Rust Unicode dependency audit
+
+The read-only Rust dependency audit checks whether the investigated Unicode matching crates are direct `outflow-core` dependencies, appear in the lockfile, and are explicitly approved in project documentation. It distinguishes direct use from transitive or unrelated lockfile presence; a locked crate is not proof that `outflow-core` can use its API or that it conforms to D145.
+
+Run the audit from the repository root with Python 3.11 or later (for standard-library `tomllib`):
+
+```sh
+python3 scripts/audit_vocabulary_unicode_rust_dependencies.py --repo .
+```
+
+The concise report shows the pre-Task 45 workspace/core manifest and lockfile state, lowercase-only production behavior at that time, the proposed D145 policy, and each candidate's direct dependency and approval status. Task 45 records the approved ICU4X choice, resolved feature graph, licenses, and measurements in [Rust Unicode matching dependency options](docs/VOCABULARY_UNICODE_RUST_OPTIONS.md) and [Task 45 evidence](evidence/rust-vocabulary-icu4x-task-45.md).
+
+The Task 44 audit is a historical pre-integration snapshot: it reported that no candidate was a direct dependency and that the policy needed a decision. The maintainer's Task 45 approval supersedes that recommendation. Reproduce the read-only audit and its Python test coverage with:
+
+```sh
+python3 scripts/audit_vocabulary_unicode_rust_dependencies.py --repo .
+python3 -m unittest scripts.tests.test_audit_vocabulary_unicode_rust_dependencies -v
+```
+
+If the report says a workspace/core manifest is missing or malformed, run it from the repository root and check `Cargo.toml` and `crates/core/Cargo.toml`; the audit does not create or repair them. If `Cargo.lock` is absent or malformed, restore or repair it through the normal maintainer workflow before relying on lockfile findings. The script makes no network request and does not need crate source access; source/API/version/license claims belong to the linked candidate evaluation. If a primary source is unavailable, treat that finding as UNVERIFIED and do not infer conformance from the package name. T-017, T-018, T-038, T-039, and AC-08 remain incomplete; repository T-044 remains the Windows insertion adapter task.
+
+## Vocabulary matching migration compatibility checker
+
+`outflow_core::vocabulary_migration::inspect_vocabulary_migration` is a pure, read-only checker for conflicts between legacy Rust `str::to_lowercase()` matching and Unicode 18.0.0 canonical-caseless V1. It validates the 500-entry and 128-scalar limits, compares entries without changing them, and reports conflict indices, classifications, and policy identifiers without printing phrase text. Pairs such as `straße` / `STRASSE`, composed `é` / decomposed `e` plus combining acute, and `σ` / `ς` are new Unicode 18 conflicts. Reviewers must resolve reported conflicts manually before adopting the newer policy for a collection; the checker never chooses or deletes an entry.
+
+Run its synthetic compatibility example and focused tests from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_migration_check --locked
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary_migration --locked
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary --locked
+```
+
+The settings crate still validates vocabulary uniqueness with lowercase-only matching. Its current schema v1 has no matching-policy field, rejects unsupported schema versions, and has no migration implementation; schema version alone or an absent policy field is not proof of which application build last validated a file. Before persistent integration, establish trusted schema/build lineage or add an explicitly versioned policy marker through an approved schema change, define safe review and rollback behavior, and connect the checker to settings loading/saving. See [Vocabulary Matching Migration Compatibility](docs/VOCABULARY_MATCHING_MIGRATION.md) for the boundary and evidence. This checker does not complete T-017, T-018, T-038, T-039, or AC-08; repository T-046 remains the copy-only result panel task.
+
+Task 46 verification snapshot: 148 Rust tests passed (24 migration-checker tests added; the 124-test pre-task baseline remained passing), along with the requested Rust checks/build, 136 frontend tests plus typecheck/lint/build, and 258 Python tests. Task 47 verification is recorded below and in [Task 47 evidence](evidence/rust-vocabulary-readiness-task-47.md).
+
+## Vocabulary migration readiness assessment (Task 47)
+
+`outflow_core::vocabulary_migration::assess_vocabulary_migration_readiness(entries, source_policy)` reuses the read-only conflict checker and returns a `VocabularyMigrationReadiness` outcome or the checker's typed size/entry validation error. The `VocabularySourcePolicy` argument is explicit provenance: use `Unknown` when evidence is absent or untrusted, and select a verified variant only when trusted evidence establishes the policy. Settings schema v1 has no matching-policy marker, so its version alone cannot prove either policy.
+
+The outcomes distinguish an empty collection, unknown source policy, conflicts requiring manual resolution, verified legacy data compatible with an explicit future migration, and verified current data that is already current. Conflicts carry input indices and legacy-versus-Unicode-18 classifications. No outcome selects a winner, changes vocabulary text, or writes settings. In particular, compatibility does not mean a migration was applied or persisted; `EmptyCollection` also says nothing about rewriting a complete settings file.
+
+Run the focused tests and synthetic example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary_migration --locked
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_migration_check --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+```
+
+The focused suite covers unknown provenance with and without conflicts, all readiness decisions, Unicode collisions, Turkish dotted/dotless-I and cross-script distinctions, typed validation errors, the 500-entry limit, stable conflict indices, text preservation, repeatability, and the absence of a persistence input. The example prints readiness outcomes generated by the assessment API and uses synthetic values only.
+
+Settings load/save migration integration remains unimplemented: schema v1 has no matching-policy marker or migration path, and `crates/settings` still validates vocabulary uniqueness with lowercase-only matching. This settings validator is **not Unicode 18-compatible**. Task 48 adds a separate opt-in adapter for already-constructed settings values; it is not called by decoding, loading, initialization, validation, or saving. Before connecting readiness to those paths, establish trustworthy source provenance, define explicit conflict review, approve a versioned schema migration, and verify atomic write/rollback behavior. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
+
+Troubleshooting:
+
+- **`SourcePolicyUnknown`:** provide trusted policy provenance to the assessment. Schema v1 alone is insufficient, even when the checker reports no conflicts.
+- **`ManualResolutionRequired`:** review both entries at each reported index and its classification. Keep both original mappings until a user explicitly resolves the conflict.
+- **`TooManyEntries` or `InvalidEntry`:** check the reported count/index and typed field reason; the checker validates collection size first, then entries in input order.
+- **`EmptyCollection`:** no vocabulary-key migration is needed, but this does not establish that other settings can be rewritten safely.
+
+Task 47 adds a pure readiness assessment only; no settings files, schema fields, or persisted values are changed. Exact verification and the current settings limitations are recorded in [Task 47 evidence](evidence/rust-vocabulary-readiness-task-47.md).
+
+## Settings vocabulary compatibility preflight (Task 48)
+
+`outflow_settings::preflight_vocabulary_compatibility(&settings, source_policy)` is an opt-in, read-only adapter over an in-memory `Settings` DTO. Settings stores vocabulary as an ordered `Vec<VocabularyEntry>` with owned `id`, `spoken`, and `written` strings. The adapter creates temporary borrowed `outflow_core::vocabulary::VocabularyEntryRef` values from each spoken/written pair and calls `assess_vocabulary_migration_readiness`; it does not clone phrases, retain comparison keys, or alter any settings field. The existing typed core readiness, conflict, and validation result types are re-exported by `outflow-settings`.
+
+Callers must supply trusted `VocabularySourcePolicy` provenance. Schema v1 has no matching-policy marker, so schema version alone, file timestamps, application version strings, operating system, and absence of conflicts do not establish policy provenance. For any nonempty collection, `Unknown` returns `SourcePolicyUnknown` even when there are no conflicts. `CompatibleForExplicitMigration` means only that verified legacy entries have no conflicts under Unicode 18; it does not mean a migration ran or settings were saved. Conflicts retain indices and classification and require manual resolution without automatic winner selection.
+
+The preflight receives an already-constructed DTO and has no file or network interface. Existing `Settings::from_json`, deserialization, and load paths validate first using lowercase-only uniqueness. They can reject malformed entries or existing lowercase conflicts before the preflight can inspect them; the adapter does not bypass or recover rejected files. Schema v1 and all existing serialization, validation, initialization, load, and save behavior remain unchanged. Automatic integration still requires trusted provenance, an approved schema/migration decision, explicit conflict review and safe atomic-write/rollback behavior. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
+
+Run the settings tests and the synthetic output demonstration from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --locked
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test vocabulary_preflight integration_summary_uses_readiness_results_from_real_preflight_calls --locked -- --nocapture
+```
+
+The integration tests exercise sharp-s, composed/decomposed accent, Greek sigma, existing lowercase conflicts, validation boundaries, ordered indices, and the 500-entry cap. They use synthetic settings only. Full implementation details and limitations are recorded in [Task 48 evidence](evidence/rust-settings-vocabulary-preflight-task-48.md).
+
+## Vocabulary policy marker contract (Task 49)
+
+`outflow_settings::VocabularyPolicyMarker` serializes the approved Unicode 18 canonical-caseless policy as the exact string `unicode18-canonical-caseless-v1`. The marker declares Unicode 18.0.0, default full non-Turkic folding, and NFD before and after folding. A declaration in JSON is not trusted provenance; missing or unsupported markers do not imply a legacy lowercase policy. Unsupported identifiers fail closed because their algorithm and collision behavior are unknown; silently substituting lowercase matching could reinterpret saved vocabulary.
+
+The current persisted settings schema remains v1 and has no policy field. A JSON declaration alone cannot prove the policy under which a settings file was validated, so adding a field to v1 would overstate its provenance; a separately approved schema migration is required. The documented schema-v2 fragment is incomplete, omits required Settings fields, and is a proposal/test fixture only; the production DTO, decoder, validator, and loader do not implement it. Review [the migration contract](docs/VOCABULARY_MATCHING_MIGRATION.md) for future marker rules and required migration/rollback steps. Cross-platform writer permissions and rollback acceptance remain incomplete.
+
+Run the focused marker tests and actual-parser summary with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings vocabulary_policy_marker --locked -- --nocapture
+```
+
+No persistent migration or automatic conflict resolution is implemented. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
+
+## Proposed schema-v2 vocabulary contract fixture (Task 50)
+
+[`crates/settings/tests/vocabulary_schema_v2_contract.rs`](crates/settings/tests/vocabulary_schema_v2_contract.rs) holds a **partial, test-only** envelope for exercising the proposed schema-v2 vocabulary marker and the existing read-only Unicode 18 migration-readiness APIs. Its shape contains only `schema_version`, `vocabulary_matching_policy`, and synthetic `{ "spoken", "written" }` entries; it is not a complete Settings format or a production `SettingsV2` type.
+
+The only accepted marker spelling is the exact, case-sensitive `unicode18-canonical-caseless-v1`. The fixture rejects a missing or empty marker, wrong-case aliases, unsupported policy or Unicode versions, malformed marker JSON types, missing or malformed vocabulary fields, and unsupported schema versions. Marker recognition is only a declaration: it does not establish verified legacy or Unicode 18 provenance. Unknown provenance stays review-required even with no conflicts, and the test supplies verified provenance only as an explicit synthetic assumption.
+
+The read-only checks cover `straße` / `STRASSE`, composed `é` / decomposed `e` plus combining acute, and Greek `σ` / `ς`. They report Unicode 18 conflicts by entry index and preserve both original mappings. The fixture does not write settings or apply a migration. Production schema v1, defaults, serialization, lowercase validation, and load/save behavior remain unchanged; production schema-v2 loading is still unsupported.
+
+Run the focused fixture and print its asserted contract summary with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test vocabulary_schema_v2_contract \
+  --locked -- --nocapture
+```
+
+Persistent migration still requires an approved complete schema and marker contract, trusted provenance handling, explicit conflict resolution, complete target validation, cross-platform atomic-write permissions, recoverable last-known-good behavior, and interruption/rollback tests. See [the migration contract](docs/VOCABULARY_MATCHING_MIGRATION.md). T-017, T-018, T-038, T-039, and AC-08 remain incomplete; repository T-050 was not changed.
+
+## Read-only vocabulary migration planning report (Task 51)
+
+[crates/settings/tests/vocabulary_schema_v2_migration_plan.rs](crates/settings/tests/vocabulary_schema_v2_migration_plan.rs) adds a pure, test-only planner that combines the proposed schema-v2 marker contract with the existing settings compatibility preflight. It accepts a source decoded through schema v1, a synthetic proposed-v2 JSON document, and an explicit source-policy assumption. The target marker is the exact unicode18-canonical-caseless-v1 declaration; it never determines whether the source was validated with legacy lowercase or Unicode 18 matching.
+
+The report returns a review status and ordered conflict indices/classifications without vocabulary text. Unknown provenance remains review-required; Unicode 18 collisions require manual conflict resolution; verified legacy data without conflicts is only compatible for a future migration review; verified current data is already current for review. Empty vocabulary needs no vocabulary-key migration, but does not authorize a rewrite of the full settings schema. Conflict-free entries are not migration-approved.
+
+Malformed content rejected by the existing schema-v1 decoder cannot reach the planner. The planner reads no user settings or files and performs no write or migration. Production loading remains schema v1 and lowercase-only. Trusted provenance, manual conflict decisions, and atomic-write/rollback verification remain future requirements.
+
+Run the focused tests and printable summary with:
+
+~~~sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test vocabulary_schema_v2_migration_plan \
+  --locked -- --nocapture
+~~~
+
+The Task 51 fixture does not change repository T-051 (tray and settings navigation), T-017, T-018, T-038, T-039, or AC-08. See [the migration planning details](docs/VOCABULARY_MATCHING_MIGRATION.md#read-only-proposed-migration-planning-report-task-51).
+
+## Read-only vocabulary conflict review groups
+
+The test-only contract groups connected conflict pairs so entries that collide directly or through another entry appear in one review group. Group indices refer to the original vocabulary order; pair classifications are preserved. The report contains no vocabulary text. It does not choose a preferred mapping, delete or edit entries, resolve conflicts, or write settings.
+
+Run the focused test and its asserted synthetic summary from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test vocabulary_conflict_review_contract \
+  --locked -- --nocapture
+```
+
+Expected demonstration output:
+
+```text
+Outflow vocabulary conflict review contract
+
+Single conflict: 1 GROUP
+Three connected entries: 1 GROUP
+Two independent conflicts: 2 GROUPS
+Group ordering: VERIFIED
+Conflict classifications: PRESERVED
+Original vocabulary: UNCHANGED
+
+Automatic winner selected: NO
+Conflict resolution applied: NO
+Settings files modified: NO
+Production schema-v2 support: NOT IMPLEMENTED
+```
+
+Conflict reports are restricted to indices, classifications, group counts, and policy identifiers. Do not put spoken or written values, normalized keys, settings JSON, transcript data, or audio in diagnostic, logging, migration-metadata, or exported error channels. The test-only helper has no production API and does not change the schema-v1 decoder, which continues to reject schema v2.
+
+Future user-facing review still requires a local review interface, explicit decisions, cancellation that preserves all originals, full-collection revalidation, validated vocabulary CRUD for edits or deletion, trusted provenance, an approved atomic migration, and a recoverable original configuration. Those are future requirements; this test contract implements none of those actions. See the [manual review grouping contract](docs/VOCABULARY_MATCHING_MIGRATION.md#manual-conflict-review-grouping-contract-task-52) for the full requirements.
+
+## Hypothetical vocabulary resolution proposals (Task 53)
+
+[`crates/settings/tests/vocabulary_resolution_proposal.rs`](crates/settings/tests/vocabulary_resolution_proposal.rs) contains a test-only in-memory validator for explicit `Retain` and `OmitFromProposedCollection` decisions. Every original index needs exactly one decision. Retained entries stay in original order, and candidate validation reuses the core Unicode 18 collection rules. Any remaining conflict reports original indices, even when omitted entries leave gaps. The validator borrows the original strings and does not edit, delete, or persist them.
+
+A valid proposal says only that its hypothetical retained collection passes current vocabulary validation. It does not establish trusted source provenance or authorize a migration or settings write. Manual review, trusted provenance, a separately approved settings migration, and tested atomic-write, recovery, and rollback behavior remain outstanding. T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete. See the [migration contract](docs/VOCABULARY_MATCHING_MIGRATION.md#hypothetical-resolution-proposal-validator-task-53).
+
+Run the focused tests and asserted synthetic summary from the repository root:
+
+~~~sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test vocabulary_resolution_proposal \
+  --locked -- --nocapture
+~~~
+
+The summary reports proposal outcomes, index and original-value preservation, and that no resolution, deletion, settings-file modification, migration authorization, or production schema-v2 support occurred. It prints no vocabulary values.
+
+## Vocabulary review cancellation and retry (Task 54)
+
+The same integration-test target models a test-only review with an immutable original vocabulary and a separate editable decision draft. Incomplete or conflicting proposals leave the active draft available for correction; validation uses the existing Unicode 18 proposal validator. Cancellation discards the draft before or after validation, preserves original strings/order/indices, and is idempotent. A cancelled review cannot be edited or validated, and a fresh review starts with an empty draft. A valid proposal remains hypothetical and does not authorize settings migration or persistence.
+
+Run the focused cancellation/retry demonstration with:
+
+~~~sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test vocabulary_resolution_proposal \
+  --locked -- --nocapture
+~~~
+
+**Task 54 verifies pre-commit cancellation and in-memory recovery only; persistent filesystem rollback is NOT TESTED.** Existing atomic-writer tests do not establish schema-v2 migration rollback. Future migration work still needs real write, disk-full, permission, pre/post-replacement, interruption recovery, last-known-good preservation, permissions, Windows replacement/ACL, Linux filesystem, and unsupported-downgrade checks. T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete. See [the migration contract](docs/VOCABULARY_MATCHING_MIGRATION.md#pre-commit-review-cancellation-and-retry-task-54) and [Task 54 evidence](evidence/rust-vocabulary-cancellation-task-54.md).

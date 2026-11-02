@@ -2,3 +2,7 @@
 name = "outflow-core"
 version = "0.1.0"
 edition = "2024"
+
+[dependencies]
+icu_casemap = { version = "=2.4.0", default-features = false, features = ["compiled_data"] }
+icu_normalizer = { version = "=2.4.0", default-features = false, features = ["compiled_data"] }

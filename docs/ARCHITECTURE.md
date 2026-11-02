@@ -91,7 +91,7 @@ flowchart TB
 | C-03 | CPAL capture, stream lifecycle, format conversion and resampler | F-03,F-04,F-05 | TS-03 | AC-05 |
 | C-04 | Preallocated ring, buffering, silence/no-speech detection, overflow strategy | F-05 | TS-04 | AC-05 |
 | C-05 | Moonshine C ABI, streaming partial/final, quantized inference, version and thread budget | F-06,F-14 | TS-05 | AC-06,AC-14 |
-| C-06 | Deterministic normalization, filler policy, keyterm mapping, V1 app profiles | F-07,F-08,F-15 | TS-06 | AC-07,AC-08,AC-15 |
+| C-06 | Deterministic normalization, Unicode 18.0.0 canonical-caseless vocabulary keys, filler policy, keyterm mapping, V1 app profiles | F-07,F-08,F-15 | TS-06 | AC-07,AC-08,AC-15 |
 | C-07 | OS permissions, capability checks, focus validation, text insertion, safe Copy fallback | F-02,F-09,F-10,F-15 | TS-07 | AC-02,AC-09,AC-10 |
 | C-08 | Atomic settings and vocabulary persistence, migration, export/delete | F-08,F-11,F-12,F-15 | TS-08 | AC-08,AC-11,AC-12 |
 | C-09 | Read-only model manifest verification, checksum, load/unload and packaging | F-01,F-06,F-13,F-14 | TS-05,TS-09 | AC-01,AC-06,AC-13 |

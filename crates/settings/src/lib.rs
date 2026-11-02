@@ -19,10 +19,21 @@ use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 
 pub mod storage;
+pub mod vocabulary_policy_marker;
+pub mod vocabulary_preflight;
 
 pub use storage::{
     MAX_SETTINGS_FILE_BYTES, SettingsStorageError, SettingsStorageOperation, load_settings,
     reset_settings_to_defaults, save_settings_atomic,
+};
+pub use vocabulary_policy_marker::{
+    UNICODE18_CANONICAL_CASELESS_V1_IDENTIFIER, VocabularyPolicyMarker,
+    VocabularyPolicyMarkerInspection, inspect_vocabulary_policy_marker,
+};
+pub use vocabulary_preflight::{
+    VocabularyField, VocabularyMatchingPolicyId, VocabularyMigrationConflict,
+    VocabularyMigrationConflictKind, VocabularyMigrationError, VocabularyMigrationReadiness,
+    VocabularySourcePolicy, VocabularyValidationError, preflight_vocabulary_compatibility,
 };
 
 /// Whether settings were loaded from an existing file or are available as
