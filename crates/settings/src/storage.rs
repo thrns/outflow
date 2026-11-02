@@ -1752,6 +1752,141 @@ mod tests {
     }
 
     #[test]
+    fn atomic_writer_temporary_write_failure_preserves_valid_settings_and_allows_retry() {
+        let directory = TestDirectory::new();
+        let test_directory_path = directory.path().to_path_buf();
+        let path = directory.path().join("settings.json");
+        let original = Settings::default();
+
+        save_settings_atomic(&path, &original).expect("write initial settings");
+        let loaded_initial = load_settings(&path).expect("load initial settings");
+        assert_eq!(loaded_initial.as_ref(), Some(&original));
+        let original_bytes = fs::read(&path).expect("read initial settings bytes");
+        let entries_before_failure = fs::read_dir(directory.path())
+            .expect("read isolated directory before failure")
+            .map(|entry| entry.expect("read directory entry").path())
+            .collect::<Vec<_>>();
+        assert_eq!(entries_before_failure, vec![path.clone()]);
+
+        let mut replacement = original.clone();
+        replacement.cleanup.remove_fillers = !replacement.cleanup.remove_fillers;
+        assert_ne!(replacement, original);
+
+        let temporary_created = Cell::new(false);
+        let partial_prefix_length = Cell::new(0);
+        let partial_content_verified = Cell::new(false);
+        let write_failure_injected = Cell::new(false);
+        let replacement_attempted = Cell::new(false);
+        let error = save_settings_atomic_with_hooks(
+            &path,
+            &replacement,
+            |file, json| {
+                let prefix_length = json.len().min(16);
+                if prefix_length == 0 {
+                    return Err(io::Error::other("empty synthetic settings document"));
+                }
+
+                file.write_all(&json[..prefix_length])?;
+                file.flush()?;
+
+                let temporary_paths = temporary_files(directory.path());
+                if temporary_paths.len() != 1 {
+                    return Err(io::Error::other(
+                        "expected one temporary settings replacement",
+                    ));
+                }
+                let temporary_metadata = fs::symlink_metadata(&temporary_paths[0])?;
+                temporary_created.set(temporary_metadata.file_type().is_file());
+                let partial_bytes = fs::read(&temporary_paths[0])?;
+                if partial_bytes != json[..prefix_length] {
+                    return Err(io::Error::other(
+                        "temporary settings prefix did not match serialized input",
+                    ));
+                }
+
+                partial_prefix_length.set(prefix_length);
+                partial_content_verified.set(true);
+                write_failure_injected.set(true);
+                Err(io::Error::other("synthetic temporary-write failure"))
+            },
+            File::sync_all,
+            || {
+                replacement_attempted.set(true);
+                Ok(())
+            },
+            File::sync_all,
+        )
+        .expect_err("injected temporary-write failure must reject the write");
+
+        assert!(temporary_created.get());
+        assert!(partial_prefix_length.get() > 0);
+        assert!(partial_content_verified.get());
+        assert!(write_failure_injected.get());
+        assert!(!replacement_attempted.get());
+        assert_eq!(error, SettingsStorageError::TemporaryFileWriteFailed);
+        assert!(!error.to_string().contains("schema_version"));
+
+        assert!(
+            fs::symlink_metadata(&path)
+                .expect("original destination still exists")
+                .file_type()
+                .is_file()
+        );
+        assert_eq!(
+            fs::read(&path).expect("read destination after failure"),
+            original_bytes
+        );
+        assert!(temporary_files(directory.path()).is_empty());
+        let entries_after_failure = fs::read_dir(directory.path())
+            .expect("read isolated directory after failure")
+            .map(|entry| entry.expect("read directory entry").path())
+            .collect::<Vec<_>>();
+        assert_eq!(entries_after_failure, entries_before_failure);
+
+        let loaded_after_failure = load_settings(&path)
+            .expect("reload original settings after failed write")
+            .expect("original settings remain available");
+        assert_eq!(loaded_after_failure, original);
+
+        save_settings_atomic(&path, &replacement).expect("retry normal settings write");
+        let loaded_after_retry = load_settings(&path)
+            .expect("load settings after normal retry")
+            .expect("retried settings remain available");
+        assert_eq!(loaded_after_retry, replacement);
+        assert!(temporary_files(directory.path()).is_empty());
+        let entries_after_retry = fs::read_dir(directory.path())
+            .expect("read isolated directory after retry")
+            .map(|entry| entry.expect("read directory entry").path())
+            .collect::<Vec<_>>();
+        assert_eq!(entries_after_retry, vec![path.clone()]);
+
+        drop(directory);
+        assert!(
+            !test_directory_path.exists(),
+            "isolated test directory should be removed"
+        );
+
+        println!("Outflow atomic settings temporary-write failure test\n");
+        println!("Initial settings write: PASS");
+        println!("Temporary replacement created: PASS");
+        println!("Partial temporary write: VERIFIED");
+        println!("Write failure: INJECTED");
+        println!("Destination replacement attempted: NO");
+        println!("Original destination bytes: PRESERVED");
+        println!("Original settings reload: PASS");
+        println!("Partial temporary file cleanup: PASS");
+        println!("Subsequent normal write: PASS");
+        println!("Stale temporary artifacts: NONE");
+
+        println!("\nSchema migration performed: NO");
+        println!("Real user settings accessed: NO");
+        println!("Actual disk-full failure tested: NO");
+        println!("Crash recovery verified: NO");
+        println!("Windows ACL verification: NOT RUN");
+        println!("Linux filesystem verification: NOT RUN");
+    }
+
+    #[test]
     fn missing_parent_directory_is_reported() {
         let directory = TestDirectory::new();
         let path = directory.path().join("missing").join("settings.json");

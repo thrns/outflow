@@ -552,6 +552,18 @@ Linux filesystem verification: NOT RUN
 
 This proves one pre-replacement failure path on the local Unix filesystem. It does not prove power-loss or crash durability, actual disk-full recovery, temporary-file creation or rename failure handling, Windows ACL/replacement behavior, or Linux filesystem behavior. The writer synchronizes the parent directory after a successful rename, but this test does not simulate a crash around that metadata update. Task 54 cancellation is an in-memory review-draft operation; it is separate from this test's real filesystem preservation check and does not establish persistent migration rollback. T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete; no schema migration is implemented. See the [Task 55 audit evidence](evidence/rust-settings-writer-recovery-task-55.md) for the coverage matrix and full verification record.
 
+### Task 56 temporary-write failure cleanup check
+
+Task 56 injects an I/O error from the existing private write callback after a nonempty prefix has been written to the newly created temporary replacement. The test reads back that prefix, verifies the pre-replacement hook was not reached, compares the directory entries and original destination bytes, reloads the original settings, and then confirms a normal write and reload succeed. This is a separate stage from Task 55, which injects after the temporary document is complete and synchronized, immediately before rename.
+
+Run the focused test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings temporary_write --locked -- --nocapture
+```
+
+The test uses only synthetic schema-v1 settings in a unique temporary directory. Its injected error verifies cleanup and retry handling; it does not reproduce actual disk exhaustion, temporary-file creation failure, failures during `sync_all`, destination replacement failure, or process-crash recovery. Current filesystem evidence is macOS/APFS only. Windows ACL and replacement behavior, and Linux filesystem behavior, remain unverified. See the [Task 56 evidence and recovery coverage extension](evidence/rust-settings-temporary-write-recovery-task-56.md) for the scenario matrix and complete verification record.
+
 Run all requested local verification commands from the repository root:
 
 ```sh

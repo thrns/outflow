@@ -115,3 +115,5 @@ Environment: macOS 26.6.2 (Darwin 25.6.0, build 25G83), arm64; Rust stable `1.99
 - Release-sized, cross-platform, and real-user-configuration verification remain out of scope and unmeasured.
 
 Final `git status --short --branch` remains on `codex/task23-moonshine-build-scope`. It contains the pre-existing uncommitted Task 43–54 changes plus this task's edits to `crates/settings/src/storage.rs`, an additive README subsection, and this new evidence file. No files were staged or committed.
+
+**Task 56 extension:** [Temporary-write failure cleanup and retry evidence](rust-settings-temporary-write-recovery-task-56.md) adds a distinct failure during temporary-file writing and updates the writer recovery coverage matrix. Task 55's pre-replacement test remains unchanged.
