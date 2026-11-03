@@ -4,8 +4,8 @@
 **Milestone:** Prompt 79C correction; this is not Prompt 80.
 **Repository:** `thrns/outflow`
 **Branch:** `codex/prompt79c-feasibility`
-**Base commit:** `2303916c2066ade0fbffb493b1d09ed1b5f86a94`
-**Final commit:** Reported by the delivery message and branch metadata after commit; a Git commit cannot contain its own hash without changing that hash.
+**Base commit:** [`2303916c2066ade0fbffb493b1d09ed1b5f86a94`](https://github.com/thrns/outflow/commit/2303916c2066ade0fbffb493b1d09ed1b5f86a94)
+**Implementation commit:** [`b2a1e5b51c66ab9aabae1bb46a9f5d129486e79e`](https://github.com/thrns/outflow/commit/b2a1e5b51c66ab9aabae1bb46a9f5d129486e79e). The final branch head after this handoff metadata update is reported by the delivery message; a commit cannot contain its own hash without changing that hash.
 **Status:** Partial engineering progress committed for review; T-002/T-003/T-004/T-006/T-009/T-010 remain incomplete.
 **Platform used:** macOS 26.6.2 (25G83), Darwin 25.6.0, Apple M3 Pro arm64, 18 GB RAM.
 **No release decision:** `BLOCKED — INSUFFICIENT EVIDENCE`.
@@ -290,8 +290,9 @@ The expected baseline for this handoff is 343 Python tests with one corpus-depen
 
 - Repository: `https://github.com/thrns/outflow`
 - Development branch: `codex/prompt79c-feasibility`, based directly on verified Prompt 79 commit `2303916c2066ade0fbffb493b1d09ed1b5f86a94`.
+- Implementation commit [`b2a1e5b51c66ab9aabae1bb46a9f5d129486e79e`](https://github.com/thrns/outflow/commit/b2a1e5b51c66ab9aabae1bb46a9f5d129486e79e) was pushed normally and verified with `git ls-remote` at that SHA before this documentation-only handoff update.
 - No history was rewritten, no branch was force-pushed, and no merge/release operation was performed.
-- Commit URL and remote verification result are reported in the final delivery message after push attempt. Local build outputs, native executables, model files, audio, process snapshots, wrapper directories, and test artifacts remain outside Git. `dist/` and Python cache directories are generated/ignored and are not staged.
+- The final branch-head SHA and its commit URL are reported in the final delivery message after this evidence-only update is pushed. Local build outputs, native executables, model files, audio, process snapshots, wrapper directories, and test artifacts remain outside Git. `dist/` and Python cache directories are generated/ignored and are not staged.
 - No dependency, Cargo/npm lockfile, or GitHub Actions changes were made.
 - Required external reviews remain: corpus/license and privacy selection; artifact-specific model redistribution; exact native notice bundle; and legal/maintainer decision on TTS/diarization scope.
 
