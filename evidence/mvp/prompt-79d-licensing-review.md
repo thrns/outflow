@@ -1,9 +1,9 @@
 # Prompt 79D — Native Runtime and Corpus Licensing Review
 
-**Date:** 2026-11-03  
-**Scope:** T-003, T-009, T-010, F-06, AC-06  
-**Result:** Partial evidence only; redistribution approval remains `undetermined`.  
-**Pinned Moonshine source:** `234f60faa0eb388b01cdf7e60aca232af37aefda`  
+**Date:** 2026-11-03
+**Scope:** T-003, T-009, T-010, F-06, AC-06
+**Result:** Partial evidence only; redistribution approval remains `undetermined`.
+**Pinned Moonshine source:** `234f60faa0eb388b01cdf7e60aca232af37aefda`
 **Tested native build:** local macOS arm64 development build with `MOONSHINE_TTS_BUILD_ONNX=ON`; not an Outflow application or release package.
 
 ## Findings by evidence type
