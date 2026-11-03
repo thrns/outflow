@@ -60,7 +60,11 @@ MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 MAX_REFERENCE_BYTES = 1024 * 1024
 MAX_AUDIO_BYTES = 64 * 1024 * 1024
 MAX_AUDIO_SECONDS = 120.0
-MAX_4GB_PHYSICAL_MEMORY_BYTES = 4_000_000_000
+# A marketed 4 GB device may report 4 GiB (4,294,967,296) installed bytes.
+# This inclusive ceiling is only a memory-size screen. Physical verification,
+# an owner-approved reference-class allowlist, CPU-only inference, and measured
+# release gates remain independent requirements.
+MAX_4GB_REPORTED_MEMORY_BYTES = 4_294_967_296
 APPROVED_4GB_REFERENCE_CLASSES: frozenset[str] = frozenset()
 SHA256_PATTERN = re.compile(r"[0-9a-fA-F]{64}\Z")
 MACHINE_LABEL_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}\Z")
@@ -659,18 +663,19 @@ def machine_record(
 def assess_physical_4gb_eligibility(machine: Mapping[str, Any]) -> str:
     """Classify conservative physical 4 GB reference-machine eligibility.
 
-    The limit uses decimal GB because the product requirement says 4 GB.
-    This repository currently has no approved reference-machine classes, so
-    a caller-provided class label cannot turn a machine into an eligible one.
+    The PRD says 4 GB but does not define decimal versus binary reporting.
+    Accepting up to exactly 4 GiB avoids rejecting a marketed 4 GB device solely
+    because the OS reports binary bytes. This does not approve a device class:
+    the caller still needs verified physical status and an approved class.
     """
     ram = machine.get("physical_memory_bytes")
     status = machine.get("physical_hardware_status")
     reference_class = machine.get("reference_hardware_class")
-    if status == "virtual_or_simulated" or (type(ram) is int and ram > MAX_4GB_PHYSICAL_MEMORY_BYTES):
+    if status == "virtual_or_simulated" or (type(ram) is int and ram > MAX_4GB_REPORTED_MEMORY_BYTES):
         return "INELIGIBLE"
     if (
         type(ram) is int
-        and ram <= MAX_4GB_PHYSICAL_MEMORY_BYTES
+        and ram <= MAX_4GB_REPORTED_MEMORY_BYTES
         and status == "verified_physical"
         and isinstance(reference_class, str)
         and reference_class in APPROVED_4GB_REFERENCE_CLASSES

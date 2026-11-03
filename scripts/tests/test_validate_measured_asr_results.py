@@ -259,6 +259,8 @@ class MeasuredResultsValidatorTests(unittest.TestCase):
             value["release_gates"]["physical_4gb_eligibility"] = "ELIGIBLE"
             value["release_gates"]["physical_4gb_gate"] = "NOT_ASSESSED"
             validate_measured_results(value)
+            value["machine"]["physical_memory_bytes"] = 4_294_967_296
+            validate_measured_results(value)
             # Reference eligibility alone cannot pass the actual benchmark gate.
             value["release_gates"]["physical_4gb_gate"] = "PASS"
             with self.assertRaisesRegex(MeasuredResultsError, "release gates"):
@@ -266,7 +268,7 @@ class MeasuredResultsValidatorTests(unittest.TestCase):
 
     def test_more_than_4gb_is_never_eligible_even_with_reference_labels(self) -> None:
         value = valid_result()
-        value["machine"]["physical_memory_bytes"] = 4_000_000_001
+        value["machine"]["physical_memory_bytes"] = 4_294_967_297
         value["machine"]["physical_hardware_status"] = "verified_physical"
         value["machine"]["reference_hardware_class"] = "reference-mac-4gb"
         value["release_gates"]["physical_4gb_eligibility"] = "ELIGIBLE"

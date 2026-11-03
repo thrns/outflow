@@ -1204,9 +1204,101 @@ The complete milestone record is [`evidence/mvp/prompt-79-macos-dictation.md`](e
 
 ### Current capability and blocker
 
-The pinned Moonshine Small Streaming C API now builds as an arm64 macOS dylib, and [`tests/native/moonshine_streaming_smoke.cpp`](tests/native/moonshine_streaming_smoke.cpp) has loaded the verified local files, streamed real speech audio through architecture `4`, produced nonempty partial and final results, and completed two sessions. This test runs outside Outflow's application. There is no Tauri shell, microphone stream, Rust Moonshine binding, cleanup pipeline, target validation, TextEdit insertion, Copy Result panel, or application launch command. `npm run dev` launches only the browser settings preview; `npm run tauri dev` is not defined. Do not use the preview as a dictation app.
+The pinned Moonshine Small Streaming C API builds as an arm64 macOS dylib, and [`tests/native/moonshine_streaming_smoke.cpp`](tests/native/moonshine_streaming_smoke.cpp) has streamed local fixture speech through architecture `4`. Prompt 79E adds a separate, development-only AppKit/AVFoundation probe that connects a real microphone capture implementation to the same C API; see [Prompt 79E below](#prompt-79e--development-only-macos-microphone-probe). It is not the shipping application and does not add a Tauri shell, Rust Moonshine binding, cleanup pipeline, target validation, TextEdit insertion, or Copy Result panel. `npm run dev` still launches only the browser settings preview; `npm run tauri dev` is not defined. Do not use the preview as a dictation app.
 
-No macOS microphone, Accessibility, or Automation permission was requested or granted for this work because the application does not exist yet. A future real microphone path requires macOS microphone permission; safe insertion requires the approved accessibility capability and real editable/protected-field checks. Those flows have not been implemented or tested.
+Prompt 79D did not request microphone permission. Prompt 79E adds a normal user-initiated macOS microphone permission path in the isolated probe. Actual microphone permission and live speech must be reported from the separate Prompt 79E evidence; fixture success is not microphone proof. Accessibility and Automation permission are never requested by the probe. Safe insertion still requires the approved capability and real editable/protected-field checks and is not implemented.
+
+### Prompt 79E — development-only macOS microphone probe
+
+The implementation and its limits are documented in [`evidence/mvp/prompt-79e-detailed-implementation-handoff.md`](evidence/mvp/prompt-79e-detailed-implementation-handoff.md). Ten real-time-paced fixture runs and one sampled AppKit process-tree trace are recorded in [`evidence/mvp/prompt-79e-timed-fixture-measurements.json`](evidence/mvp/prompt-79e-timed-fixture-measurements.json). The probe is a standalone native development tool under `dev/macos-mic-probe/`; it is not linked into the browser preview, Rust workspace, production bundle, or installer.
+
+The probe uses AVAudioEngine's default input, queries its actual sample rate/channel/sample representation, copies callback buffers into a fixed 16-slot queue, downmixes/resamples on a separate worker, and calls the pinned Small Streaming C API with the CPU provider. The worker copies native-owned transcript strings before the next native call. The window shows only volatile partial/final text; Start, Stop, Cancel, Dismiss, and window close have explicit paths. Cancel and Dismiss clear preview text. No audio or transcript is written to disk, copied to the clipboard, injected into another app, or sent over the network. A metrics file is written only when the developer explicitly supplies a new `--metrics-file` path; it contains timings and counts, not speech text.
+
+#### Prerequisites and build
+
+Use a logged-in macOS desktop session, Apple Clang and the macOS SDK, the pinned Moonshine source tree, the already-built and hash-verified Moonshine/ONNX Runtime libraries, and the eight locally authorized model files outside Git. The build fails closed on unexpected source-revision input, header constants, binary hashes, or architecture; it does not download dependencies or assets. Set these variables to the actual local paths (the examples shown are the paths used for this development run):
+
+```sh
+export MOONSHINE_SOURCE_DIR=/private/tmp/outflow-feasibility/moonshine-234f60faa0eb388b01cdf7e60aca232af37aefda
+export MOONSHINE_SOURCE_REVISION=234f60faa0eb388b01cdf7e60aca232af37aefda
+export MOONSHINE_LIBRARY=/private/tmp/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
+export MOONSHINE_ORT_LIBRARY="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib"
+export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-mic-probe-build-01
+
+scripts/build_macos_mic_probe.sh
+export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
+export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+```
+
+The app bundle is created outside the repository and ad-hoc signed for local development. Its `Info.plist` contains a microphone usage description. The code currently expects macOS 26.0 or newer because this is the host/SDK build used for the feasibility pass; it is not a cross-version support claim.
+
+#### Real microphone flow
+
+Launch through the script from a normal desktop Terminal session:
+
+```sh
+scripts/run_macos_mic_probe.sh
+```
+
+Press **Start recording**. macOS presents its normal microphone prompt on first use; allow access through that prompt. The UI then opens the default microphone and shows its discovered format while listening. Speak a short sentence and press **Stop** to drain final recognition and display the final result. Press **Cancel** to stop capture and discard/clear the result. **Dismiss result** clears the preview and returns to Idle. Closing the window cancels active work. If permission was denied earlier, use **Microphone Settings** to open the normal macOS privacy panel, change access there, and retry. No Accessibility permission is requested.
+
+The success path on real hardware requires both a nonempty partial and a final result from actual microphone samples. Fixture runs below test the same worker/UI path but do not establish microphone permission, device availability, or real-speech quality. Do not record ambient speech from other people as a substitute for the user speaking a test sentence.
+
+Observed on the development Mac on 2026-11-03: macOS permission reached **Granted**, the default input reported **48,000 Hz mono**, and one user-spoken test produced nonempty partial and final UI text before the microphone was released. The recognized wording was imperfect; this proves only that live samples reached streaming Moonshine and generated a temporary result. One earlier 47.8-second capture contained no recognizable speech and also finalized/released cleanly. The spoken-session metrics file could not be saved because its explicit exclusive path had already been used by the earlier session, so the UI's rounded timing/memory values are recorded separately from exact metrics. See the measurement JSON and detailed handoff; no transcript text is stored there.
+
+#### Timed fixture mode
+
+The pinned local `two_cities_16k.wav` fixture is a development smoke fixture, not a human-reviewed WER corpus. Timed replay feeds 1,600-sample chunks at their 100 ms audio duration on a producer thread; inference remains on the worker thread. The app still requires the explicit Start button:
+
+```sh
+scripts/run_macos_mic_probe.sh \
+  --timed-fixture "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav" \
+  --fixture-seconds 12 \
+  --metrics-file /private/tmp/outflow-mic-probe-run-01.json
+```
+
+Expected output is an app window labeled **timed fixture** with partial text appearing during replay and a final result after about 12 seconds. Metrics use an exclusive create and refuse to overwrite an existing file; select a fresh path for each run. They include model load, first partial, update cadence, audio duration, stop-to-final, native process high-water RSS, CPU time, thread count, queue depth and overflow count. There is no accelerated-fixture mode in this probe. Prompt 79D's accelerated native smoke measurements remain separate and are not mixed with these time-paced observations.
+
+#### Automated tests and RSS sampling
+
+Run portable/native test coverage with the same pinned source and runtime variables above:
+
+```sh
+scripts/test_macos_mic_probe.sh
+```
+
+This compiles and runs core audio/state/permission/queue/WAV tests and injected Moonshine lifecycle tests, including 100 start/stop/cancel worker cycles. To additionally run real local Moonshine fixture inference at real-time pace:
+
+```sh
+export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
+export OUTFLOW_MIC_PROBE_FIXTURE_SECONDS=12
+export OUTFLOW_MIC_PROBE_FIXTURE_RUNS=10
+export OUTFLOW_MIC_PROBE_PROFILE_DIR=/private/tmp/outflow-mic-probe-rss-10
+scripts/test_macos_mic_probe.sh --real-fixture
+```
+
+This test uses the real native model and writes one 100 ms process-tree RSS record per headless worker-harness run. It does not measure the AppKit app. For an app-window trace, launch a single configured app fixture run, find its PID with `/usr/bin/pgrep -n -x OutflowMicProbe`, then attach the sampler while the window is active:
+
+```sh
+APP_PID=$(/usr/bin/pgrep -n -x OutflowMicProbe)
+python3 scripts/measure_process_tree_rss.py \
+  --pid "$APP_PID" --duration-seconds 30 --interval-ms 100 \
+  --output /private/tmp/outflow-mic-probe-app-rss-01.json
+```
+
+Use one app instance when attaching; the PID lookup selects the newest matching process. The sampler records process identities, RSS, sample timestamps and gaps, but not command arguments or environment. Its RSS is not macOS physical-footprint measurement and does not certify the 4 GB release gate.
+
+#### Recovery and limits
+
+- `launch with --model-dir`: set `OUTFLOW_MIC_PROBE_MODEL_DIR` to the local model directory and rerun the launch script.
+- Model checksum failure: verify the eight files against `evidence/mvp/prompt-79-model-assets.json`; the probe will not fall back to another model.
+- Permission denied/restricted: use the visible **Microphone Settings** button and normal System Settings controls; do not edit TCC databases.
+- No device, busy device, disconnect, unsupported PCM format, or device-format change: the probe stops the session and reports an error; close competing capture apps or reconnect the device before trying again.
+- Queue overflow: capture fails closed rather than growing memory or silently dropping speech.
+- Metrics file already exists: choose a new filename; prior evidence is not replaced.
+- `kLSNoExecutableErr`: rebuild the `.app` with `scripts/build_macos_mic_probe.sh` and launch it from the logged-in macOS desktop session so LaunchServices and TCC see the application bundle.
+
+Prompt 79E does not complete T-011, T-025–T-034, AC-06, T-010, or any MVP acceptance. It does not add a production Tauri/Rust application, model packaging, injection, clipboard behavior, a Windows/Linux implementation, or release approval. The current 18 GB M3 Pro is not the approved physical 4 GB reference machine. The meaning of “4 GB” remains pending owner clarification between decimal and binary reporting; the code permits up to exactly 4 GiB for classification screening but still requires separately verified physical hardware and an approved reference class. The 950,000,000-byte app-process RSS cap is unchanged.
 
 ### Authorized local development model preparation
 

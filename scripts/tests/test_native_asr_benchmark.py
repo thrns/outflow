@@ -10,8 +10,11 @@ import subprocess
 import tempfile
 import unittest
 import wave
+from unittest.mock import patch
 
 from scripts.run_native_asr_benchmark import (
+    APPROVED_4GB_REFERENCE_CLASSES,
+    assess_physical_4gb_eligibility,
     BenchmarkError,
     EXPECTED_ARCHITECTURE,
     EXPECTED_HEADER_VERSION,
@@ -76,6 +79,22 @@ def output_fixture(hypothesis: str, *, index: int = 0) -> dict[str, object]:
 
 
 class NativeAsrBenchmarkTests(unittest.TestCase):
+    def test_market_4gb_memory_boundary_includes_binary_reporting_only(self) -> None:
+        machine = {
+            "physical_memory_bytes": 4_000_000_000,
+            "physical_hardware_status": "verified_physical",
+            "reference_hardware_class": "approved-reference",
+        }
+        with patch(
+            "scripts.run_native_asr_benchmark.APPROVED_4GB_REFERENCE_CLASSES",
+            frozenset({"approved-reference"}),
+        ):
+            self.assertEqual(assess_physical_4gb_eligibility(machine), "ELIGIBLE")
+            machine["physical_memory_bytes"] = 4_294_967_296
+            self.assertEqual(assess_physical_4gb_eligibility(machine), "ELIGIBLE")
+            machine["physical_memory_bytes"] = 4_294_967_297
+            self.assertEqual(assess_physical_4gb_eligibility(machine), "INELIGIBLE")
+
     def test_wer_normalization_version_is_frozen_and_alignment_is_stable(self) -> None:
         self.assertEqual(NORMALIZATION_POLICY_VERSION, "lexical-wer-unicode-boundary-v1")
         result = calculate_wer("CAFÉ, １２３!", "cafe\u0301 １２３")
