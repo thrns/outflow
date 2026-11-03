@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Calculate lexical WER for two in-memory transcriptions.
 
-The fixture policy requires NFC, lowercase, collapsed whitespace, and lexical
-tokens without punctuation, but it does not fully specify Unicode token
-boundaries. Until that policy is frozen, this tool uses the provisional
-``provisional-unicode-boundary-v1`` rule: contiguous Unicode letters, numbers,
-and combining marks form a token; every other character is a boundary. This
-does not expand contractions, convert number spellings, or correct vocabulary.
+The frozen ``lexical-wer-unicode-boundary-v1`` policy uses NFC, lowercase,
+collapsed whitespace, and contiguous Unicode letters, numbers, and combining
+marks as tokens; all other characters, including punctuation, are boundaries.
+It does not expand contractions, convert number spellings, or correct vocabulary.
 
 This development utility only scores strings supplied by its caller. It does
 not load audio or datasets, persist results, or calculate punctuation accuracy.
@@ -20,7 +18,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 
-PROVISIONAL_NORMALIZATION_VERSION = "provisional-unicode-boundary-v1"
+NORMALIZATION_POLICY_VERSION = "lexical-wer-unicode-boundary-v1"
 
 
 @dataclass(frozen=True)
@@ -69,7 +67,7 @@ def calculate_wer(reference: str, prediction: str) -> WerResult:
     """Return word-level substitutions, deletions, insertions, and WER.
 
     Both strings use the fixture policy's NFC/lowercase/whitespace steps and
-    the provisional Unicode token boundary rule documented above. The
+    the frozen Unicode token boundary rule documented above. The
     dynamic-programming alignment resolves equal-cost paths in this order:
     diagonal (match/substitution), deletion, then insertion.
     """

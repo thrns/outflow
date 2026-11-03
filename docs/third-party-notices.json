@@ -61,9 +61,9 @@
       "notice_required_if_shipped": true,
       "planned_notice_destination": null,
       "notice_verification_status": "blocked",
-      "status_explanation": "The bundled COPYING identifies BSD-3-Clause but refers to a full license text that still needs complete-text reconciliation.",
+      "status_explanation": "The pinned checkout's COPYING identifies BSD-3-Clause but points to a LICENSES/BSD-3-Clause file that is absent. The canonical SPDX BSD-3-Clause text was checked; no Outflow notice file or installer package has been assembled, so the shipped-notice obligation remains blocked.",
       "outstanding_questions": [
-        "Reconcile the COPYING reference to LICENSES/BSD-3-Clause with the exact license text distributed in the selected source and binary package.",
+        "Provide the complete BSD-3-Clause notice in the selected release's source and binary materials, preserving the Mark Borgerding copyright and conditions.",
         "Confirm platform packaging preserves the BSD-3-Clause notices."
       ],
       "redistribution_approval": "undetermined"
@@ -77,9 +77,9 @@
       "notice_required_if_shipped": true,
       "planned_notice_destination": null,
       "notice_verification_status": "planned",
-      "status_explanation": "The MIT notice requirement is identified if nlohmann/json ships; Outflow's conditional TTS/G2P build selection has not been determined.",
+      "status_explanation": "Prompt 79's development build set MOONSHINE_TTS_BUILD_ONNX=ON and linked the TTS/G2P target, so nlohmann/json was in that build's scope. Whether the product build will include it and where its MIT notice will ship remain undetermined.",
       "outstanding_questions": [
-        "Record whether the eventual Outflow build disables TTS/G2P or includes the conditional target.",
+        "Record whether the eventual Outflow product build disables TTS/G2P or includes the conditional target.",
         "If included, verify the exact copied header and package the applicable MIT notice."
       ],
       "redistribution_approval": "undetermined"
@@ -93,10 +93,10 @@
       "notice_required_if_shipped": true,
       "planned_notice_destination": null,
       "notice_verification_status": "blocked",
-      "status_explanation": "The source-tree MIT license does not establish the notice set, provenance, version, or contents of an eventual platform ONNX Runtime binary.",
+      "status_explanation": "Prompt 79 linked a local macOS arm64 ONNX Runtime dylib and recorded its SHA-256; the official v1.23.2 ThirdPartyNotices.txt was located. That does not establish the binary's source provenance or exact notice set, nor the binaries/notices for other product platforms.",
       "outstanding_questions": [
-        "Identify the exact per-platform ORT binary or source build, immutable provenance, version, checksums and final dynamic or static linkage for Outflow.",
-        "Obtain and review the ThirdPartyNotices and any license files shipped with each selected ORT binary; the Moonshine MIT license file does not establish those binary-level notices.",
+        "Identify the exact per-platform ORT binary or source build, immutable provenance, version, checksums and final dynamic or static linkage for Outflow, including the Prompt 79 macOS development artifact.",
+        "Reconcile the exact local ORT binary against its build provenance and ThirdPartyNotices; review per-platform binaries and package the applicable notices.",
         "Reconcile selected ORT library and required system frameworks with each installer and notice bundle."
       ],
       "redistribution_approval": "undetermined"
@@ -126,9 +126,9 @@
       "notice_required_if_shipped": true,
       "planned_notice_destination": null,
       "notice_verification_status": "blocked",
-      "status_explanation": "The applicable Unicode-derived data notice depends on the selected files; the actual utf8proc files in an Outflow package have not been established.",
+      "status_explanation": "Prompt 79's TTS/G2P-enabled development build linked utf8proc code, but the exact data object and notice contents in the binary were not resolved. The product package has not been established.",
       "outstanding_questions": [
-        "Record whether the eventual Outflow build disables TTS/G2P or includes this target.",
+        "Record whether the eventual Outflow product build disables TTS/G2P or includes this target.",
         "If included, verify whether utf8proc_data.c is present in the selected binary and package the separate Unicode data notice as required."
       ],
       "redistribution_approval": "undetermined"

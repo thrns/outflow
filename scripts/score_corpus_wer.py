@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Aggregate lexical WER for in-memory reference/prediction pairs.
 
-Each pair is scored by :mod:`score_wer`, so corpus scoring uses the same
-provisional NFC/lowercase/whitespace/tokenization behavior as individual WER.
+Each pair is scored by :mod:`score_wer`, so corpus scoring uses the same frozen
+NFC/lowercase/whitespace/tokenization policy as individual WER.
 Silence and no-speech detection must be evaluated separately: samples with an
 empty normalized reference are rejected rather than omitted or assigned 0%.
 

@@ -104,7 +104,7 @@
       "runtime_use_assessment": "The core CMake source list compiles kiss_fft.c and kiss_fftr.c as part of cpp-annote, which is added to the Moonshine target. This is source build evidence, not a check of a packaged library.",
       "binary_verification_status": "not-verified",
       "outstanding_questions": [
-        "Reconcile the COPYING reference to LICENSES/BSD-3-Clause with the exact license text distributed in the selected source and binary package.",
+        "Provide the complete BSD-3-Clause notice in the selected release's source and binary materials, preserving the Mark Borgerding copyright and conditions.",
         "Confirm platform packaging preserves the BSD-3-Clause notices."
       ]
     },
@@ -127,10 +127,10 @@
       ],
       "build_use_classification": "conditional",
       "redistribution_review_status": "undetermined",
-      "runtime_use_assessment": "The pinned CMake lists JSON configuration code in the TTS/G2P core. The Moonshine target links the ONNX TTS target only when MOONSHINE_TTS_BUILD_ONNX is enabled; that option defaults to ON in the TTS CMake file. Outflow has not selected or built this option.",
+      "runtime_use_assessment": "The pinned CMake lists JSON configuration code in the TTS/G2P core. The Prompt 79 macOS arm64 development wrapper explicitly set MOONSHINE_TTS_BUILD_ONNX=ON and linked the TTS target into libmoonshine.dylib; exported nlohmann JSON symbols were observed. The product build remains unselected and redistribution is not approved.",
       "binary_verification_status": "not-verified",
       "outstanding_questions": [
-        "Record whether the eventual Outflow build disables TTS/G2P or includes the conditional target.",
+        "Record whether the eventual Outflow product build disables TTS/G2P or includes the conditional target.",
         "If included, verify the exact copied header and package the applicable MIT notice."
       ]
     },
@@ -155,11 +155,11 @@
       ],
       "build_use_classification": "confirmed-build-input",
       "redistribution_review_status": "undetermined",
-      "runtime_use_assessment": "The core links ort-utils and the imported ONNX Runtime library. CMake selects shared libraries on Android, macOS, Linux and Windows, and static archives for iOS/Swift and WebAssembly; static Apple framework builds merge the selected archive. WebAssembly uses an archive built by a repository script. This identifies source-level build paths only; no runtime binary was inspected.",
+      "runtime_use_assessment": "The core links ort-utils and the imported ONNX Runtime library. Prompt 79 linked the local macOS arm64 libonnxruntime.1.23.2.dylib (27,623,992 bytes; SHA-256 480790a978a48ad3e06ce86b6025e037bd70221637f5c104a8dde19617364cf4) into a development-only libmoonshine.dylib. The filename advertises 1.23.2 but does not prove binary provenance. Official v1.23.2 transitive notices were located; the exact binary notice set and product package remain unreconciled.",
       "binary_verification_status": "not-verified",
       "outstanding_questions": [
-        "Identify the exact per-platform ORT binary or source build, immutable provenance, version, checksums and final dynamic or static linkage for Outflow.",
-        "Obtain and review the ThirdPartyNotices and any license files shipped with each selected ORT binary; the Moonshine MIT license file does not establish those binary-level notices.",
+        "Identify the exact per-platform ORT binary or source build, immutable provenance, version, checksums and final dynamic or static linkage for Outflow, including the Prompt 79 macOS development artifact.",
+        "Reconcile the exact local ORT binary against its build provenance and ThirdPartyNotices; review per-platform binaries and package the applicable notices.",
         "Reconcile selected ORT library and required system frameworks with each installer and notice bundle."
       ]
     },
@@ -208,10 +208,10 @@
       ],
       "build_use_classification": "conditional",
       "redistribution_review_status": "undetermined",
-      "runtime_use_assessment": "The TTS CMake file builds utf8proc.c and links it into the TTS/G2P core. The Moonshine CMake file links TTS into the Moonshine target only when MOONSHINE_TTS_BUILD_ONNX is enabled; the option defaults to ON. The selected Outflow target configuration has not been established.",
+      "runtime_use_assessment": "The TTS CMake file builds utf8proc.c and links it into the TTS/G2P core. Prompt 79's macOS arm64 development wrapper set MOONSHINE_TTS_BUILD_ONNX=ON; utf8proc-related code was in that build's TTS/G2P source scope. The product target remains unselected; the actual inclusion of utf8proc_data.c and its Unicode notice must be checked against the eventual release binary and package.",
       "binary_verification_status": "not-verified",
       "outstanding_questions": [
-        "Record whether the eventual Outflow build disables TTS/G2P or includes this target.",
+        "Record whether the eventual Outflow product build disables TTS/G2P or includes this target.",
         "If included, verify whether utf8proc_data.c is present in the selected binary and package the separate Unicode data notice as required."
       ]
     }

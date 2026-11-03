@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -36,6 +37,9 @@ REQUIRED_FIXTURE_FIELDS = {
     "audio_file",
     "audio_sha256",
     "reference_file",
+    "reference_sha256",
+    "audio_metadata",
+    "human_transcription_review_method",
     "provenance",
     "license_or_permission_status",
     "license_or_permission_evidence",
@@ -137,6 +141,9 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
         errors.append(f"collection_status must be one of {sorted(ALLOWED_COLLECTION_STATUSES)}")
     if not _nonempty_string(data.get("reference_transcription_policy")):
         errors.append("reference_transcription_policy must be a non-empty string")
+    for field in ("reference_transcription_policy_version", "normalization_policy_version"):
+        if not _nonempty_string(data.get(field)):
+            errors.append(f"{field} must be a non-empty string")
 
     integrity = data.get("audio_integrity_requirements")
     if not isinstance(integrity, dict):
@@ -212,11 +219,61 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
             require_nonempty=status == "ready",
         )
 
+        reference_sha256 = fixture.get("reference_sha256")
+        if reference_sha256 is not None and (
+            not isinstance(reference_sha256, str) or not SHA256_PATTERN.fullmatch(reference_sha256)
+        ):
+            errors.append(f"{label}.reference_sha256 must be 64 hexadecimal characters or null")
+        if reference_sha256 is not None and reference_file_value is None:
+            errors.append(f"{label}.reference_sha256 requires reference_file")
+
+        audio_metadata = fixture.get("audio_metadata")
+        if audio_metadata is not None:
+            if not isinstance(audio_metadata, dict):
+                errors.append(f"{label}.audio_metadata must be an object or null")
+                audio_metadata = None
+            else:
+                expected_audio_fields = {
+                    "sample_format",
+                    "sample_rate_hz",
+                    "channels",
+                    "frame_count",
+                    "duration_seconds",
+                }
+                if audio_metadata.keys() != expected_audio_fields:
+                    errors.append(f"{label}.audio_metadata has missing or unsupported fields")
+                if audio_metadata.get("sample_format") != "PCM_S16LE":
+                    errors.append(f"{label}.audio_metadata.sample_format must be PCM_S16LE")
+                for field in ("sample_rate_hz", "channels", "frame_count"):
+                    value = audio_metadata.get(field)
+                    if type(value) is not int or value <= 0:
+                        errors.append(f"{label}.audio_metadata.{field} must be a positive integer")
+                duration = audio_metadata.get("duration_seconds")
+                if (
+                    isinstance(duration, bool)
+                    or not isinstance(duration, (int, float))
+                    or not math.isfinite(float(duration))
+                    or duration <= 0
+                ):
+                    errors.append(f"{label}.audio_metadata.duration_seconds must be positive and finite")
+                elif (
+                    type(audio_metadata.get("sample_rate_hz")) is int
+                    and audio_metadata.get("sample_rate_hz") > 0
+                    and type(audio_metadata.get("frame_count")) is int
+                    and audio_metadata.get("frame_count") > 0
+                    and abs(duration - audio_metadata["frame_count"] / audio_metadata["sample_rate_hz"]) > 0.001
+                ):
+                    errors.append(f"{label}.audio_metadata duration does not match its frame count")
+
+        review_method = fixture.get("human_transcription_review_method")
+        if review_method is not None and not _nonempty_string(review_method):
+            errors.append(f"{label}.human_transcription_review_method must be a non-empty string or null")
+
         provenance = fixture.get("provenance")
         if not isinstance(provenance, dict):
             errors.append(f"{label}.provenance must be an object")
             provenance = {}
-        for field in ("source", "citation"):
+        for field in ("source", "source_release", "citation"):
             if provenance.get(field) is not None and not _nonempty_string(provenance.get(field)):
                 errors.append(f"{label}.provenance.{field} must be a non-empty string or null")
 
@@ -240,6 +297,8 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
         if status == "ready":
             if not _nonempty_string(provenance.get("source")):
                 errors.append(f"{label}.provenance.source is required for a ready fixture")
+            if not _nonempty_string(provenance.get("source_release")):
+                errors.append(f"{label}.provenance.source_release is required for a ready fixture")
             if not _nonempty_string(provenance.get("citation")):
                 errors.append(f"{label}.provenance.citation is required for a ready fixture")
             if permission_status != "verified":
@@ -248,6 +307,8 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
                 errors.append(f"{label}.license_or_permission_evidence is required for a ready fixture")
             if reference_status != "verified":
                 errors.append(f"{label}.human_transcription_status must be verified for a ready fixture")
+            if not _nonempty_string(review_method):
+                errors.append(f"{label}.human_transcription_review_method is required for a ready fixture")
             if audio_sha256 is None:
                 errors.append(f"{label}.audio_sha256 is required for a ready fixture")
             elif isinstance(audio_sha256, str) and SHA256_PATTERN.fullmatch(audio_sha256) and audio_file is not None:
@@ -256,6 +317,20 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
                     errors.append(f"{label}.audio_file could not be read for checksum verification")
                 elif actual_sha256.lower() != audio_sha256.lower():
                     errors.append(f"{label}.audio_sha256 does not match the referenced audio file")
+            if audio_metadata is None:
+                errors.append(f"{label}.audio_metadata is required for a ready fixture")
+            if reference_sha256 is None:
+                errors.append(f"{label}.reference_sha256 is required for a ready fixture")
+            elif (
+                isinstance(reference_sha256, str)
+                and SHA256_PATTERN.fullmatch(reference_sha256)
+                and reference_file is not None
+            ):
+                actual_reference_sha256 = _file_sha256(reference_file)
+                if actual_reference_sha256 is None:
+                    errors.append(f"{label}.reference_file could not be read for checksum verification")
+                elif actual_reference_sha256.lower() != reference_sha256.lower():
+                    errors.append(f"{label}.reference_sha256 does not match the referenced reference file")
 
         if status == "ready" and len(errors) == entry_error_start:
             counts["ready_audio_fixtures"] += 1

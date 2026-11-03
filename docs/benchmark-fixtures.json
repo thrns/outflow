@@ -2,7 +2,7 @@
   "schema_version": 1,
   "language": "English",
   "collection_status": "planned",
-  "reference_transcription_policy": "Store a human-verified verbatim reference for every audio fixture, including spoken words and intended punctuation. Keep references in the corresponding reference file; do not place transcript text in this manifest. Record the normalization version used for evaluation in benchmark evidence.",
+  "reference_transcription_policy": "A reviewer listens to the complete recording and verifies each spoken word, number, name, abbreviation, and intended punctuation. Keep transcript text in a separate reference file; do not store it in this manifest.",
   "audio_integrity_requirements": {
     "checksum_algorithm": "SHA-256",
     "checksum_scope": "Hash the exact bytes of the repository-relative audio file.",
@@ -19,11 +19,15 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     },
     {
       "id": "long_speech_001",
@@ -35,11 +39,15 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     },
     {
       "id": "quiet_environment_001",
@@ -51,11 +59,15 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     },
     {
       "id": "noisy_environment_001",
@@ -67,11 +79,15 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     },
     {
       "id": "accented_english_001",
@@ -83,11 +99,15 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     },
     {
       "id": "proper_nouns_technical_001",
@@ -99,11 +119,15 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     },
     {
       "id": "numbers_001",
@@ -115,11 +139,15 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     },
     {
       "id": "silence_001",
@@ -131,11 +159,17 @@
       "reference_file": null,
       "provenance": {
         "source": null,
-        "citation": null
+        "citation": null,
+        "source_release": null
       },
       "license_or_permission_status": "not_verified",
       "license_or_permission_evidence": null,
-      "human_transcription_status": "not_verified"
+      "human_transcription_status": "not_verified",
+      "reference_sha256": null,
+      "audio_metadata": null,
+      "human_transcription_review_method": null
     }
-  ]
+  ],
+  "reference_transcription_policy_version": "human-verified-verbatim-v1",
+  "normalization_policy_version": "lexical-wer-unicode-boundary-v1"
 }

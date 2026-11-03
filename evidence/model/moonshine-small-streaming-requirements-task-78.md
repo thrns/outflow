@@ -1,7 +1,11 @@
-# Task 78 — Moonshine Small Streaming Model Source Requirements
+# Prompt 78 — Moonshine Small Streaming Model Source Requirements
+
+> **Identifier correction:** “78” is the research prompt number, not canonical task `T-078`. Canonical `T-078` is the signed installer clean-machine beta. This source-requirements research is related to `T-009`; it does not complete or change `T-078`.
 
 ```yaml
-task_id: T-078
+prompt_id: Prompt 78
+task_id: null
+related_task_ids: [T-009]
 feature_ids: [F-06]
 flows: [UF-05]
 acceptance: [AC-06]
@@ -13,14 +17,14 @@ result_commit: uncommitted
 platform: macOS 26.6.2 arm64; Apple M3 Pro, 18 GB host; not physical 4 GB release evidence
 implementation: scripts/moonshine_model_source_audit.py; scripts/tests/test_moonshine_model_source_audit.py; README.md; this evidence
 metrics: Model bytes, installed size, process RSS, latency, CPU real-time factor, WER, and quality gates NOT_MEASURED
-doc_updates: README.md Task 78 subsection; this evidence; docs/TASKS.md unchanged
+doc_updates: README.md Prompt 78 subsection; this evidence; docs/TASKS.md unchanged
 risks: Exact artifact revision and packaged SHA-256 are unavailable; no model files are present; redistribution evidence is incomplete
 review: PENDING
 ```
 
 ## Scope and result
 
-Task 78 adds a standard-library-only, offline audit of the model-selection and dependency-manifest contract in the already pinned Moonshine source. It does not invoke the C API, compile Moonshine, call model-download helpers, access a network, modify the source checkout, obtain model files, create a production manifest, or implement inference.
+Prompt 78 adds a standard-library-only, offline audit of the model-selection and dependency-manifest contract in the already pinned Moonshine source. It does not invoke the C API, compile Moonshine, call model-download helpers, access a network, modify the source checkout, obtain model files, create a production manifest, or implement inference.
 
 The source checkout identity was verified locally:
 
@@ -165,7 +169,7 @@ The Rust workspace commands validate Outflow only. They do not configure or comp
 
 ```text
 Native source: VERIFIED
-Native configure: PASSED (Task 76 evidence; not rerun by Task 78)
+Native configure: PASSED (Task 76 evidence; not rerun by Prompt 78)
 Native compilation: NOT RUN
 Model architecture: VERIFIED — MOONSHINE_MODEL_ARCH_SMALL_STREAMING (4)
 Model artifact list: VERIFIED from pinned source catalog
@@ -178,6 +182,6 @@ Hardware and WER gates: NOT TESTED
 Redistribution clearance: INCOMPLETE
 ```
 
-The next prerequisite is artifact-specific provenance/revision and distribution review, together with resolution of the KISS FFT and ONNX Runtime notice gaps. Only after that review and a separate authorization should a controlled acquisition of the catalog-listed files be considered. That later acquisition must verify each byte length and vendor CRC32C from this pinned registry, compute a separate SHA-256 for every exact file, and retain immutable provenance before any production manifest is written. Task 78 did not perform that retrieval.
+The next prerequisite is artifact-specific provenance/revision and distribution review, together with resolution of the KISS FFT and ONNX Runtime notice gaps. Only after that review and a separate authorization should a controlled acquisition of the catalog-listed files be considered. That later acquisition must verify each byte length and vendor CRC32C from this pinned registry, compute a separate SHA-256 for every exact file, and retain immutable provenance before any production manifest is written. Prompt 78 did not perform that retrieval.
 
-T-009, T-010, T-013, T-022, and AC-06 remain incomplete. No task-ledger completion markers were changed. The README was already modified before Task 78; its prior content was preserved and a Task 78 subsection was added. No dependency, Cargo/npm lockfile, model file, Moonshine binary, or upstream source change was introduced. No files were staged or committed.
+T-009, T-010, T-013, T-022, and AC-06 remain incomplete. No task-ledger completion markers were changed. The README was already modified before Prompt 78; its prior content was preserved and a Prompt 78 subsection was added. No dependency, Cargo/npm lockfile, model file, Moonshine binary, or upstream source change was introduced. No files were staged or committed.

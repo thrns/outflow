@@ -324,10 +324,18 @@ def validate_manifest(
             )
 
         if status == "file-verified":
-            for field in ("source_revision", "file_path", "sha256", "provenance_reference"):
+            for field in ("file_path", "sha256", "provenance_reference"):
                 if not _nonempty_string(asset.get(field)):
                     errors.append(f"{label}.{field} is required for a file-verified asset")
             revision = asset.get("source_revision")
+            provenance_reference = asset.get("provenance_reference")
+            if revision is None and (
+                not _nonempty_string(provenance_reference)
+                or "revision unavailable" not in provenance_reference.lower()
+            ):
+                errors.append(
+                    f"{label}.provenance_reference must state that the immutable source revision is unavailable"
+                )
             if _nonempty_string(revision) and revision.strip().lower() in {
                 "unknown",
                 "tbd",

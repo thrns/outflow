@@ -2,11 +2,11 @@
 
 - **Review date:** 2026-10-31
 - **Reviewed source commit:** [`234f60faa0eb388b01cdf7e60aca232af37aefda`](https://github.com/moonshine-ai/moonshine/tree/234f60faa0eb388b01cdf7e60aca232af37aefda)
-- **Review status:** Preliminary engineering inventory; redistribution approval **undetermined**.
+- **Review status:** Source inventory supplemented with Prompt 79 development-build evidence; redistribution approval **undetermined**.
 
-**Scope:** The eight direct source entries in `core/third-party`, their bundled license documents, and the pinned CMake references described below. This is not a legal opinion, binary review, installer review, or redistribution clearance.
+**Scope:** The eight direct source entries in `core/third-party`, their bundled license documents, the pinned CMake references described below, and the explicitly bounded Prompt 79 macOS arm64 development build. This is not a legal opinion, installer review, or redistribution clearance. Prompt 79's compiled library is not a production Outflow artifact.
 
-The machine-readable inventory is [`moonshine-third-party.json`](moonshine-third-party.json). Its evidence scope is the pinned source tree only. No Moonshine build was run, and no runtime binary, model, or model weight was downloaded or inspected for this task.
+The machine-readable inventory is [`moonshine-third-party.json`](moonshine-third-party.json). Its classifications describe the pinned source tree. The original source-only review did not run a Moonshine build; Prompt 79C adds a separate macOS arm64 development-build supplement below. Model bytes and native binaries remain outside this repository.
 
 ## Findings at a glance
 
@@ -21,7 +21,7 @@ The machine-readable inventory is [`moonshine-third-party.json`](moonshine-third
 | `utf-8` | `LICENSE.txt` — Boost Software License 1.0 (`BSL-1.0`) | `confirmed-build-input` | The transcriber includes `utf8.h`; the core target includes this directory. |
 | `utf8proc` | `LICENSE.md` — MIT library code plus Unicode data license | `conditional` | The TTS/G2P core compiles `utf8proc.c`; linking TTS into Moonshine is option-controlled. The separate Unicode data notice applies to `utf8proc_data.c`. |
 
-The classifications describe source-level CMake evidence at this commit. They do not establish which targets Outflow will build, which exact files a platform binary contains, or which files an installer will distribute. A classification of `conditional` means the dependency belongs to an option-controlled path, not that the option is disabled. A classification of `test-only` means no production use was found in the inspected CMake references, not that package contents were inspected.
+The classifications describe source-level CMake evidence at this commit. They do not establish which targets an Outflow release will build or which files an installer will distribute. A classification of `conditional` means the dependency belongs to an option-controlled path, not that the option is disabled. A classification of `test-only` means no production use was found in the inspected CMake references, not that package contents were inspected.
 
 ## Per-dependency review
 
@@ -53,7 +53,7 @@ BSD-3-Clause requires retention of the copyright notice, license conditions, and
 
 The pinned vendored directory contains `core/third-party/nlohmann/LICENSE.MIT`; its license identifier is MIT. The TTS CMake file lists JSON configuration source in the TTS/G2P core and exposes the `core/third-party` include root. The [core CMake file](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt) links the ONNX TTS target only when `MOONSHINE_TTS_BUILD_ONNX` is enabled. The [TTS CMake file](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt) declares that option with a default of `ON`.
 
-The English STT path does not require JSON configuration from TTS by itself, but the source tree's default option can build/link optional TTS/G2P. This review therefore records `conditional`, not `not used`. If included, preserve the copyright and MIT permission notice in copies or substantial portions. Outflow has not fixed the TTS flag or verified a product build.
+The English STT path does not require JSON configuration from TTS by itself, but the source tree's default option can build/link optional TTS/G2P. This review therefore records `conditional`, not `not used`. Prompt 79's development build set the option to ON and linked the TTS/G2P target; the product build remains unselected. If included, preserve the copyright and MIT permission notice in copies or substantial portions.
 
 ### ONNX Runtime
 
@@ -65,9 +65,9 @@ The inspected CMake distinguishes these source-level linking paths:
 - iOS and Swift use a static ORT archive. Static framework packaging merges the ORT archive into the Moonshine framework.
 - WebAssembly uses a static archive produced by `scripts/build-ort-wasm.sh` rather than a Microsoft-provided prebuilt archive.
 
-Static linking or archive merging does not remove the need to review and satisfy the relevant license and notice conditions. Dynamic linking still requires identifying and packaging the exact shared library and its notices. The Moonshine source contains the ORT MIT license text, but this review did not verify the actual native binary, its provenance, its hash, its architecture, or whether its full notice set is present.
+Static linking or archive merging does not remove the need to review and satisfy the relevant license and notice conditions. Dynamic linking still requires identifying and packaging the exact shared library and its notices. Prompt 79 linked and hashed a local macOS arm64 ORT dylib; the exact binary provenance and full notice set remain unverified.
 
-ONNX Runtime's upstream notice set is separate from the short MIT license. As an example, the official [ONNX Runtime v1.23.2 ThirdPartyNotices.txt](https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/ThirdPartyNotices.txt) lists additional components and terms, including notices for ONNX, protobuf, zlib, pybind11, and Intel MKL. The Moonshine macOS library path contains `1.23.2` in its filename, but that alone does not prove all platform libraries were built from that exact release or carry that same notice set. Obtain notices for each exact binary or source build selected for Outflow, reconcile all third-party components and licenses, and include the required materials. No binary has been checked here.
+ONNX Runtime's upstream notice set is separate from the short MIT license. The official [ONNX Runtime v1.23.2 ThirdPartyNotices.txt](https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/ThirdPartyNotices.txt) lists additional components and terms, including notices for ONNX, protobuf, zlib, pybind11, and Intel MKL. The local Moonshine dylib links a library whose filename contains `1.23.2`, but that alone does not prove all platform libraries were built from that exact release or carry that same notice set. Obtain notices for each exact binary or source build selected for Outflow, reconcile all third-party components and licenses, and include the required materials. The development-binary hash and link evidence are in the supplement.
 
 ### UTF8-CPP (`utf-8`)
 
@@ -79,7 +79,7 @@ BSL-1.0 is not MIT. It requires copyright notices and the license statement with
 
 The bundled `core/third-party/utf8proc/LICENSE.md` contains separate terms: MIT for utf8proc library code and a Unicode license notice for the derived `utf8proc_data.c` data. The inventory records both identifiers (`MIT` and `Unicode-3.0`) because the data notice is not subsumed by the library's MIT grant. MIT requires copyright and permission notice retention. The Unicode data terms require the copyright and permission notice with copies and in associated documentation, a clear notice if the data is modified, and restrict promotional use of Unicode names or marks without authorization.
 
-The [TTS CMake file](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt) compiles `utf8proc.c` and links it into the TTS/G2P core. The main [core CMake file](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt) adds TTS to Moonshine only when its build option is enabled; the option defaults to ON. The selected Outflow build configuration is not yet established, so use remains conditional.
+The [TTS CMake file](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-tts/CMakeLists.txt) compiles `utf8proc.c` and links it into the TTS/G2P core. The main [core CMake file](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt) adds TTS to Moonshine only when its build option is enabled; the option defaults to ON. Prompt 79's development build used ON; the future product build remains unselected, so source inventory use remains conditional.
 
 ## License differences and practical obligations
 
@@ -102,3 +102,17 @@ These summaries identify issues for engineering review; they do not decide legal
 6. Reconcile notices against each installer and obtain final human/legal redistribution review. Until then, redistribution approval remains **undetermined**.
 
 The audit's Python validator checks local inventory consistency and immutable references only. It does not contact the network or test whether the source evidence is legally sufficient.
+
+## Prompt 79 macOS development-build supplement
+
+Prompt 79 built the pinned commit on macOS 26.6.2 arm64 with Apple Clang 21.0.0.21000101 and `MOONSHINE_TTS_BUILD_ONNX=ON`. The external development-only `libmoonshine.dylib` is 10,164,432 bytes, SHA-256 `42128afcc4ad6f71d8f6c79012aa81d0b8755c3c6b393c8f9c38029a7de946f5`. `otool -L` shows it dynamically links `libonnxruntime.1.23.2.dylib` (27,623,992 bytes, SHA-256 `480790a978a48ad3e06ce86b6025e037bd70221637f5c104a8dde19617364cf4`), plus system `libc++` and `libSystem`. The filenames/architecture and hashes identify local bytes; they do not establish full binary build provenance or product package contents.
+
+The successful TTS-enabled build compiled and exported TTS/G2P and `cppannote` symbols. Source and link evidence confirms:
+
+- `core/moonshine-tts/CMakeLists.txt` adds `moonshine_tts_ort` and links it into `moonshine` when `MOONSHINE_TTS_BUILD_ONNX=ON`. The compiled branch includes ZipVoice/TTS code and `zipvoice-voices-data.cpp`; that source is 11,695,724 bytes and contains embedded VCTK reference clips. The source acknowledgements identify VCTK, but no artifact-specific license/redistribution terms for the embedded clips were established. Do not redistribute this binary until those terms are reviewed.
+- `core/CMakeLists.txt` unconditionally appends cpp-annote, KISS FFT, and kaldi-native-fbank sources to the `moonshine` target, regardless of the TTS flag. Exported `cppannote`/embedded community-1 symbols were found in the built dylib. `community1_cpp_annote_embedded.cpp` is 2,535,244 bytes (SHA-256 `9424da4176b33e67e4000ea2a776d64b6a78ee9bbf72d40405fb6805d12758c4`) and contains embedded PLDA/config/geometry data. The README attributes the community-1 diarization model family to pyannote.ai under CC BY 4.0; the larger segmentation/embedding weights were deleted from this vendored file and are external model inputs. Prompt 79 used `identify_speakers=false`; that means the smoke did not request diarization inference, not that its code/config data were absent.
+- With `MOONSHINE_TTS_BUILD_ONNX=OFF`, upstream CMake configured, but building `moonshine` first failed because `moonshine-c-api.cpp` still includes `moonshine-asset-catalog.h` while the TTS source include directory is conditional. An external wrapper adding that include directory let compilation continue, but linking failed on TTS/G2P APIs and asset-catalog functions referenced by the same C API. The same OFF build compiled cpp-annote, KISS FFT, and kaldi-native-fbank. No pinned source file was edited. An STT-only C API target requires an upstream change or a separately reviewed wrapper/interface contract.
+- The local ONNX Runtime directory contains Microsoft's MIT `LICENSE.txt`. The official [v1.23.2 ThirdPartyNotices.txt](https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/ThirdPartyNotices.txt) was checked and includes notices for additional components such as ONNX/Apache-2.0, protobuf/BSD-3-Clause, zlib, pybind11, and Intel MKL. This notice file has not been matched to the local dylib's exact source/build provenance or reconciled into a product package.
+- The pinned KISS FFT `COPYING` identifies BSD-3-Clause and points to `LICENSES/BSD-3-Clause`, which is absent from the checkout. The canonical text was checked against the [SPDX BSD-3-Clause License List](https://raw.githubusercontent.com/spdx/license-list-data/main/text/BSD-3-Clause.txt); no release notice file was created. Notice delivery remains blocked.
+
+Detailed file identities, build commands, runtime measurements, and exact open review questions are in [`evidence/mvp/prompt-79c-native-license-audit.md`](../evidence/mvp/prompt-79c-native-license-audit.md). The local model inventory separates Moonshine source commit, vendor catalog path, absent immutable artifact revision, and observed per-file SHA-256. The pinned source calls English streaming STT MIT at the family level, but it does not give an immutable revision or artifact-specific redistribution approval for the eight local quantized assets. T-009 remains incomplete.

@@ -12,7 +12,7 @@ Each entry copies the audited dependency ID, component name, license expression 
 
 Requirements come from each dependency's license evidence and attribution/notice summary in the source inventory. The validator compares the manifest's license expression and build-use classification to that inventory rather than maintaining another license rules table. This is a planning record; it does not decide legal interpretation, determine selected build flags, or make all eight audited dependencies mandatory release artifacts.
 
-The existing audit classifies doctest as `test-only`, so it is not automatically a production dependency. nlohmann/json and utf8proc are `conditional` TTS/G2P dependencies; Outflow has not selected whether those paths will ship. `confirmed-build-input` records Moonshine's source-level CMake evidence only. None of these classifications establishes installer contents.
+The existing audit classifies doctest as `test-only`, so it is not automatically a production dependency. nlohmann/json and utf8proc remain `conditional` in the pinned source inventory, but the Prompt 79 development build explicitly set `MOONSHINE_TTS_BUILD_ONNX=ON` and linked the TTS/G2P target into `libmoonshine.dylib`. Those dependencies were therefore in that development build's source/link scope. The build does not establish product installer contents or redistribution approval. `confirmed-build-input` records source-level CMake evidence; the exact development artifact and its limitations are documented in [`prompt-79c-native-license-audit.md`](../evidence/mvp/prompt-79c-native-license-audit.md).
 
 ## Validate
 
@@ -31,11 +31,11 @@ A planned notice means only that a notice requirement has been identified and a 
 
 ## Known open questions
 
-- KISS FFT's `COPYING` identifies BSD-3-Clause but references a full text that still needs complete-text reconciliation.
+- KISS FFT's `COPYING` identifies BSD-3-Clause but references a `LICENSES/BSD-3-Clause` file absent from the pinned checkout. The standard text is available in the [SPDX License List](https://raw.githubusercontent.com/spdx/license-list-data/main/text/BSD-3-Clause.txt); no Outflow notice package has been assembled.
 - Eigen's exact covered files and applicable MPL-2.0 source and notice obligations need confirmation.
-- ONNX Runtime needs per-platform binary provenance, checksums, transitive notices, and package review.
+- The Prompt 79 macOS arm64 build linked the local `libonnxruntime.1.23.2.dylib` (SHA-256 recorded in the evidence file). Its filename and matching runtime version do not prove build provenance. The official [ONNX Runtime v1.23.2 ThirdPartyNotices.txt](https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/ThirdPartyNotices.txt) is available, but the exact binary's full notice set has not been reconciled or packaged.
 - utf8proc's Unicode-related terms need assessment against the actual selected files, including whether `utf8proc_data.c` is present.
-- Conditional TTS/G2P dependencies must not be assumed to ship; the selected build configuration is unknown.
+- The development build used TTS/G2P; the future product build remains unselected. The pinned CMake option did not yield an STT-only C API library when turned off.
 - doctest is test-only in the audit and must not be treated as a production dependency without package evidence.
 - Exact package contents, notice destinations, installer inclusion, and redistribution approval remain undetermined for all entries.
 

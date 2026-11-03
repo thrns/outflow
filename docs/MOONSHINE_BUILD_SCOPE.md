@@ -1,15 +1,15 @@
 # Moonshine Build Scope for Outflow
 
-**Status:** Source-backed build plan; Task 76 configured the pinned native `core/` project, but no Moonshine target has been compiled or linked.
+**Status:** Source-backed build plan. Prompt 79 built and inspected a macOS arm64 development-only `moonshine` library with TTS enabled; artifact-specific results are in [Prompt 79C native build/license evidence](../evidence/mvp/prompt-79c-native-license-audit.md). That build is not an Outflow production target.
 **Reviewed source:** [`234f60faa0eb388b01cdf7e60aca232af37aefda`](https://github.com/moonshine-ai/moonshine/tree/234f60faa0eb388b01cdf7e60aca232af37aefda)  
 **Machine-readable checklist:** [`moonshine-build-scope.json`](moonshine-build-scope.json)  
 **Project scope:** F-06 / AC-06, C-05 and C-09, TS-05, T-009, T-010, T-013.
 
 ## Intended application target
 
-Outflow intends to ship one English streaming speech-to-text model with a CPU-only native runtime. The intended operating-system targets follow the project matrix: macOS 13+ arm64 and x86_64, Windows 10/11 x86_64, Linux X11 x86_64, and best-effort Linux Wayland x86_64. These are target intentions, not Moonshine platform build certifications. The current model revision and its tokenizer/configuration files are not selected; T-013 remains incomplete.
+Outflow intends to ship one English streaming speech-to-text model with a CPU-only native runtime. The intended operating-system targets follow the project matrix: macOS 13+ arm64 and x86_64, Windows 10/11 x86_64, Linux X11 x86_64, and best-effort Linux Wayland x86_64. These are target intentions, not Moonshine platform build certifications. Prompt 79 used the Small Streaming catalog path `small-streaming-en/quantized_26_08_21` as a local development candidate and recorded eight observed file hashes, but the upstream immutable artifact revision is unavailable and production asset selection/redistribution is not approved; T-013 remains incomplete.
 
-The intended upstream build target is the native `moonshine` library defined from `core/CMakeLists.txt`. Its `MOONSHINE_SRC_FILES` list includes more than the streaming STT path, so identifying the library target does not establish a minimal object set. The CMake source list is reviewed below; compiled objects, linked contents, installed bytes, CPU-only behavior, and target platform behavior remain untested.
+The intended upstream build target is the native `moonshine` library defined from `core/CMakeLists.txt`. Its `MOONSHINE_SRC_FILES` list includes more than the streaming STT path, so identifying the library target does not establish a minimal object set. Prompt 79 inspected the actual arm64 dylib and confirmed the broader TTS and diarization symbols; installed bytes, CPU-only behavior, and target platform behavior remain untested.
 
 ## Feature checklist
 
@@ -50,17 +50,17 @@ The current configuration does not expose a complete, verified path for an Outfl
 
 1. `core/CMakeLists.txt` unconditionally adds `ort-utils`, `bin-tokenizer`, and `moonshine-tts` subdirectories. The TTS option sits inside the TTS subdirectory; it is not a top-level switch for the subtree.
 2. The `moonshine` source list contains speaker-diarization/cpp-annote sources and auxiliary clone, embedding, and text-embedding sources alongside streaming STT.
-3. `MOONSHINE_TTS_BUILD_ONNX` defaults to ON. OFF only gates its ONNX branch and main-library link. `moonshine_tts_core` is declared before the option and links `ort-utils`; G2P utilities and core tests are also declared before that condition.
+3. `MOONSHINE_TTS_BUILD_ONNX` defaults to ON. OFF only gates its ONNX branch and main-library link. In an external build wrapper, OFF first failed to compile `moonshine-c-api.cpp` because it unconditionally includes `moonshine-asset-catalog.h`; supplying that include path exposed unresolved TTS/G2P and asset-catalog symbols at link. `moonshine_tts_core` is declared before the option and links `ort-utils`; G2P utilities and core tests are also declared before that condition.
 4. Native test and benchmark executables are declared without a global option in the reviewed CMake files. Several use doctest or other test-only inputs that the production STT library may not need.
 5. CMake links an ONNX Runtime library but does not establish a CPU-only provider selection or platform artifact. The exact model and tokenizer assets are selected outside these CMake files.
 
-Potential upstream changes to evaluate later include a top-level gate for the full TTS/G2P subtree, explicit test/benchmark/utility build controls, separation of diarization and auxiliary sources from the streaming library, and an explicit CPU-only ONNX Runtime artifact/provider contract. These are proposals for a future reviewed change; they are not implemented here. A target-specific build may avoid compiling some unrelated targets, but this task did not configure or test that behavior.
+The exact source list compiles cpp-annote, KISS FFT, and kaldi-native-fbank into `moonshine` regardless of the TTS option; the TTS-off build log reached those sources. An STT-only library therefore requires an upstream source/interface change or a separately reviewed build wrapper with a coherent C API contract. Do not patch the pinned source silently. Potential upstream changes include a top-level gate for the full TTS/G2P subtree, explicit test/benchmark/utility build controls, separation of diarization and auxiliary sources from the streaming library, and an explicit CPU-only ONNX Runtime artifact/provider contract.
 
-The existing third-party dependency and notice inventories remain unchanged. Their classifications describe the reviewed source-level use and must not be read as binary or installer proof. In particular, this build-scope review does not promote conditional TTS/G2P dependencies to absent or packaged.
+The third-party source inventory still distinguishes conditional source paths from product packaging. The Prompt 79 development build had `MOONSHINE_TTS_BUILD_ONNX=ON`; the actual TTS and its associated licenses are documented in the linked evidence. Neither the source inventory nor the development binary establishes installer contents or redistribution approval.
 
 ## Verification boundary
 
-The intended CPU-only ASR build has **not been compiled, linked, measured, or tested**. Task 76 generated a CMake cache and target graph only; target declarations do not show what a selected build would compile. No ASR model weights were downloaded. Task 75 separately materialized and verified the pinned macOS arm64 ONNX Runtime dylib, but Task 76 did not link it. No compiled Moonshine binary was inspected; therefore this document makes no claim that diarization, TTS/G2P, tests, benchmarks, utilities, or auxiliary model code are absent from a binary. The current build-plan validator reports unresolved questions rather than treating an unverified exclusion as successful.
+The intended Outflow-minimal CPU-only ASR build has **not** been compiled, linked, or tested. Prompt 79 did compile the pinned upstream target with TTS enabled, link it to the local macOS arm64 ONNX Runtime dylib, and inspect its symbols and runtime measurements. That development artifact contains or retains the source modules described in the linked evidence; it does not establish behavior on other platforms, an installer package, or redistribution permission. The machine-readable build-scope checklist remains intentionally source-only and continues to report compiled status as not tested for the future Outflow target.
 
 T-009 remains unchecked, and this supplement does not complete T-010, T-013, AC-01, or AC-06.
 

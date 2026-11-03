@@ -37,8 +37,18 @@ def ready_fixture(root: Path) -> dict[str, Any]:
             "audio_file": "audio/synthetic.wav",
             "audio_sha256": hashlib.sha256(audio_bytes).hexdigest(),
             "reference_file": "references/synthetic.txt",
+            "reference_sha256": hashlib.sha256(b"synthetic validator reference\n").hexdigest(),
+            "audio_metadata": {
+                "sample_format": "PCM_S16LE",
+                "sample_rate_hz": 16_000,
+                "channels": 1,
+                "frame_count": 16_000,
+                "duration_seconds": 1.0,
+            },
+            "human_transcription_review_method": "synthetic fixture test; no human-audio claim",
             "provenance": {
                 "source": "synthetic validator test data",
+                "source_release": "temporary test fixture",
                 "citation": "created only in a temporary test directory",
             },
             "license_or_permission_status": "verified",
@@ -95,6 +105,14 @@ class FixtureManifestValidatorTests(unittest.TestCase):
 
         self.assertTrue(any("reference_transcription_policy must be a non-empty string" in error for error in errors))
 
+    def test_missing_policy_versions_are_rejected(self) -> None:
+        manifest = load_manifest()
+        manifest.pop("normalization_policy_version")
+
+        errors, _ = validate_manifest(manifest)
+
+        self.assertTrue(any("normalization_policy_version must be a non-empty string" in error for error in errors))
+
     def test_malformed_checksums_are_rejected(self) -> None:
         manifest = load_manifest()
         manifest["fixtures"][0]["audio_sha256"] = "not-a-sha256"
@@ -132,6 +150,22 @@ class FixtureManifestValidatorTests(unittest.TestCase):
             errors, counts = validate_manifest(manifest, root)
 
         self.assertTrue(any("human_transcription_status must be verified" in error for error in errors))
+        self.assertEqual(counts["ready_audio_fixtures"], 0)
+
+    def test_ready_entries_require_actual_format_duration_and_reference_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest = load_manifest()
+            fixture = ready_fixture(root)
+            fixture["audio_metadata"]["duration_seconds"] = 2.0
+            fixture["reference_sha256"] = "0" * 64
+            manifest["collection_status"] = "in_progress"
+            manifest["fixtures"] = [fixture]
+
+            errors, counts = validate_manifest(manifest, root)
+
+        self.assertTrue(any("duration does not match" in error for error in errors))
+        self.assertTrue(any("reference_sha256 does not match" in error for error in errors))
         self.assertEqual(counts["ready_audio_fixtures"], 0)
 
     def test_unsafe_audio_paths_are_rejected(self) -> None:

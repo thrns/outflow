@@ -139,14 +139,36 @@ class ModelAssetInventoryValidatorTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(counts["file_verified_assets"], 0)
 
-    def test_file_verified_asset_requires_revision_file_hash_and_provenance(self) -> None:
+    def test_file_verified_asset_requires_file_hash_and_provenance(self) -> None:
         manifest = load_inventory()
         manifest["assets"][0]["status"] = "file-verified"
 
         errors, _ = validate_manifest(manifest)
 
-        for field in ("source_revision", "file_path", "sha256", "provenance_reference"):
+        for field in ("file_path", "sha256", "provenance_reference"):
             self.assertTrue(any(f"{field} is required for a file-verified asset" in e for e in errors))
+
+    def test_file_verified_asset_can_record_unavailable_immutable_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            asset = file_verified_asset(root)
+            asset["source_revision"] = None
+            asset["provenance_reference"] = (
+                "Local observed SHA-256 was computed; upstream immutable artifact revision unavailable."
+            )
+            errors, counts = validate_manifest({"schema_version": 1, "assets": [asset]}, root)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(counts["file_verified_assets"], 1)
+
+    def test_missing_revision_requires_explicit_unavailable_note(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            asset = file_verified_asset(root)
+            asset["source_revision"] = None
+            errors, _ = validate_manifest({"schema_version": 1, "assets": [asset]}, root)
+
+        self.assertTrue(any("state that the immutable source revision is unavailable" in e for e in errors))
 
     def test_file_verified_asset_rejects_placeholder_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:

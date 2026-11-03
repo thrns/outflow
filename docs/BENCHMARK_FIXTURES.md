@@ -8,6 +8,13 @@ This collection will provide a frozen, reproducible English reference set for th
 
 The future corpus target is at least **100 short speech phrases and 50 longer speech phrases**. These are targets, not existing counts. Freeze exact membership, versions, checksums, and normalization policy before using the set for a model decision.
 
+### Public corpus leads checked 2026-11-03 (not selected or ready)
+
+- Mozilla's [Common Voice Data Collective](https://commonvoice.mozilla.org/en/datasets) currently lists English spontaneous-speech ASR data under CC0-1.0. This is a plausible source for spontaneous speech and contributor-reported accent metadata where present. The dataset page is JavaScript-rendered and access may require an email address. A catalog entry is not file-level provenance or privacy review; inspect the exact release, metadata fields, each chosen recording, permitted use, and any non-sensitive-content constraints before selecting clips.
+- [OpenSLR LibriSpeech SLR12](https://www.openslr.org/12/) lists read English speech under CC BY 4.0 and has clean and more challenging subsets. It is a plausible source for read speech, but does not by itself establish broad accent, conversational, or environmental-noise coverage. Preserve attribution and review the exact source files and references.
+
+These are research leads only: neither corpus has been acquired into the repository or approved for this frozen benchmark. There are still **0 ready fixtures**. No file hashes, verified references, permission records, or category counts are inferred from these source listings.
+
 ## Manifest fields
 
 The JSON document uses schema version `1`. The Python validator rejects unsupported versions and invalid metadata.
@@ -18,6 +25,8 @@ The JSON document uses schema version `1`. The Python validator rejects unsuppor
 | `language` | Corpus language; this manifest is English-only. |
 | `collection_status` | Collection-level state: `planned`, `in_progress`, or `complete`. It does not establish benchmark readiness. |
 | `reference_transcription_policy` | Human reference and evaluation policy applying to the collection. |
+| `reference_transcription_policy_version` | Version of the manual verbatim transcription-review procedure. |
+| `normalization_policy_version` | Frozen lexical WER tokenization policy used by the scorer. |
 | `audio_integrity_requirements` | Hash algorithm, exact-byte scope, and missing-audio rule. |
 | `fixtures` | List of individual planned or ready fixture records. |
 | `id` | Stable, unique fixture identifier. Do not recycle an ID for changed audio. |
@@ -27,12 +36,15 @@ The JSON document uses schema version `1`. The Python validator rejects unsuppor
 | `audio_file` | Repository-relative path to the exact audio file, or `null` while unavailable. |
 | `audio_sha256` | SHA-256 hex digest of the exact audio-file bytes, or `null` while unavailable. |
 | `reference_file` | Repository-relative path to the human reference file, or `null` while unavailable. Do not put transcript text in this manifest. |
-| `provenance` | `source` and `citation` identify the source and an auditable source record. |
+| `reference_sha256` | SHA-256 of the separate human reference file. Required for ready entries. |
+| `audio_metadata` | Measured PCM format, sample rate, channels, frame count, and duration. Required for ready entries. |
+| `human_transcription_review_method` | Non-identifying method used to verify the full reference against its audio. |
+| `provenance` | `source`, `source_release`, and `citation` identify the exact corpus release and source record. |
 | `license_or_permission_status` | `not_verified` until redistribution permission is checked; ready entries require `verified`. |
 | `license_or_permission_evidence` | License name/version and a stable citation or permission record sufficient to review redistribution rights. Do not include private contact details. |
 | `human_transcription_status` | `not_verified` until a human has checked the complete reference against the audio; ready entries require `verified`. |
 
-Audio and reference paths must be relative to the repository, remain within it (including after symlink resolution), and use forward slashes. Do not use absolute paths or `..` traversal. The validator checks audio bytes for every ready fixture and requires the referenced human reference file to exist and be non-empty.
+Audio and reference paths must be relative to the repository, remain within it (including after symlink resolution), and use forward slashes. Do not use absolute paths or `..` traversal. The validator checks audio and reference hashes for every ready fixture, requires a non-empty reference file, and cross-checks measured duration against sample rate and frame count.
 
 ## Provenance and redistribution permission
 
@@ -44,7 +56,7 @@ Do not add personal recordings, customer speech, confidential material, identify
 
 Each ready audio file needs a human-verified reference in its separate reference file. The reviewer must listen to the full corresponding recording and check every spoken word, number, proper noun, abbreviation, and intended punctuation. A second review or adjudication is required for uncertain words and names. Record the review method and reference policy version in the corpus's non-sensitive review evidence; the manifest records only the verification status. Never present an ASR output, automatic transcript, or guessed text as a human reference.
 
-For the primary lexical Word Error Rate (WER), normalize both hypothesis and reference with one versioned procedure: Unicode NFC normalization, lowercase, whitespace collapse, and word tokenization; exclude punctuation marks from lexical tokens while preserving distinctions between words and numeric forms. Do not silently expand contractions, convert number spellings, remove fillers, or apply vocabulary corrections for scoring. Report the normalization version with results. The exact normalization implementation must be frozen before a benchmark run.
+For primary lexical Word Error Rate (WER), the frozen `lexical-wer-unicode-boundary-v1` implementation normalizes both hypothesis and reference with Unicode NFC, lowercase, and collapsed whitespace; contiguous Unicode letters, numbers, and combining marks form tokens, while punctuation and other characters are boundaries. It preserves numeric forms and does not expand contractions, convert number spellings, remove fillers, or apply vocabulary corrections. Results record this version. The stable diagonal/deletion/insertion alignment tie order is covered by scorer tests.
 
 Report lexical recognition errors separately from punctuation errors. Punctuation removed for lexical WER must still be compared against the punctuation-bearing reference using a separately described punctuation metric or annotated error count. Also keep any deterministic cleanup/vocabulary transformations separate from raw ASR output so recognition changes are not attributed to punctuation or cleanup.
 
@@ -62,7 +74,7 @@ Balance categories across short/long utterances and quiet/noisy conditions where
 
 ## Audio integrity and versioning
 
-Store each audio SHA-256 as lowercase or uppercase hexadecimal in the manifest; the validator accepts either. Compute it over the exact bytes at the repository-relative path. Any audio edit, re-encoding, trim, channel conversion, or replacement changes the fixture and requires a new checksum and review. Do not claim a duration or format unless it has been measured from that file.
+Store audio and reference SHA-256 values as lowercase or uppercase hexadecimal in the manifest; the validator accepts either. Hash the exact bytes at each repository-relative path. Any audio edit, re-encoding, trim, channel conversion, reference correction, or replacement changes the fixture and requires a new checksum and review. Do not claim a duration or format unless it has been measured from that file.
 
 Keep a frozen manifest with each reported benchmark result. Do not silently update an existing fixture's audio or reference while retaining its ID. Add a new ID for a changed fixture, or explicitly retire the old entry and document the reason in the change review. Dataset updates require rechecking licensing, provenance, transcription, and every affected hash.
 

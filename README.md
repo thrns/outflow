@@ -1269,7 +1269,91 @@ Expected output includes `MODEL_LOAD_OK architecture=4` and two `SESSION` rows w
 
 ### Current measurements and limits
 
-The latest native smoke run loaded the model in 599.8 ms, processed 12 seconds twice on one transcriber, returned ten nonempty partial polls per session and three finalized lines, with 1,626.6 ms / 993.0 ms session times and 0.136 / 0.083 real-time factors. This run's `getrusage` peak RSS was 886,587,392 bytes; the highest observed across three separate smoke processes was 922,386,432 bytes. Those are native harness processes, not the Outflow Tauri app, and leave little headroom below the 950,000,000-byte limit; full application peak and 4 GB release gate remain unverified. Model files are 142,300,974 bytes total; installed application footprint, idle memory, app-process aggregate RSS, WER, hardware-specific performance, and CPU/battery behavior are unmeasured.
+Prompt 79's earlier three-run `getrusage` maximum was 922,386,432 bytes. Prompt 79C added a 100 ms process-tree sampler and repeated the existing two-session smoke ten times on the verified 18 GB M3 Pro: the highest sampled tree RSS was **1,023,426,560 bytes** (median 925,245,440 bytes). Four runs exceeded the 950,000,000-byte release threshold. The process tree contained only the native smoke executable; it is not an Outflow app measurement.
+
+A separate one-fixture native batch measurement processed the full 56.269896-second smoke WAV. The sampled process tree peaked at **974,405,632 bytes**, comprising the native helper at 955,564,032 bytes and the small Python capture wrapper at 18,841,600 bytes. Recognition took 5,475.256 ms (RTF 0.097); thread-inclusive process CPU time was 30,156.661 ms and stop-to-final was 0.001 ms. This is one smoke utterance without a verified reference, so it supplies no WER and no meaningful p50/p95 corpus latency. The separate three-load probe measured 289.508 ms for its first load and a 79.125 ms median for two in-process reloads; OS file-cache state was not controlled.
+
+The current Prompt 79 native build therefore misses the 950,000,000-byte RSS threshold even before a Tauri/webview process is present. T-010 remains **BLOCKED — INSUFFICIENT EVIDENCE** overall: there is no verified WER corpus, no physical 4 GB host, Tiny was not acquired or tested, and the native build has not isolated STT from unused TTS/diarization sources. The Small+current-runtime measurements are a resource-gate failure; do not select it for an application or claim the complete model candidate evaluation is finished. Eight local Small assets total 142,300,974 bytes. The native library is 10,164,432 bytes and the linked ONNX Runtime dylib is 27,623,992 bytes. These figures exclude the app, installer, and all remaining files; they are not installed-size evidence.
+
+### Prompt 79C reproduction: native evaluation and process-tree RSS
+
+These commands use the existing authorized local Small model files at `/private/tmp/prompt79-moonshine-small-streaming`; they do not download or package them. Confirm the pinned source, model hashes, and fixture readiness first:
+
+```sh
+MOONSHINE_SOURCE_DIR=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
+MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+BUILD_DIR=/private/tmp/prompt79-moonshine-wrapper-build-onnx
+
+python3 scripts/moonshine_model_source_audit.py --source-dir "$MOONSHINE_SOURCE_DIR"
+python3 scripts/validate_model_asset_inventory.py \
+  --manifest evidence/mvp/prompt-79-model-assets.json --asset-root "$MODEL_DIR"
+python3 scripts/validate_fixture_manifest.py
+```
+
+Build and run the existing transcript-free two-session native smoke test:
+
+```sh
+clang++ -std=c++17 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
+  tests/native/moonshine_streaming_smoke.cpp \
+  -L"$BUILD_DIR/moonshine-core" -lmoonshine \
+  -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
+  -Wl,-rpath,"$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64" \
+  -o /private/tmp/prompt79c_moonshine_stream_smoke
+DYLD_LIBRARY_PATH="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64:$BUILD_DIR/moonshine-core" \
+  /private/tmp/prompt79c_moonshine_stream_smoke \
+  "$MODEL_DIR" "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
+```
+
+Build the development-only batch helper. Its stdout is a private JSON pipe containing raw hypotheses; **do not invoke it directly in a terminal**. The Python benchmark captures it in memory and writes only sanitized metrics.
+
+```sh
+clang++ -std=c++20 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
+  tests/native/moonshine_asr_batch.cpp \
+  -L"$BUILD_DIR/moonshine-core" -lmoonshine \
+  -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
+  -Wl,-rpath,"$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64" \
+  -o /private/tmp/prompt79c_moonshine_asr_batch
+
+python3 scripts/run_native_asr_benchmark.py \
+  --model-dir "$MODEL_DIR" --asset-root "$MODEL_DIR" \
+  --source-dir "$MOONSHINE_SOURCE_DIR" \
+  --native-runner /private/tmp/prompt79c_moonshine_asr_batch \
+  --moonshine-library "$BUILD_DIR/moonshine-core/libmoonshine.dylib" \
+  --onnxruntime-library "$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib" \
+  --machine-label MAC-ARM64-01 --cpu-label "Apple M3 Pro" \
+  --output /private/tmp/prompt79c-measured-asr.json
+```
+
+The current fixture manifest has **zero ready fixtures**, so the runner exits nonzero with `no verified ready fixtures are available for native evaluation` before model loading. It writes no measured-results file. To run the corpus evaluation, first add a lawfully usable file-level corpus and human-verified references under the fixture policy, then re-run this command with a new output path. The opt-in integration test needs the environment values listed in `scripts/tests/test_native_asr_integration.py`; it skips when the verified corpus or native artifacts are absent.
+
+Run the sampler for one smoke process (choose a new output path each time; it refuses to overwrite evidence):
+
+```sh
+python3 scripts/measure_process_tree_rss.py --interval-ms 100 \
+  --output /private/tmp/prompt79c-rss-run-01.json -- \
+  /private/tmp/prompt79c_moonshine_stream_smoke \
+  "$MODEL_DIR" "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
+```
+
+The JSON records a timestamped per-process snapshot, PIDs, process start identity, per-process RSS bytes, tree peak RSS bytes, sampling gaps, and limits. It never stores command arguments, environment variables, audio, or transcript output. On macOS it currently records no additional physical-footprint metric; the 100 ms `ps` sampling can miss short-lived helpers and RSS sums can double-count shared pages. It measures the launched tree, not the full Outflow application. Run ten times with distinct output paths before quoting the highest observed result.
+
+Validate native notices and reproduce the available local audits with:
+
+```sh
+python3 scripts/validate_moonshine_third_party.py
+python3 scripts/validate_third_party_notices.py
+python3 scripts/validate_moonshine_build_scope.py
+python3 -m unittest scripts.tests.test_measure_process_tree_rss scripts.tests.test_native_asr_benchmark scripts.tests.test_native_asr_integration -v
+```
+
+`PHYSICAL_4GB_GATE` remains `BLOCKED`; neither a VM limit nor this 18 GB development Mac certifies the reference machine. The macOS Accessibility probe returned `AX_NOT_TRUSTED`; no UI controls were targeted or edited. Full measured WER, Tauri process-tree RSS, CPU-only 4 GB behavior, and insertion remain unverified.
+
+The trust-state query was read-only and did not request permission or control any UI:
+
+```sh
+CLANG_MODULE_CACHE_PATH=/private/tmp/prompt79c-clang-module-cache swift -e \
+  'import ApplicationServices; print(AXIsProcessTrusted() ? "AX_TRUSTED" : "AX_NOT_TRUSTED")'
+```
 
 Run the complete applicable repository checks from the root:
 
@@ -1345,7 +1429,7 @@ Troubleshooting:
 
 The source-backed preliminary review is [`docs/MOONSHINE_LICENSE_REVIEW.md`](docs/MOONSHINE_LICENSE_REVIEW.md), with claim-level provenance in [`docs/moonshine-license-review.json`](docs/moonshine-license-review.json). The official [Moonshine license policy](https://github.com/moonshine-ai/moonshine/blob/main/docs/license.md), [model catalog](https://github.com/moonshine-ai/moonshine/blob/main/docs/models/available-models.md), [repository LICENSE](https://github.com/moonshine-ai/moonshine/blob/main/LICENSE), [third-party source directory](https://github.com/moonshine-ai/moonshine/tree/main/core/third-party), and [C API reference](https://moonshine-voice.readthedocs.io/en/stable/api/c-api/) are listed with their reviewed scope and revision status in those records.
 
-The catalog labels English Small Streaming and Tiny Streaming as MIT, and Moonshine's policy says all streaming STT models are MIT. The policy separately identifies a limited set of legacy, non-English, non-streaming models under the Community License. Moonshine's own repository code excludes `core/third-party`; those subdirectories follow supplier terms. The review records 6 upstream-documented claims and 3 unverified items. It does not identify or hash a model artifact or native runtime, assemble the complete notices, or approve redistribution. Redistribution remains **undetermined**, and T-009 remains incomplete.
+The catalog labels English Small Streaming and Tiny Streaming as MIT, and Moonshine's policy says all streaming STT models are MIT. The policy separately identifies a limited set of legacy, non-English, non-streaming models under the Community License. Moonshine's own repository code excludes `core/third-party`; those subdirectories follow supplier terms. The source-policy review records 6 upstream-documented claims and 3 unverified items; it does not itself identify or hash a model artifact or native runtime, assemble the complete notices, or approve redistribution. Prompt 79C separately validated eight existing local Small file hashes and recorded the macOS development library/runtime hashes and build scope in [`evidence/mvp/prompt-79c-native-license-audit.md`](evidence/mvp/prompt-79c-native-license-audit.md). The model's immutable artifact revision is unavailable, the complete notice bundle and artifact-specific rights remain unresolved, redistribution remains **undetermined**, and T-009 remains incomplete.
 
 Validate the local record and run its focused tests with Python's standard library:
 
@@ -1653,7 +1737,9 @@ See the [Task 74 evidence](evidence/model/moonshine-pinned-source-task-74.md) fo
 
 The preflight uses only local filesystem reads, PATH lookup, bounded `cmake --version`, read-only Git revision/status/metadata queries, and local SHA-256/Mach-O inspection. A ready result does not prove CMake configuration, compilation, C ABI linkage, inference, speech-model hashes or licensing, CPU-only behavior, accuracy, installed size, or memory compliance. It does not complete T-009, T-010, T-013, T-022, or AC-06.
 
-### Task 78 — Moonshine Small Streaming model-source audit
+### Prompt 78 — Moonshine Small Streaming model-source audit
+
+“Prompt 78” is the research prompt number, not canonical `T-078` (the signed installer clean-machine beta). This evidence relates to T-009 and does not mark T-078 complete.
 
 The native source commit and model-artifact revision are separate pins: the commit contains the loader contract and a catalog snapshot, while the model files live at catalog URLs and are not included in the source checkout. Audit the local source with:
 
@@ -1664,7 +1750,7 @@ python3 scripts/moonshine_model_source_audit.py \
 
 At pinned source `234f60faa0eb388b01cdf7e60aca232af37aefda`, Small Streaming English is `MOONSHINE_MODEL_ARCH_SMALL_STREAMING` (`4`). English by itself does not select it: the dependency lookup defaults to the first catalog model, Medium Streaming, so callers must set `model_arch=4`. Quantization is represented by the catalog's dated URL directory, not a separate model variant option. The dependency function builds a local manifest from the source-bundled catalog and generated size/CRC32C registry; it does not fetch a remote manifest. The real audit lists the eight required files and the optional word-timestamp attention decoder and spelling group.
 
-The local registry provides expected byte sizes and vendor CRC32C values, but the model files are absent, no artifact revision is emitted in the dependency manifest, and no packaged SHA-256 values are available. CRC32C is not Outflow's SHA-256 integrity check; after any separately authorized artifact acquisition, compute SHA-256 over the exact acquired bytes and verify provenance before packaging. Upstream's pinned license documents English Small Streaming as MIT, but artifact-specific distribution evidence and runtime notices remain incomplete, including the KISS FFT and ONNX Runtime notice gaps. The audit authorizes no download or redistribution. Before acquisition, obtain trustworthy artifact-specific revision and distribution evidence, resolve the notice review, and get a separate acquisition decision. See the [Task 78 evidence](evidence/model/moonshine-small-streaming-requirements-task-78.md).
+The registry still provides catalog metadata, not an immutable artifact revision. Prompt 79 subsequently acquired eight Small files for local inference, recorded their separate observed SHA-256 values in [`prompt-79-model-assets.json`](evidence/mvp/prompt-79-model-assets.json), and validated those exact local bytes. The catalog path is not an artifact revision, and the hashes are not vendor-published release identifiers. No redistribution approval has been recorded. See the [Prompt 78 evidence](evidence/model/moonshine-small-streaming-requirements-task-78.md) and [Prompt 79C native license/build audit](evidence/mvp/prompt-79c-native-license-audit.md).
 
 ## Task 26 — Home page preview
 
