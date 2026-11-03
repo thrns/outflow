@@ -9,7 +9,7 @@ acceptance: [AC-01, AC-03, AC-04, AC-05, AC-06, AC-07, AC-09, AC-10, AC-12, AC-1
 owner: Codex coordinator
 branch: codex/prompt79-macos-offline-dictation
 base_commit: efb3ba8a7b48f608a0eb5aaf29a3f656f57f893f
-result_commit: recorded in GitHub delivery section after push
+result_commit: a7c037030ec99731f183e25b45f88f6a7113b012
 platform: macOS 26.6.2 (25G83), Apple M3 Pro arm64, 18 GB physical RAM
 implementation: Added native C API inference smoke harness, local artifact-hash manifest, task evidence, and development instructions. No Outflow runtime/app integration.
 metrics: Native smoke process only; app footprint, app-process RSS, 4 GB, WER and offline app operation NOT TESTED.
@@ -212,4 +212,4 @@ No screenshots were captured. No personal audio/transcript was used or committed
 
 ## GitHub delivery
 
-This section is completed after the partial evidence commit is pushed. Model weights, native binaries, LFS inputs, temporary logs, and fixture audio are excluded from Git.
+Repository: `https://github.com/thrns/outflow`. Branch: `codex/prompt79-macos-offline-dictation`. The partial implementation/evidence commit `a7c037030ec99731f183e25b45f88f6a7113b012` was pushed to that branch at [the GitHub commit page](https://github.com/thrns/outflow/commit/a7c037030ec99731f183e25b45f88f6a7113b012). The first push was verified with `git ls-remote origin refs/heads/codex/prompt79-macos-offline-dictation`, which returned that same SHA. A documentation-only follow-up records this push evidence; the final branch head is reported in the completion response. Model weights, native binaries, LFS inputs, temporary logs, and fixture audio are excluded from Git.
