@@ -2,8 +2,8 @@
 """Attempt an isolated configure of the pinned Moonshine CMake source.
 
 This runner verifies the upstream revision and the existing six-file source
-contract before configuring. CMake writes only to a temporary out-of-source
-directory, which is removed after target/cache inspection. It never invokes a
+contract before configuring. CMake writes only to a new, retained, out-of-source
+directory so its cache and diagnostics remain inspectable. It never invokes a
 build, install, or test command and does not certify a minimal STT binary.
 """
 
@@ -20,7 +20,6 @@ import re
 import shutil
 import stat
 import subprocess
-import tempfile
 from typing import Sequence
 
 try:  # Direct script execution and package-based unittest imports.
@@ -38,6 +37,7 @@ CONFIGURE_DEFINITIONS = (
     "-DMOONSHINE_TTS_BUILD_ONNX=OFF",
     "-DMOONSHINE_RELIABILITY=OFF",
     "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+    "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON",
 )
 BLOCKED_EXIT_CODE = 2
 FAILED_EXIT_CODE = 1
@@ -89,6 +89,7 @@ class ExperimentResult:
     cmake_version: str | None = None
     minimum_cmake_version: str | None = None
     configure_arguments: tuple[str, ...] = ()
+    build_directory: str | None = None
     configure_return_code: int | None = None
     configure_attempted: bool = False
     configure_status: str | None = None
@@ -266,10 +267,18 @@ def _target_graph(
             ),
             configurations[0],
         )
-        targets = [
-            {"name": str(target.get("name", "")), "type": str(target.get("type", "UNKNOWN"))}
-            for target in configuration.get("targets", [])
-        ]
+        targets: list[dict[str, str]] = []
+        for target in configuration.get("targets", []):
+            name = str(target.get("name", ""))
+            target_type = target.get("type")
+            target_file = target.get("jsonFile")
+            if not target_type and target_file:
+                target_path = (reply_dir / str(target_file)).resolve(strict=True)
+                if reply_dir.resolve() not in target_path.parents:
+                    return [], "UNAVAILABLE (File API target path escaped the build directory)"
+                target_data = json.loads(target_path.read_text(encoding="utf-8"))
+                target_type = target_data.get("type", "UNKNOWN")
+            targets.append({"name": name, "type": str(target_type or "UNKNOWN")})
         return sorted(targets, key=lambda target: target["name"].casefold()), "INSPECTED"
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return [], f"UNAVAILABLE (could not read CMake File API graph: {exc})"
@@ -332,8 +341,63 @@ def _set_diagnostics(result: ExperimentResult, stdout: str | bytes | None, stder
     result.diagnostics = combined[-MAX_DIAGNOSTIC_CHARS:]
 
 
-def run_experiment(source_dir: str | Path) -> ExperimentResult:
-    """Verify and configure one exact source checkout in a disposable build tree."""
+def _create_build_directory(source_root: Path, requested: str | Path | None) -> tuple[Path | None, str | None]:
+    """Create one new, retained build directory outside both source trees."""
+    if requested is None:
+        return None, "A new dedicated --build-dir is required so generated files remain inspectable"
+
+    provided = Path(requested).expanduser()
+    if os.path.lexists(provided):
+        return None, f"Build directory already exists; refusing to reuse or overwrite it: {provided}"
+    try:
+        resolved = provided.resolve(strict=False)
+    except OSError as exc:
+        return None, f"Could not resolve the requested build directory: {exc}"
+
+    if not resolved.parent.is_dir():
+        return None, f"Build directory parent must already exist: {resolved.parent}"
+
+    outflow_root = Path(__file__).resolve().parents[1]
+    for label, root in (("Moonshine source", source_root), ("Outflow repository", outflow_root)):
+        if resolved == root or resolved in root.parents or root in resolved.parents:
+            return None, f"Build directory must be outside the {label} tree: {resolved}"
+
+    try:
+        resolved.mkdir()
+    except OSError as exc:
+        return None, f"Could not create the requested build directory: {exc}"
+    return resolved, None
+
+
+def _selection_arguments(
+    *,
+    generator: str | None,
+    c_compiler: str | None,
+    cxx_compiler: str | None,
+    osx_architectures: str | None,
+) -> tuple[str, ...]:
+    arguments: list[str] = []
+    if generator is not None:
+        arguments.extend(("-G", generator))
+    if c_compiler is not None:
+        arguments.append(f"-DCMAKE_C_COMPILER={c_compiler}")
+    if cxx_compiler is not None:
+        arguments.append(f"-DCMAKE_CXX_COMPILER={cxx_compiler}")
+    if osx_architectures is not None:
+        arguments.append(f"-DCMAKE_OSX_ARCHITECTURES={osx_architectures}")
+    return tuple(arguments)
+
+
+def run_experiment(
+    source_dir: str | Path,
+    build_dir: str | Path | None = None,
+    *,
+    generator: str | None = None,
+    c_compiler: str | None = None,
+    cxx_compiler: str | None = None,
+    osx_architectures: str | None = None,
+) -> ExperimentResult:
+    """Verify and configure one pinned checkout into a new retained build tree."""
     provided = Path(source_dir).expanduser()
     try:
         source_root = provided.resolve(strict=True)
@@ -400,10 +464,14 @@ def run_experiment(source_dir: str | Path) -> ExperimentResult:
         result.blocker = "CMake prerequisite check did not return an executable and version"
         return result
 
-    try:
-        with tempfile.TemporaryDirectory(prefix="outflow-moonshine-cmake-") as temporary_build:
-            build_dir = Path(temporary_build).resolve()
-            query_dir = build_dir / ".cmake" / "api" / "v1" / "query"
+    created_build_dir, build_error = _create_build_directory(source_root, build_dir)
+    if build_error:
+        result.status = "BLOCKED"
+        result.blocker = build_error
+    elif created_build_dir is not None:
+        result.build_directory = str(created_build_dir)
+        try:
+            query_dir = created_build_dir / ".cmake" / "api" / "v1" / "query"
             query_dir.mkdir(parents=True)
             (query_dir / "codemodel-v2").write_text("", encoding="utf-8")
 
@@ -412,7 +480,13 @@ def run_experiment(source_dir: str | Path) -> ExperimentResult:
                 "-S",
                 str(source_root / "core"),
                 "-B",
-                str(build_dir),
+                str(created_build_dir),
+                *_selection_arguments(
+                    generator=generator,
+                    c_compiler=c_compiler,
+                    cxx_compiler=cxx_compiler,
+                    osx_architectures=osx_architectures,
+                ),
                 *CONFIGURE_DEFINITIONS,
             )
             result.configure_arguments = tuple(command[1:])
@@ -420,7 +494,7 @@ def run_experiment(source_dir: str | Path) -> ExperimentResult:
             try:
                 configured = subprocess.run(
                     list(command),
-                    cwd=build_dir,
+                    cwd=created_build_dir,
                     capture_output=True,
                     text=True,
                     timeout=CONFIGURE_TIMEOUT_SECONDS,
@@ -442,11 +516,11 @@ def run_experiment(source_dir: str | Path) -> ExperimentResult:
                 result.configure_status, result.blocker = _configure_status(configured.returncode, output)
                 result.status = result.configure_status
                 if result.configure_status == "CONFIGURED":
-                    result.cache_values = _cache_values(build_dir / "CMakeCache.txt")
+                    result.cache_values = _cache_values(created_build_dir / "CMakeCache.txt")
                     result.generator = result.cache_values.get("CMAKE_GENERATOR")
                     preferred_configuration = result.cache_values.get("CMAKE_BUILD_TYPE") or "Release"
                     result.targets, result.target_graph_status = _target_graph(
-                        build_dir,
+                        created_build_dir,
                         preferred_configuration,
                     )
                     raw_ort_path = result.cache_values.get("ONNXRUNTIME_LIB_PATH", "")
@@ -454,9 +528,9 @@ def run_experiment(source_dir: str | Path) -> ExperimentResult:
                         raw_ort_path,
                         source_root / "core",
                     )
-    except OSError as exc:
-        result.status = "BLOCKED"
-        result.blocker = f"Could not create or inspect an isolated temporary build directory: {exc}"
+        except OSError as exc:
+            result.status = "BLOCKED"
+            result.blocker = f"Could not create or inspect the retained build directory: {exc}"
 
     try:
         final_fingerprint = source_tree_fingerprint(source_root)
@@ -497,7 +571,7 @@ def render_result(result: ExperimentResult) -> str:
         f"Source revision: {result.source_revision or 'NOT VERIFIED'}",
         f"CMake minimum required by upstream: {result.minimum_cmake_version or 'NOT READ'}",
         f"CMake version: {result.cmake_version or 'NOT AVAILABLE'}",
-        f"Build directory: {'TEMPORARY (removed after inspection)' if result.configure_attempted else 'NOT CREATED'}",
+        f"Build directory: {result.build_directory or 'NOT CREATED'}" + (" (retained)" if result.build_directory else ""),
         f"Source checkout unchanged: {result.source_unchanged}",
         f"CMake configuration: {result.configure_status or 'NOT RUN'}",
         f"Experiment outcome: {result.status}",
@@ -525,6 +599,8 @@ def render_result(result: ExperimentResult) -> str:
             "MOONSHINE_TTS_BUILD_ONNX",
             "MOONSHINE_RELIABILITY",
             "FETCHCONTENT_FULLY_DISCONNECTED",
+            "FETCHCONTENT_UPDATES_DISCONNECTED",
+            "CMAKE_OSX_ARCHITECTURES",
         ):
             lines.append(f"  {name}: {result.cache_values.get(name, 'NOT SET IN CACHE')}")
         moonshine = [item for item in result.targets if item["name"].casefold() == "moonshine"]
@@ -546,17 +622,37 @@ def render_result(result: ExperimentResult) -> str:
 def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Verify a pinned Moonshine checkout and attempt CMake configuration in a temporary build tree; "
+            "Verify a pinned Moonshine checkout and configure it in a new retained out-of-source build tree; "
             "does not compile targets."
         )
     )
     parser.add_argument("--source-dir", required=True, type=Path, help="root of the pinned Moonshine checkout")
+    parser.add_argument(
+        "--build-dir",
+        required=True,
+        type=Path,
+        help="new build directory to create and retain; existing paths are rejected",
+    )
+    parser.add_argument("--generator", help="optional CMake generator name passed with -G")
+    parser.add_argument("--c-compiler", help="optional C compiler path passed to CMake")
+    parser.add_argument("--cxx-compiler", help="optional C++ compiler path passed to CMake")
+    parser.add_argument(
+        "--osx-architectures",
+        help="optional CMAKE_OSX_ARCHITECTURES value (for example, arm64 on Apple Silicon)",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _argument_parser().parse_args(argv)
-    result = run_experiment(args.source_dir)
+    result = run_experiment(
+        args.source_dir,
+        args.build_dir,
+        generator=args.generator,
+        c_compiler=args.c_compiler,
+        cxx_compiler=args.cxx_compiler,
+        osx_architectures=args.osx_architectures,
+    )
     print(render_result(result))
     if result.status == "CONFIGURED":
         return 0

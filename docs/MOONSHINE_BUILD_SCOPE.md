@@ -1,6 +1,6 @@
 # Moonshine Build Scope for Outflow
 
-**Status:** Source-backed build plan; no native Moonshine build has been run.  
+**Status:** Source-backed build plan; Task 76 configured the pinned native `core/` project, but no Moonshine target has been compiled or linked.
 **Reviewed source:** [`234f60faa0eb388b01cdf7e60aca232af37aefda`](https://github.com/moonshine-ai/moonshine/tree/234f60faa0eb388b01cdf7e60aca232af37aefda)  
 **Machine-readable checklist:** [`moonshine-build-scope.json`](moonshine-build-scope.json)  
 **Project scope:** F-06 / AC-06, C-05 and C-09, TS-05, T-009, T-010, T-013.
@@ -60,7 +60,7 @@ The existing third-party dependency and notice inventories remain unchanged. The
 
 ## Verification boundary
 
-The intended CPU-only ASR build has **not been compiled, linked, measured, or tested**. No model weights or native libraries were downloaded. No compiled binary was inspected; therefore this document makes no claim that diarization, TTS/G2P, tests, benchmarks, utilities, or auxiliary model code are absent from a binary. The current build-plan validator reports unresolved questions rather than treating an unverified exclusion as successful.
+The intended CPU-only ASR build has **not been compiled, linked, measured, or tested**. Task 76 generated a CMake cache and target graph only; target declarations do not show what a selected build would compile. No ASR model weights were downloaded. Task 75 separately materialized and verified the pinned macOS arm64 ONNX Runtime dylib, but Task 76 did not link it. No compiled Moonshine binary was inspected; therefore this document makes no claim that diarization, TTS/G2P, tests, benchmarks, utilities, or auxiliary model code are absent from a binary. The current build-plan validator reports unresolved questions rather than treating an unverified exclusion as successful.
 
 T-009 remains unchecked, and this supplement does not complete T-010, T-013, AC-01, or AC-06.
 

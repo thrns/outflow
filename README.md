@@ -586,6 +586,36 @@ RUSTUP_TOOLCHAIN=stable cargo test \
 
 All fixtures are synthetic and isolated in temporary directories. See the [Task 69 evidence](evidence/rust-settings-snapshot-boundaries-task-69.md) and [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix).
 
+### Task 70 settings lost-update audit
+
+Atomic replacement and lost-update prevention are separate properties. The existing `save_settings_atomic(path, &settings)` writer atomically replaces the file with the complete validated snapshot it receives; it does not compare that snapshot with the current file, require an expected revision, merge fields, serialize settings updates, or report stale-write conflicts. The stored `schema_version` identifies the document format, not a concurrency revision. In the deterministic two-actor test, both actors load A, then change separate ordinary preferences. With actor 1 writing first, actor 2's stale snapshot succeeds and replaces actor 1's field; reversing the write order reverses which change is lost. The file remains valid schema v1 with no partial JSON or temporary artifacts. This is a lost logical update, not file corruption.
+
+A fresh read before actor 2's update preserves both changes in the controlled sequence because that snapshot includes actor 1's write. It is not transaction isolation: another writer could still change the file between that read and the next write. No production locking, compare-and-swap, versioning, or automatic merge is present. The tests use ordered operations and do not exercise overlapping writes, cross-process behavior, or Windows/Linux filesystem semantics. Run the focused audit with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test settings_lost_update_audit \
+  --locked -- --nocapture
+```
+
+See the [Task 70 evidence](evidence/rust-settings-lost-update-audit-task-70.md) and [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix).
+
+### Task 71 test-only stale-snapshot contract
+
+The test-only assessment compares the caller's expected snapshot with a successfully loaded current `Settings` value. It compares the complete object, including every preference and the vocabulary entries in order, because a selected field or vocabulary count would miss other persisted changes. `schema_version` identifies the document format and is not a concurrency revision. Equal values match only at inspection time; another writer can change the file immediately afterward, so this is not an atomic write precondition or compare-and-swap. A → B → A also compares equal and cannot reveal that intervening history.
+
+The production writer is unchanged and still accepts complete snapshots with last-writer-wins behavior. Task 71 adds only a test contract for classifying a different observed value as stale; it does not prevent lost updates in production, lock files, merge, retry, or roll back settings. Run the focused contract and assertion-backed summary with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test settings_stale_update_contract \
+  --locked -- --nocapture
+```
+
+See the [Task 71 evidence](evidence/rust-settings-stale-update-contract-task-71.md) and [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix).
+
 Run the example from the repository root:
 
 ```sh
@@ -1304,7 +1334,19 @@ python3 -m unittest scripts.tests.test_validate_moonshine_build_scope -v
 
 The manifest records 6 required features, 6 intended exclusions, 0 undetermined scope classifications, and 11 unresolved build questions. An intended exclusion is not a verified build exclusion: the pinned CMake source includes diarization and auxiliary model code in the main source list; adds the TTS subtree; and declares test, benchmark, and utility executables without a general disable option. `MOONSHINE_TTS_BUILD_ONNX` defaults to `ON`; setting it off only gates part of the TTS/G2P target graph. The exact CPU-only ONNX Runtime configuration and one English model's files/hashes are unresolved.
 
-Moonshine has not been configured, compiled, linked, measured, or runtime-tested for this plan. No model or native library was downloaded, and no binary contents are verified. T-009 remains unchecked; T-010, T-013, AC-01, and AC-06 remain incomplete.
+Task 76 configured the pinned `core/` CMake project on macOS arm64 and retained its generated cache and File API reply outside both source trees. No Moonshine target was compiled or linked, and no model was downloaded. Task 75 separately verified the local ONNX Runtime dylib's bytes and arm64 architecture; CMake generation does not prove that the library links or that its ABI is compatible. T-009 remains unchecked; T-010, T-013, AC-01, and AC-06 remain incomplete.
+
+### Moonshine Native Dependency and License Inventory
+
+[`scripts/moonshine_native_license_inventory.py`](scripts/moonshine_native_license_inventory.py) reads the pinned source checkout, an existing CMake cache, and its File API reply to list the selected `moonshine` target's source/link inputs. It makes only local Git metadata queries, hashes found license/notice files, and does not compile, download, or install anything. Run it with the Task 76 inputs:
+
+```sh
+python3 scripts/moonshine_native_license_inventory.py \
+  --source-dir ../moonshine-upstream-234f60f \
+  --build-dir /private/tmp/outflow-moonshine-task76-cmake-arm64-final
+```
+
+The report labels components `RUNTIME`, `BUILD-ONLY`, `OPTIONAL`, or `UNRESOLVED` and flags incomplete attribution with `REDISTRIBUTION_EVIDENCE_INCOMPLETE`. Moonshine's root MIT license covers Moonshine-authored repository source outside `core/third-party`; vendored third-party components use their own local license/notice evidence and are assessed separately. A license file's presence does not establish complete notices, binary/package contents, or redistribution approval. The existing model candidate inventory is not a selected production bundle: Small Streaming revision, exact model files and hashes, model-specific license evidence/approval, and the T-013 runtime manifest remain outstanding. This report supports the native dependency portion of T-009; it does not complete T-009.
 
 Troubleshooting:
 
@@ -1342,26 +1384,187 @@ Troubleshooting:
 
 ## Moonshine CMake configure experiment
 
-[`docs/MOONSHINE_CMAKE_CONFIGURE.md`](docs/MOONSHINE_CMAKE_CONFIGURE.md) records the isolated configure runner and the actual Task 25 attempt. The runner accepts only a clean Git checkout at Moonshine revision `234f60faa0eb388b01cdf7e60aca232af37aefda`, verifies the six pinned CMake files with the Task 24 probe, checks upstream's CMake minimum, and configures into a temporary out-of-source directory. It uses Python's standard library and removes the temporary build tree after inspecting the cache, target graph, compiler selections, and ONNX Runtime library path.
+[`docs/MOONSHINE_CMAKE_CONFIGURE.md`](docs/MOONSHINE_CMAKE_CONFIGURE.md) records the configure runner and the original Task 25 attempt. The runner accepts only a clean Git checkout at Moonshine revision `234f60faa0eb388b01cdf7e60aca232af37aefda`, verifies the six pinned CMake files with the Task 24 probe, and checks upstream's CMake minimum. It requires a new build directory, rejects existing paths and directories inside either source tree, and retains the generated cache, File API reply, and diagnostics for inspection.
 
-When the exact checkout and compatible CMake are available, run:
+For the macOS arm64 toolchain, run the following with a clean pinned checkout. `mktemp` creates a new parent under the system temporary directory; the runner creates and retains its `build/` child:
 
 ```sh
+MOONSHINE_SOURCE_DIR="/path/to/pinned/moonshine"
+BUILD_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/outflow-moonshine-configure.XXXXXX")"
+MOONSHINE_BUILD_DIR="$BUILD_PARENT/build"
+
 python3 scripts/try_moonshine_cmake_configure.py \
-  --source-dir /path/to/pinned/moonshine
+  --source-dir "$MOONSHINE_SOURCE_DIR" \
+  --build-dir "$MOONSHINE_BUILD_DIR" \
+  --generator "Unix Makefiles" \
+  --c-compiler "$(command -v clang)" \
+  --cxx-compiler "$(command -v clang++)" \
+  --osx-architectures arm64
 ```
 
-The runner supplies `CMAKE_BUILD_TYPE=Release`, `MOONSHINE_TTS_BUILD_ONNX=OFF`, `MOONSHINE_RELIABILITY=OFF`, and `FETCHCONTENT_FULLY_DISCONNECTED=ON`. It does not build, install, or test Moonshine targets. `CONFIGURED` (exit 0) reports CMake generation only; it does not prove a minimal STT binary, working native linkage, runtime compatibility, or release readiness. `BLOCKED` (exit 2) means the pinned source, CMake, a required dependency, or an environmental capability is unavailable. `FAILED` (exit 1) means source integrity or an unexpected configure assumption failed.
+Task 76 used this same runner and selection with the verified local source and `/private/tmp/outflow-moonshine-task76-cmake-arm64-final`; the [Task 76 evidence](evidence/model/moonshine-native-configure-task-76.md) records the exact expanded invocation and result.
 
-Task 25 is currently **BLOCKED**: Git could not resolve `github.com` while preparing the source-only checkout, and CMake is not installed. No source revision, target graph, or ONNX Runtime library was verified during this attempt. Network isolation also remains unverified because `FETCHCONTENT_FULLY_DISCONNECTED=ON` does not disable every possible configure-time network request.
+The runner supplies `CMAKE_BUILD_TYPE=Release`, `MOONSHINE_TTS_BUILD_ONNX=OFF`, `MOONSHINE_RELIABILITY=OFF`, `FETCHCONTENT_FULLY_DISCONNECTED=ON`, and `FETCHCONTENT_UPDATES_DISCONNECTED=ON`. It does not invoke a build, install, CTest, or download command. These FetchContent settings are not a general network sandbox: inspect the configured CMake entry and its included modules for custom acquisition paths. For the pinned `core/` entry, inspection found no `FetchContent`, `ExternalProject`, `file(DOWNLOAD)`, `execute_process`, or curl/wget path. The separate `micro/` entry does use FetchContent for Pico SDK and is not configured here.
+
+Inspect the retained result with:
+
+```sh
+rg -n '^(CMAKE_BUILD_TYPE|CMAKE_C_COMPILER|CMAKE_CXX_COMPILER|CMAKE_GENERATOR|CMAKE_HOME_DIRECTORY|CMAKE_OSX_ARCHITECTURES|FETCHCONTENT_FULLY_DISCONNECTED|FETCHCONTENT_UPDATES_DISCONNECTED|MOONSHINE_RELIABILITY|MOONSHINE_TTS_BUILD_ONNX|ONNXRUNTIME_LIB_PATH):' \
+  "$MOONSHINE_BUILD_DIR/CMakeCache.txt"
+rg -n 'CMAKE_HOST_SYSTEM_PROCESSOR|CMAKE_SYSTEM_PROCESSOR' \
+  "$MOONSHINE_BUILD_DIR/CMakeFiles" --glob 'CMakeSystem.cmake'
+rg -n 'CMAKE_C_COMPILER_ID|CMAKE_CXX_COMPILER_ID|CMAKE_C_COMPILER_VERSION|CMAKE_CXX_COMPILER_VERSION' \
+  "$MOONSHINE_BUILD_DIR/CMakeFiles" --glob 'CMakeCCompiler.cmake' --glob 'CMakeCXXCompiler.cmake'
+find "$MOONSHINE_BUILD_DIR" -maxdepth 2 -type f -print
+```
+
+Expect `CMakeCache.txt`, the selected generator's build description, `CMakeFiles/`, and `.cmake/api/v1/reply/`. CMake may compile its small compiler-identification checks during configuration. Those checks are not Moonshine target compilation. `CONFIGURED` (exit 0) means CMake generated the build system; it does not prove a minimal STT binary, native linkage, ABI compatibility, inference, or release readiness. `BLOCKED` (exit 2) means a prerequisite or required local file is unavailable. `FAILED` (exit 1) means source integrity or an unexpected configure assumption failed. Read the runner's blocker and first actionable CMake error, preserve the build directory, and report its path; use a new directory for any later attempt.
+
+Task 25's original configure attempt was **BLOCKED** because Git could not resolve `github.com` and CMake was not installed. Tasks 73–75 later verified CMake, acquired the pinned source, and materialized and verified the macOS arm64 ONNX Runtime artifact. Task 76 then configured the native `core/` project successfully with CMake 4.4.5, Apple Clang 21.0.0.21000101, the `Unix Makefiles` generator, and `arm64`. CMake reported the FetchContent variables as unused by this project; the configure path had no acquisition commands, and no dependency download was invoked. This is configure-only evidence, not proof of network isolation for arbitrary CMake code.
 
 Troubleshooting:
 
 - **`BLOCKED: Source directory is unavailable` or revision mismatch:** prepare a clean checkout at the exact commit above with `GIT_LFS_SKIP_SMUDGE=1`; do not substitute a package subdirectory, another revision, or an LFS pointer.
 - **`BLOCKED: CMake executable is not available` or unsupported version:** use a CMake installation that meets the minimum read from the pinned `core/CMakeLists.txt`; do not install dependencies as part of the experiment without authorization.
-- **`BLOCKED` for a missing dependency:** read the bounded CMake diagnostics. Supply only already-approved source dependencies; do not fetch ONNX Runtime binaries or model weights for this task.
+- **`BLOCKED` for a missing dependency:** read the bounded CMake diagnostics and use only the exact, separately approved artifact retrieval documented under Task 75. Do not trigger LFS or model downloads from a configure attempt.
 - **ONNX Runtime path is missing or an LFS pointer:** the configure result does not make that file usable. The runner reports LFS pointers as non-binaries and never treats their pointer text as a native library.
-- **CMake reports `CONFIGURED`:** inspect the target list and cache, but keep binary contents and minimal STT exclusions unproven. The TTS subtree, tests, benchmarks, utilities, diarization, and auxiliary sources have no verified general exclusion control in the reviewed source.
+- **CMake reports `CONFIGURED`:** inspect the target list and cache, but keep binary contents and minimal STT exclusions unproven. Task 76's generated target graph included test, benchmark, TTS/G2P, and utility targets; the source provides no general disable switch for them. Continue to treat native compilation and linkage as separate steps.
+
+### Task 76 configure result
+
+The pinned source and Task 75 ONNX Runtime file passed the preflight. The final CMake run returned exit code 0 and generated `CMakeCache.txt`, `Makefile`, `CTestTestfile.cmake`, and CMake File API replies in a retained directory under the host's temporary directory. The cache selects `core/` as `CMAKE_HOME_DIRECTORY`, `Unix Makefiles`, `/usr/bin/clang`, `/usr/bin/clang++`, and `CMAKE_OSX_ARCHITECTURES=arm64`; the imported ONNX Runtime target resolves to the verified `libonnxruntime.1.23.2.dylib`.
+
+The CMake 4.4.5 run completed configuration and generation without a policy compatibility error. Its only warning was that the two FetchContent settings were unused. No Moonshine target build, link, install, CTest, model download, or inference ran; the runtime model manifest is still missing. After license/model feasibility and the T-013 bundle are resolved, the next native milestone is the separately controlled build/link and ABI verification required by T-022.
+
+## Moonshine Native Build Readiness
+
+[`scripts/moonshine_native_preflight.py`](scripts/moonshine_native_preflight.py) checks whether the local machine has the prerequisites for attempting the existing native configure experiment. It runs offline and does not configure or build Moonshine, download source/models, or install tools. On macOS arm64 it also reads the pinned ONNX Runtime Git LFS pointer from the verified source commit and checks the materialized library's byte length, SHA-256, and Mach-O architecture; it never fetches or replaces the file. Until equivalent checks are added for other platform library paths, those hosts remain unverified and cannot report configure readiness.
+
+### CMake toolchain prerequisite
+
+Check for CMake and CTest with `command -v cmake`, `cmake --version`, `command -v ctest`, and `ctest --version`. On macOS, the approved installation option when CMake is missing is Homebrew's official formula: `brew install cmake`. Task 73 approved and attempted that command, but its first invocation stopped because `/opt/homebrew/Cellar` was not writable. The maintainer later reported CMake installed; the successful installation invocation was not observed. Verification found CMake and CTest 4.4.5 at `/opt/homebrew/bin/cmake` and `/opt/homebrew/bin/ctest`.
+
+To smoke-test the local C/C++ toolchain without configuring Moonshine, create a disposable fixture:
+
+```sh
+SMOKE_DIR="$(mktemp -d)"
+cat > "$SMOKE_DIR/CMakeLists.txt" <<'EOF'
+cmake_minimum_required(VERSION 3.20)
+
+project(outflow_cmake_smoke LANGUAGES C CXX)
+
+enable_testing()
+
+add_executable(outflow_cmake_smoke main.c)
+
+add_test(
+    NAME native_toolchain_smoke
+    COMMAND outflow_cmake_smoke
+)
+EOF
+cat > "$SMOKE_DIR/main.c" <<'EOF'
+int main(void) {
+    return 0;
+}
+EOF
+cmake -S "$SMOKE_DIR" -B "$SMOKE_DIR/build"
+cmake --build "$SMOKE_DIR/build"
+ctest --test-dir "$SMOKE_DIR/build" --output-on-failure
+```
+
+Expect C and C++ compiler checks to succeed, the executable to build, and CTest to report `1/1` passing. Before cleanup, verify `SMOKE_DIR` is the nonempty temporary directory created above and contains the fixture; then remove only that directory with `rm -rf "$SMOKE_DIR"`. Task 73 passed this smoke test with Apple Clang 21.0.0.21000101.
+
+Run it from the repository root:
+
+```sh
+python3 scripts/moonshine_native_preflight.py
+```
+
+The check requires a supported host, CMake at or above the minimum declared by the pinned source, C and C++ compiler executables, and a clean local Moonshine checkout at the revision already pinned in `scripts/probe_moonshine_cmake.py`. It checks for `core/CMakeLists.txt`, the pinned Git revision and clean state, and a header declaring `MOONSHINE_HEADER_VERSION` and `moonshine_load_transcriber_from_files`. Supply the local checkout explicitly:
+
+```sh
+python3 scripts/moonshine_native_preflight.py --source-dir /path/to/clean/moonshine
+```
+
+`READY_TO_ATTEMPT_CONFIGURE` means the checks for the current host passed, including verification of the selected macOS arm64 ONNX Runtime artifact when running on that host. It means only that a separate configure attempt may be tried; it does not mean CMake configuration or compilation succeeded. The configure-only runner requires `--source-dir` and a new `--build-dir`, retains generated files, and applies both FetchContent disconnected settings. It does not build or invoke download helpers. Do not run `scripts/build-ort-*`, `scripts/fetch-voice-assets.sh`, `examples/c++/download-library.sh`, or the language-binding model download helpers as part of an offline configure attempt. The separate `micro/` CMake entry can fetch the Raspberry Pi Pico SDK through `FetchContent`; it is not the native C API entry point.
+
+### Pinned source checkout (Task 74)
+
+The approved upstream is [`https://github.com/moonshine-ai/moonshine.git`](https://github.com/moonshine-ai/moonshine) at the full commit `234f60faa0eb388b01cdf7e60aca232af37aefda`. The local checkout is stored outside this repository in the sibling directory `moonshine-upstream-234f60f`. From the Outflow repository root, verify it with:
+
+```sh
+MOONSHINE_SOURCE_DIR="../moonshine-upstream-234f60f"
+MOONSHINE_PIN="234f60faa0eb388b01cdf7e60aca232af37aefda"
+git -C "$MOONSHINE_SOURCE_DIR" remote get-url origin
+git -C "$MOONSHINE_SOURCE_DIR" rev-parse HEAD
+git -C "$MOONSHINE_SOURCE_DIR" status --porcelain
+test "$(git -C "$MOONSHINE_SOURCE_DIR" remote get-url origin)" = \
+  "https://github.com/moonshine-ai/moonshine.git"
+test "$(git -C "$MOONSHINE_SOURCE_DIR" rev-parse HEAD)" = "$MOONSHINE_PIN"
+test -z "$(git -C "$MOONSHINE_SOURCE_DIR" status --porcelain)"
+```
+
+The expected remote is `https://github.com/moonshine-ai/moonshine.git`, `HEAD` must equal the full pin, and the status command must print nothing. The checkout is detached at that commit. Its C API header is `core/moonshine-c-api.h`; the pinned declaration is `#define MOONSHINE_HEADER_VERSION (30000)`. Check it and run the offline preflight with:
+
+```sh
+rg -n 'MOONSHINE_HEADER_VERSION|moonshine_load_transcriber_from_files|moonshine_create_stream|moonshine_start_stream|moonshine_transcribe_add_audio_to_stream|moonshine_transcribe_stream|moonshine_stop_stream|moonshine_free_stream|moonshine_free_transcriber' \
+  "$MOONSHINE_SOURCE_DIR/core/moonshine-c-api.h"
+python3 scripts/moonshine_native_preflight.py --source-dir "$MOONSHINE_SOURCE_DIR"
+```
+
+Task 74 verified the remote, full commit, detached state, clean tree, header declarations, CMake minimum, and local compiler/CMake prerequisites. At that time the preflight reported `READY_TO_ATTEMPT_CONFIGURE` despite the required ONNX Runtime file being an unmaterialized LFS pointer; Task 75 corrected that false-ready result. The selected quantized English streaming model, its exact files and hashes, and a T-013 runtime manifest remain unavailable. The full Git source tree includes upstream-tracked SpellingCNN/TinyVadCNN micro model files, a Tiny English tokenizer asset, and test audio; no separate Small Streaming ASR model bundle was fetched.
+
+### Pinned ONNX Runtime artifact (Task 75)
+
+The native macOS arm64 CMake branch in `core/third-party/onnxruntime/find-ort-library-path.cmake` selects one shared library: `core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib`. Its tracked Git object is an LFS pointer, so a regular clone can contain the pointer text instead of the native library. The pinned LFS identity is SHA-256 `480790a978a48ad3e06ce86b6025e037bd70221637f5c104a8dde19617364cf4`, size `27623992` bytes. The native CMake target imports this dylib; the macOS arm64 static archive is selected by the separate Swift build path and is not required for this native C API configure.
+
+Identify and inspect the candidate from the pinned checkout. If the working file begins with the Git LFS pointer header, use `git show` to read the tracked object metadata; do not treat the pointer text as a library:
+
+```sh
+ORT_RELATIVE_PATH="core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib"
+ORT_LIBRARY="$MOONSHINE_SOURCE_DIR/$ORT_RELATIVE_PATH"
+file "$ORT_LIBRARY"
+ls -lh "$ORT_LIBRARY"
+head -c 160 "$ORT_LIBRARY" # only when file reports ASCII text / an LFS pointer
+git -C "$MOONSHINE_SOURCE_DIR" show "HEAD:$ORT_RELATIVE_PATH"
+```
+
+After a separately approved, exact-path LFS fetch, materialize and verify only that artifact:
+
+```sh
+git -C "$MOONSHINE_SOURCE_DIR" lfs fetch \
+  --include="$ORT_RELATIVE_PATH" origin "$MOONSHINE_PIN"
+git -C "$MOONSHINE_SOURCE_DIR" lfs checkout "$ORT_RELATIVE_PATH"
+stat -f '%z bytes' "$ORT_LIBRARY"
+shasum -a 256 "$ORT_LIBRARY"
+file "$ORT_LIBRARY"
+lipo -info "$ORT_LIBRARY"
+```
+
+The size and complete SHA-256 must match the pointer above, and `file`/`lipo` must identify an arm64 Mach-O dynamic library. If Git LFS is already installed but reports that it is not initialized, `git -C "$MOONSHINE_SOURCE_DIR" lfs install --local --skip-repo` registers filters in that checkout only and does not install hooks or change global Git settings. Use an exact `--include` path; unrestricted `git lfs pull` may download unrelated runtimes, TTS/auxiliary assets, and model data. The ONNX Runtime library checksum is not a speech-model checksum.
+
+Rerun the offline readiness check with `python3 scripts/moonshine_native_preflight.py --source-dir "$MOONSHINE_SOURCE_DIR"`. It reports a missing library, `LFS_POINTER_NOT_MATERIALIZED`, `PRESENT_UNVERIFIED`, or `VERIFIED`. A verified result contributes to `READY_TO_ATTEMPT_CONFIGURE`; it proves only local prerequisites and the selected library's metadata/architecture match, not CMake generation, native compilation, C ABI linkage, or ASR inference.
+
+Task 75 materialized only this 27,623,992-byte macOS arm64 library. The checkout remains at the approved commit and clean under its Git LFS filters. Speech-model assets remain a separate T-013 prerequisite.
+
+The upstream root `LICENSE` covers Moonshine-authored source under MIT except `core/third-party`. The pinned source has per-dependency license files but no top-level third-party NOTICE file. Upstream documents the English and streaming STT model family as MIT, legacy non-English non-streaming model exceptions, and separate TTS/G2P licensing. This is only a source inventory; T-009 still requires a complete native/runtime/model redistribution review.
+
+See the [Task 74 evidence](evidence/model/moonshine-pinned-source-task-74.md) for exact inspection results and remaining blockers.
+
+The preflight uses only local filesystem reads, PATH lookup, bounded `cmake --version`, read-only Git revision/status/metadata queries, and local SHA-256/Mach-O inspection. A ready result does not prove CMake configuration, compilation, C ABI linkage, inference, speech-model hashes or licensing, CPU-only behavior, accuracy, installed size, or memory compliance. It does not complete T-009, T-010, T-013, T-022, or AC-06.
+
+### Task 78 — Moonshine Small Streaming model-source audit
+
+The native source commit and model-artifact revision are separate pins: the commit contains the loader contract and a catalog snapshot, while the model files live at catalog URLs and are not included in the source checkout. Audit the local source with:
+
+```sh
+python3 scripts/moonshine_model_source_audit.py \
+  --source-dir "$MOONSHINE_SOURCE_DIR"
+```
+
+At pinned source `234f60faa0eb388b01cdf7e60aca232af37aefda`, Small Streaming English is `MOONSHINE_MODEL_ARCH_SMALL_STREAMING` (`4`). English by itself does not select it: the dependency lookup defaults to the first catalog model, Medium Streaming, so callers must set `model_arch=4`. Quantization is represented by the catalog's dated URL directory, not a separate model variant option. The dependency function builds a local manifest from the source-bundled catalog and generated size/CRC32C registry; it does not fetch a remote manifest. The real audit lists the eight required files and the optional word-timestamp attention decoder and spelling group.
+
+The local registry provides expected byte sizes and vendor CRC32C values, but the model files are absent, no artifact revision is emitted in the dependency manifest, and no packaged SHA-256 values are available. CRC32C is not Outflow's SHA-256 integrity check; after any separately authorized artifact acquisition, compute SHA-256 over the exact acquired bytes and verify provenance before packaging. Upstream's pinned license documents English Small Streaming as MIT, but artifact-specific distribution evidence and runtime notices remain incomplete, including the KISS FFT and ONNX Runtime notice gaps. The audit authorizes no download or redistribution. Before acquisition, obtain trustworthy artifact-specific revision and distribution evidence, resolve the notice review, and get a separate acquisition decision. See the [Task 78 evidence](evidence/model/moonshine-small-streaming-requirements-task-78.md).
 
 ## Task 26 — Home page preview
 
