@@ -21,8 +21,8 @@
       "queue_overflow_count": 0,
       "stop_to_final_ms": 59.232
     },
-    "physical_microphone_sessions": 2,
-    "real_microphone_inference": "VERIFIED: two physical microphone sessions; one captured 47.8 s without nonempty recognition, and one produced nonempty partial and final text. This demonstrates path feasibility only; no human-reviewed reference or WER exists.",
+    "physical_microphone_sessions": 3,
+    "real_microphone_inference": "VERIFIED: three physical microphone sessions; one captured 47.8 s without nonempty recognition, and two produced nonempty partial and final text. This demonstrates path feasibility only; no human-reviewed reference or WER exists.",
     "successful_spoken_session": {
       "WER_assessed": false,
       "first_frame_ms_displayed_rounded": 147,
@@ -41,6 +41,30 @@
       "queue_maximum_depth_blocks_displayed": 5,
       "queue_overflow_count": "No overflow reported; session reached Result ready.",
       "stop_to_final_ms_displayed_rounded": 48,
+      "transcript_content_persisted": false
+    },
+    "third_spoken_session": {
+      "WER_assessed": false,
+      "audio_duration_seconds": 10.968836,
+      "capture_duration_ms": 10968.836,
+      "first_frame_after_capture_start_ms": 143.282,
+      "first_partial_after_first_frame_ms": 3193.178,
+      "mean_partial_cadence_ms": 834.627,
+      "model_load_ms": 300.492,
+      "microphone_release_latency_ms": 44.924,
+      "native_process_peak_rss_bytes": 599965696,
+      "native_thread_count": 31,
+      "nonempty_partial_and_final": true,
+      "partial_update_count": 6,
+      "process_cpu_ms": 5617.728,
+      "queue_capacity_blocks": 16,
+      "queue_maximum_depth_blocks": 3,
+      "queue_overflow_count": 0,
+      "metrics_file_saved": true,
+      "metrics_file_path": "/private/tmp/outflow-prompt79e-mic-third-session-20261103.json",
+      "metrics_file_contains_transcript_or_audio": false,
+      "stop_to_final_ms": 44.955,
+      "total_session_ms": 13518.623,
       "transcript_content_persisted": false
     }
   },
