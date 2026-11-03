@@ -1,6 +1,6 @@
 # TASKS.md — Dependency-Ordered Engineering Backlog
 
-> **Status:** In progress; checkboxes remain open until evidence is accepted · **Revision:** 1.1 · **2026-10-30**
+> **Status:** In progress; checkboxes remain open until evidence is accepted · **Revision:** 1.2 · **2026-11-03**
 > **Product authority:** [PRD.md](PRD.md) · **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md) · **Technology:** [TECH_STACK.md](TECH_STACK.md) · **Behavior:** [USER_FLOWS.md](USER_FLOWS.md)
 
 ## 0. How agents should use this checklist
@@ -22,6 +22,12 @@
 4. Inspect diff and resource impact. For OS/FFI work run target-native tests; a mock alone is insufficient for hardware certification.
 5. Write evidence to `evidence/T-xxx.md` with command, date/OS, expected vs observed, links to logs (redacted), and issue IDs.
 6. Only then mark `[x]` in this file; never mark complete via a speculative code suggestion.
+
+### 0.2 Prompt 79 execution note — partial native inference evidence
+
+Prompt 79 verified a local-only Small Streaming model bundle by observed SHA-256, built the pinned Moonshine C API as an arm64 macOS dylib, confirmed exported stream lifecycle symbols, and ran two real fixture-backed C API streaming sessions with nonempty partial and final transcripts. The reproducible smoke harness and detailed record are `tests/native/moonshine_streaming_smoke.cpp`, `evidence/mvp/prompt-79-model-assets.json`, and `evidence/mvp/prompt-79-macos-dictation.md`. This evidence does **not** complete the app vertical slice: no Tauri shell, Rust binding, microphone capture, session state machine, cleanup integration, target validation, insertion, Copy Result, or offline app launch exists. No task checkbox is changed by this note.
+
+Task progress from this run: T-009 licensing review, T-010 candidate go/no-go, T-013 selected production bundle, T-022 supported-platform dependency/ABI work, and T-029 Rust stream lifecycle have additional partial evidence only; each remains incomplete against its original dependencies and acceptance evidence. T-003 has one smoke fixture but no 100-phrase benchmark manifest; T-004 has a single native-process peak-RSS observation but no process-tree sampler; T-006 and all real insertion tests remain unrun. The native smoke peak RSS was 922,386,432 bytes on an 18 GB M3 Pro and leaves insufficient evidence for the 950,000,000-byte release cap or 4 GB support. The model artifact terms, ONNX Runtime/KISS FFT and compiled optional TTS/diarization notice review, and redistribution decisions remain unresolved. See the Prompt 79 evidence report for exact environment, commands, results, licensing qualifications, and remaining blockers.
 
 ## 1. Milestone map / critical path
 
@@ -204,9 +210,9 @@ A feature F-xx is **Done** only when: (1) every mapped T-xxx is checked, (2) its
 
 | Milestone | Task range | Status | Blocker | Evidence |
 |---|---|---|---|---|
-| M0 feasibility | T-001–T-010 | Not started | No physical bench results | `evidence/model/` |
+| M0 feasibility | T-001–T-010 | In progress | No 4 GB benchmark, WER corpus, process-tree sampler, completed license review, or macOS insertion matrix | `evidence/mvp/prompt-79-macos-dictation.md`; `evidence/model/` |
 | M1 foundation | T-011–T-024 | In progress | T-001/T-010 prerequisites and remaining M1 tasks | `evidence/build/` |
-| M2 local speech | T-025–T-040 | Not started | Requires M1 | `evidence/asr/` |
+| M2 local speech | T-025–T-040 | Not started | Requires M1; standalone native C API smoke is not the app audio/ASR integration | `evidence/asr/`; `evidence/mvp/prompt-79-macos-dictation.md` |
 | M3 OS UX | T-041–T-056 | Not started | Requires M2 interfaces | `evidence/platform/` |
 | M4 hardening | T-061–T-070 | Not started | Requires E2E | `evidence/perf/` |
 | M5 release | T-071–T-080 | Not started | Requires memory/quality gate | `evidence/release/` |

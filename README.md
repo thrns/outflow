@@ -1196,7 +1196,107 @@ The running page was visually inspected in the browser at **1440×900**, **390×
 
 ## Current implementation status
 
-The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading and safe initialization, explicit confirmed reset, and explicit-path atomic writes on Unix. The reset and settings filesystem behavior were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Reset button, confirmation dialog, Tauri command, Home features, reusable component library, Tauri shell, microphone capture, or dictation behavior is included yet. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.
+The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading and safe initialization, explicit confirmed reset, and explicit-path atomic writes on Unix. The reset and settings filesystem behavior were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Reset button, confirmation dialog, Tauri command, Home features, reusable component library, Tauri shell, microphone capture, or in-app dictation behavior is included. Prompt 79 adds a standalone native Moonshine streaming smoke test, not an application runtime. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.
+
+## Prompt 79 — macOS native inference evidence (partial)
+
+The complete milestone record is [`evidence/mvp/prompt-79-macos-dictation.md`](evidence/mvp/prompt-79-macos-dictation.md). The verified local-only model hashes are in [`evidence/mvp/prompt-79-model-assets.json`](evidence/mvp/prompt-79-model-assets.json). No weights, audio fixtures, native binaries, or signed URLs are stored in this repository.
+
+### Current capability and blocker
+
+The pinned Moonshine Small Streaming C API now builds as an arm64 macOS dylib, and [`tests/native/moonshine_streaming_smoke.cpp`](tests/native/moonshine_streaming_smoke.cpp) has loaded the verified local files, streamed real speech audio through architecture `4`, produced nonempty partial and final results, and completed two sessions. This test runs outside Outflow's application. There is no Tauri shell, microphone stream, Rust Moonshine binding, cleanup pipeline, target validation, TextEdit insertion, Copy Result panel, or application launch command. `npm run dev` launches only the browser settings preview; `npm run tauri dev` is not defined. Do not use the preview as a dictation app.
+
+No macOS microphone, Accessibility, or Automation permission was requested or granted for this work because the application does not exist yet. A future real microphone path requires macOS microphone permission; safe insertion requires the approved accessibility capability and real editable/protected-field checks. Those flows have not been implemented or tested.
+
+### Authorized local development model preparation
+
+The pinned source commit `234f60faa0eb388b01cdf7e60aca232af37aefda` selects the English Small Streaming catalog path `https://download.moonshine.ai/model/small-streaming-en/quantized_26_08_21/`. The path is a dated catalog directory, not a separate immutable artifact revision. The eight files total 142,300,974 bytes. Their observed hashes are recorded in the evidence manifest; the existing verifier checks every byte and SHA-256:
+
+```sh
+set -eu
+MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+mkdir -m 700 -p "$MODEL_DIR"
+BASE=https://download.moonshine.ai/model/small-streaming-en/quantized_26_08_21
+for file in adapter.ort cross_kv.ort decoder_kv.ort encoder.ort \
+  frontend.model.ort frontend.weights.ort streaming_config.json tokenizer.bin; do
+  curl --fail --location --show-error --output "$MODEL_DIR/$file" "$BASE/$file"
+done
+python3 scripts/validate_model_asset_inventory.py \
+  --manifest evidence/mvp/prompt-79-model-assets.json \
+  --asset-root "$MODEL_DIR"
+```
+
+This is a developer-controlled preparation step, not application behavior. The bundle was downloaded only for this local inference test under the user's explicit authorization. Keep model bytes outside Git. The manifest's artifact-specific license and redistribution status remain unresolved; the upstream English streaming model-family policy is not a substitute for artifact review or commercial approval. Do not package or distribute these files based on this local test.
+
+### Pinned macOS native build and smoke test
+
+Prerequisites used here: macOS 26.6.2 (25G83), arm64 Apple M3 Pro with 18 GB RAM, Xcode Command Line Tools / Apple Clang 21.0.0.21000101, CMake 4.4.5, the clean pinned Moonshine checkout, and its already-present macOS arm64 ONNX Runtime 1.23.2. The out-of-tree wrapper enables the upstream `MOONSHINE_TTS_BUILD_ONNX` target because the current C API references those symbols even when that option is off. CMake also compiles two source-checkout Git LFS inputs: pyannote community-1 data and embedded VCTK reference voices. They were materialized only in the external checkout for this local build; their notices/release rights are not approved.
+
+```sh
+MOONSHINE_SOURCE=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
+WRAPPER_DIR=/private/tmp/prompt79-moonshine-wrapper
+BUILD_DIR=/private/tmp/prompt79-moonshine-wrapper-build-onnx
+mkdir -p "$WRAPPER_DIR"
+cat > "$WRAPPER_DIR/CMakeLists.txt" <<EOF
+cmake_minimum_required(VERSION 3.22.1)
+project(prompt79_moonshine_wrapper LANGUAGES C CXX)
+set(MOONSHINE_TTS_BUILD_ONNX ON CACHE BOOL "Build upstream C API dependencies" FORCE)
+add_subdirectory(${MOONSHINE_SOURCE}/core moonshine-core)
+EOF
+cmake -S "$WRAPPER_DIR" -B "$BUILD_DIR" \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DMOONSHINE_TTS_BUILD_ONNX=ON
+cmake --build "$BUILD_DIR" --clean-first --target moonshine \
+  --config Release --parallel 4
+```
+
+Compile and run the real streaming test with the same local model directory and the pinned checkout's `test-assets/two_cities_librivox_48k.wav` fixture (only its first 12 seconds are processed):
+
+```sh
+clang++ -std=c++17 -O2 -I"$MOONSHINE_SOURCE/core" \
+  tests/native/moonshine_streaming_smoke.cpp \
+  -L"$BUILD_DIR/moonshine-core" -lmoonshine \
+  -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
+  -Wl,-rpath,"$MOONSHINE_SOURCE/core/third-party/onnxruntime/lib/macos/arm64" \
+  -o /private/tmp/prompt79_moonshine_stream_smoke
+DYLD_LIBRARY_PATH="$MOONSHINE_SOURCE/core/third-party/onnxruntime/lib/macos/arm64:$BUILD_DIR/moonshine-core" \
+  /private/tmp/prompt79_moonshine_stream_smoke \
+  /private/tmp/prompt79-moonshine-small-streaming \
+  "$MOONSHINE_SOURCE/test-assets/two_cities_librivox_48k.wav"
+```
+
+Expected output includes `MODEL_LOAD_OK architecture=4` and two `SESSION` rows with nonempty partial/final results and complete final lines. The test deliberately does not print transcript text. The fixture is not copied into Outflow. Its upstream filename identifies it as LibriVox audio; LibriVox states its recordings are public domain, while the pinned Moonshine checkout does not include the original catalog item or narrator record. This is a local smoke fixture, not a WER corpus. See [LibriVox public-domain policy](https://librivox.org/pages/public-domain/).
+
+### Current measurements and limits
+
+The latest native smoke run loaded the model in 599.8 ms, processed 12 seconds twice on one transcriber, returned ten nonempty partial polls per session and three finalized lines, with 1,626.6 ms / 993.0 ms session times and 0.136 / 0.083 real-time factors. This run's `getrusage` peak RSS was 886,587,392 bytes; the highest observed across three separate smoke processes was 922,386,432 bytes. Those are native harness processes, not the Outflow Tauri app, and leave little headroom below the 950,000,000-byte limit; full application peak and 4 GB release gate remain unverified. Model files are 142,300,974 bytes total; installed application footprint, idle memory, app-process aggregate RSS, WER, hardware-specific performance, and CPU/battery behavior are unmeasured.
+
+Run the complete applicable repository checks from the root:
+
+```sh
+python3 scripts/moonshine_model_source_audit.py \
+  --source-dir /Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
+python3 -m unittest discover -s scripts/tests -v
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+```
+
+Rerun on 2026-11-03 after the native-harness and documentation changes: 311 Python tests, 352 Rust unit/integration tests plus one doctest, and 136 frontend tests passed; Rust formatting/check/test/clippy/build and frontend typecheck/test/lint/build all passed. The model-source audit passes the source contract but reports its source-checkout artifact status as `NO`; local model integrity was separately verified by the evidence manifest and existing asset validator. The browser build is not a desktop app build.
+
+### Troubleshooting and unsupported flows
+
+- **Missing or corrupted local model:** rerun the asset validator with the exact model directory; it rejects missing/unreadable files and SHA-256 mismatches. The Prompt 79 evidence also compares observed file sizes with the pinned catalog's expected byte counts. This development check does not download anything and is not integrated into an application runtime.
+- **Native library not found:** confirm `libmoonshine.dylib` and the ONNX Runtime path in `DYLD_LIBRARY_PATH`; no loader code or runtime model fetch is included in Outflow.
+- **Cannot launch dictation:** there is no launchable macOS application yet. Start/Stop/Cancel, microphone permission recovery, partial preview, cleanup, focus mismatch, protected-field rejection, TextEdit insertion, and explicit Copy Result are not available.
+- **Offline claim:** the smoke test used local model/audio files and the native library has a local ORT dependency, but no packaged app was run with network disabled or packet-captured. Offline first-launch acceptance remains untested.
+- **Licensing and native notices:** exact model artifact terms, commercial redistribution, complete ONNX Runtime/KISS FFT notices, and the compiled TTS/diarization inputs need review. The local-only authorizations do not approve Git, packaging, or redistribution.
 
 ## Model asset inventory
 
