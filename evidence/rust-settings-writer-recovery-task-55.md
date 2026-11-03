@@ -13,7 +13,7 @@ platform: "macOS 26.6.2 (Darwin 25.6.0, build 25G83), arm64; Rust stable 1.99.1"
 implementation: "Expanded private Unix settings-writer unit coverage; added README guidance and this audit evidence"
 metrics: "NOT_MEASURED; no performance or release metrics are in scope"
 doc_updates: ["README.md: Task 55 pre-replacement recovery section", "evidence/rust-settings-writer-recovery-task-55.md"]
-risks: "Windows and Linux behavior, actual disk-full and rename failures, corruption recovery, and crash/power-loss durability remain unverified"
+risks: "Windows and Linux behavior, actual disk-full and OS-level rename failures, corruption recovery, and crash/power-loss durability remain unverified"
 review: PENDING
 ```
 
@@ -24,14 +24,18 @@ review: PENDING
 | Failure scenario | Evidence status |
 |---|---|
 | Invalid settings rejected before writing | **PASS** — `storage::tests::invalid_settings_do_not_modify_existing_file` asserts `InvalidSettings`, unchanged destination bytes, and no temp artifact. Validation is called before JSON encoding or filesystem operations in `save_settings_atomic_with_destination_policy`. |
-| Temporary file creation failure | **NOT TESTED** — `create_new` failures are mapped to typed errors, but no deterministic create-failure hook/test exists. |
-| Failure while writing temporary content | **PASS** — `storage::tests::simulated_partial_write_failure_preserves_file_and_cleans_temporary_file` writes a short prefix to the temporary file, returns an injected I/O error, then checks old bytes and cleanup. This is simulated write failure, not actual disk exhaustion. |
-| Failure before atomic replacement | **PASS** — new `storage::tests::atomic_writer_pre_replacement_failure_preserves_valid_settings_and_allows_retry` injects after the temporary file is written, flushed, and synchronized and after the final destination/parent checks, immediately before `fs::rename`; exact old bytes and reloadability are asserted. |
-| Destination replacement failure | **NOT TESTED** — the writer maps an actual `fs::rename` error to `ReplacementFailed`, but no test injects a rename failure. The pre-replacement hook test does not claim to exercise this operation. |
-| Existing valid configuration preserved | **PASS** — the new recovery test writes and reloads schema-v1 settings through the public writer, retains the exact bytes, injects a pre-replacement error, then asserts the destination is a regular file, the bytes are identical, and the settings and vocabulary reload unchanged. |
-| Temporary artifact cleanup | **PASS** — the partial-write, file-sync, pre-replacement, and new recovery tests assert that no `.outflow-settings-tmp-*` artifact remains. The new test also asserts that the isolated directory contains only the destination. |
+| Temporary file creation failure | **PASS (Task 57 injected callback)** — the creation callback receives the generated path and returns a controlled error; the test verifies original bytes, no temporary artifact, and a successful retry. This is not an actual OS creation or permission failure. |
+| Failure while writing temporary content | **PASS (Task 56)** — the write callback writes a verified prefix and returns a controlled I/O error; the test checks old bytes, cleanup, and retry. This is not actual disk exhaustion. |
+| Temporary-file synchronization failure | **PASS (Task 58 injected callback)** — after a full write and flush, the callback verifies and decodes the complete temporary document before returning an error in place of `sync_all`. This is not an actual OS-level sync failure. |
+| Failure before atomic replacement | **PASS (Task 55)** — the test injects after the temporary file is written, flushed, and synchronized and after final destination/parent checks, immediately before replacement; exact old bytes and reloadability are asserted. |
+| Destination replacement-operation failure | **PASS (Task 59 injected callback)** — the replacement callback returns a controlled error at the operation boundary after the temporary file is fully prepared and synchronized. This tests writer error handling but does not call `fs::rename`. |
+| Actual OS-level rename failure | **NOT TESTED** — Task 59 substitutes the injected error for the syscall; it does not verify platform-specific rename behavior or ambiguous outcomes. |
+| Existing valid configuration preserved | **PASS (Tasks 55 and 59)** — both tests create and reload synthetic schema-v1 settings through the public writer, then verify the existing destination bytes and settings remain unchanged after their distinct injected failures. |
+| Temporary artifact cleanup | **PASS (Tasks 55, 56, 58, and 59)** — each failing write verifies the generated temporary artifact is removed; Task 59 also verifies the directory still contains only the original destination. Task 57 fails before a temporary file is created. |
 | Corrupted settings recovery | **GAP** — loading/initialization reject and preserve malformed settings; defaults can be written only through explicit confirmed reset. There is no automatic last-known-good recovery or safe-default plus review flow for corrupted data, as called for by PRD FR-13.4. |
 | Disk-full handling | **GAP** — a partial-write callback simulates an I/O failure and verifies cleanup, but no real `ENOSPC`/disk-full condition was exercised. The host filesystem was not filled. |
+| Parent-directory synchronization failure | **NOT TESTED at the OS operation** — it occurs after a successful replacement and is a separate durability boundary; a synthetic callback mapping test does not represent an OS failure. |
+| Post-replacement rollback | **NOT TESTED** — no persistent rollback or last-known-good recovery mechanism was added. |
 | Windows ACL and replacement behavior | **GAP** — the writer returns `UnsupportedPlatform` on non-Unix targets. There is no owner-only Windows ACL or Windows replacement implementation, and Windows was not tested. |
 | Linux filesystem behavior | **NOT TESTED** — verification ran on macOS arm64. Shared `cfg(unix)` source is not evidence of a Linux filesystem run. |
 | Crash and power-loss durability | **GAP** — the writer calls `sync_all` on the temporary file and parent directory around replacement, but no process-crash or power-loss test was run. Directory-entry durability across all supported filesystems is unproven. |
@@ -108,7 +112,7 @@ Environment: macOS 26.6.2 (Darwin 25.6.0, build 25G83), arm64; Rust stable `1.99
 ## Remaining requirements and limits
 
 - T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete. No task ledger completion state was changed; repository T-055 is separate and untouched.
-- This task verifies one failure after preparation but before rename. It does not test temp-file creation failure, actual rename failure, actual disk full, corruption recovery, crash/power loss, or persistence migration rollback.
+- This Task 55 test verifies one failure after preparation but before the replacement operation. Task 59 separately injects an error at the replacement-operation callback; neither test reproduces an actual OS-level rename failure. Task 55 does not test temp-file creation failure, actual disk full, corruption recovery, crash/power loss, or persistence migration rollback.
 - Windows owner-only ACL and replacement semantics remain unsupported/unverified. Linux filesystem behavior was not run. The successful test is macOS-only evidence.
 - Parent-directory sync is implemented after rename, but all-platform directory-entry durability and successful rollback after replacement are not established.
 - No schema-v2 decoder/writer, vocabulary migration/CRUD, dependency, Cargo manifest, or lockfile change was introduced for this task.

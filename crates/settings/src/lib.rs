@@ -165,9 +165,24 @@ impl Settings {
     ///
     /// Missing required fields, unknown fields, malformed JSON, invalid field
     /// types, and unsupported schema versions are rejected. The reader never
-    /// migrates or substitutes defaults. The returned error includes no input
-    /// text, vocabulary phrase, shortcut, or other private value.
+    /// migrates or substitutes defaults. It checks the version header before
+    /// decoding the v1 shape, so an unsupported document does not need to
+    /// contain fields defined only by this version. The returned error includes
+    /// no input text, vocabulary phrase, shortcut, or other private value.
     pub fn from_json(json: &str) -> Result<Self, SettingsJsonError> {
+        let header: SettingsSchemaVersionHeader =
+            serde_json::from_str(json).map_err(|error| SettingsJsonError::InvalidDocument {
+                line: error.line(),
+                column: error.column(),
+            })?;
+        if header.schema_version != CURRENT_SCHEMA_VERSION {
+            return Err(SettingsJsonError::InvalidSettings(
+                SettingsError::UnsupportedSchemaVersion {
+                    found: header.schema_version,
+                },
+            ));
+        }
+
         let wire: SettingsWire =
             serde_json::from_str(json).map_err(|error| SettingsJsonError::InvalidDocument {
                 line: error.line(),
@@ -200,6 +215,14 @@ impl<'de> Deserialize<'de> for Settings {
         let wire = SettingsWire::deserialize(deserializer)?;
         Self::from_wire(wire).map_err(D::Error::custom)
     }
+}
+
+// Unknown fields are intentionally ignored here: the header exists only to
+// classify a syntactically valid unsupported version before requiring v1-only
+// fields. A supported v1 document is still fully decoded by `SettingsWire`.
+#[derive(Deserialize)]
+struct SettingsSchemaVersionHeader {
+    schema_version: u32,
 }
 
 #[derive(Deserialize)]

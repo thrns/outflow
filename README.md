@@ -445,6 +445,147 @@ On Unix, reset uses the existing same-directory temporary file and atomic rename
 
 The reset is currently available only where the atomic writer is implemented: Unix. Windows and other non-Unix targets fail closed with `UnsupportedPlatform` until owner-only ACL and atomic replacement guarantees are implemented. Filesystem tests in this task ran on macOS 26.6.2 arm64; Linux behavior has not been tested.
 
+The operation modifies only the caller-supplied settings path, using a transient temporary file in that path's directory; it does not discover the user configuration directory or modify sibling files. A second confirmed call currently succeeds and writes the same defaults again; the API does not separately promise cross-platform idempotence. The Task 64 isolated regression checks persisted vocabulary removal, load/initialization preservation, repeat behavior, and a byte-for-byte unchanged sibling sentinel:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  explicit_settings_reset_is_scoped_and_separate_from_loading \
+  --locked -- --nocapture
+```
+
+Expected output reports defaults persisted as schema v1, previous vocabulary absent from persisted settings, the sentinel preserved, no unexpected temporary/backup/transcript/audio files, and repeated reset success. The same test confirms malformed and schema-v2 files survive ordinary loading and initialization; a separate explicit reset of the synthetic v2 fixture writes defaults and is not a schema migration. Passing `confirmed=true` in a storage call is only caller intent: this repository has no production reset caller, Tauri command, or user confirmation UI, and this storage test does not establish human confirmation. User-reviewed recovery for corrupted or future-version files, persistent schema migration, backup restoration, Windows support, Linux filesystem behavior, and crash recovery remain separate and unimplemented or unverified. See the [Task 64 evidence](evidence/rust-settings-explicit-reset-safety-task-64.md) for inspected semantics and exact results.
+
+### Confirmed reset failure before replacement (Task 65)
+
+A confirmed reset that fails before replacement must leave the existing preferences and vocabulary available: the prepared defaults have not been committed yet. The Task 65 test reuses the atomic writer's private pre-replacement hook after it has prepared and synchronized a defaults file. It compares the original settings bytes exactly, reloads the original ordered vocabulary and non-default preferences, checks permissions and temporary-file cleanup, and confirms a sibling sentinel is unchanged. A new, separate public confirmed-reset call then persists schema-v1 defaults and clears the vocabulary.
+
+Run the focused test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  confirmed_reset_pre_replacement_failure_preserves_settings_and_allows_retry \
+  --locked -- --nocapture
+```
+
+The failure is injected in-process; this does not reproduce an OS-level disk or rename error. Automatic retry is prohibited because another failure class, `ReplacementDurabilityUncertain`, means defaults may already be visible after an error. Task 65 does not establish that every reset error preserves the original file, add rollback, or verify crash durability. It was tested on macOS 26.6.2 with an APFS temporary filesystem; Windows and Linux remain unverified. The boolean is caller intent only: no human confirmation UI or accessibility flow exists. See the [Task 65 evidence](evidence/rust-settings-reset-failure-recovery-task-65.md).
+
+### Confirmed reset durability uncertainty after replacement (Task 66)
+
+Task 65 injects failure before replacement, so the original settings remain visible. Task 66 injects a parent-directory synchronization error after the reset's real rename succeeds. The reset returns `ReplacementDurabilityUncertain` while the schema-v1 defaults are already visible and reloadable; the original vocabulary and non-default preferences must not be assumed to survive. This error does not mean rollback completed, and it does not prove crash durability. No automatic retry or rollback occurs.
+
+Run the reset-level regression test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  confirmed_reset_directory_sync_failure \
+  --locked -- --nocapture
+```
+
+Expected output after assertions pass:
+
+```text
+Outflow confirmed reset durability uncertainty test
+
+Initial settings write: PASS
+Original vocabulary persisted: VERIFIED
+Confirmed reset requested: VERIFIED
+Temporary replacement synchronized: VERIFIED
+Real destination replacement: COMPLETED
+Parent-directory sync callback: VERIFIED
+Directory synchronization error: INJECTED
+Reset returned ReplacementDurabilityUncertain: PASS
+
+Default settings visible after error: VERIFIED
+Original vocabulary no longer visible: VERIFIED
+Non-default preferences reset: VERIFIED
+Settings reload after error: PASS
+File permissions: VERIFIED
+Unrelated sentinel: PRESERVED
+Unexpected temporary artifacts: NONE
+
+Subsequent public write: PASS
+Third settings value reload: PASS
+
+Automatic retry: NO
+Automatic rollback: NO
+Crash durability verified: NO
+Actual OS-level sync failure tested: NO
+Human confirmation UI tested: NO
+Real user settings accessed: NO
+Schema migration performed: NO
+```
+
+This callback test ran on macOS/APFS only; it does not reproduce an OS-level sync error or power loss. No human confirmation UI, crash recovery, Windows behavior, or Linux filesystem behavior was tested. See [Task 66 evidence](evidence/rust-settings-reset-durability-uncertain-task-66.md) and the [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix). T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete.
+
+### Task 67 caller guidance after settings persistence errors
+
+A writer error describes the operation or failed phase; a later `load_settings` call separately describes the valid configuration currently visible. `ReplacementFailed` alone does not establish whether the original or attempted settings remain visible. `ReplacementDurabilityUncertain` means replacement may already be visible while crash durability remains unconfirmed. Even when a reload shows the replacement, that observation does not prove power-loss durability.
+
+Future callers should reload through the read-only loader and report the observed category without substituting defaults on missing or unreadable files. Those cases need recovery review. A confirmed-reset error must not trigger another reset, assume the original vocabulary survived, or claim that `confirmed=true` represents a human confirmation interface. No automatic retry, rollback, reset, deletion, migration, or repair is allowed. After presenting the observation, any later change must be a separate deliberate operation.
+
+The proposed guidance helper exists only in the integration-test target; it is not wired to a production settings service, Tauri command, or UI. Run its contract tests with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test settings_persistence_guidance_contract \
+  --locked -- --nocapture
+```
+
+The tests use synthetic settings in isolated temporary directories and verify that the loader observation does not write them. No production caller, human confirmation UI, automatic retry or rollback, schema migration, or persistent recovery metadata was added. No OS-level rename or synchronization failure was reproduced; crash durability remains unverified, as do Windows and Linux filesystem behavior. See [Task 67 evidence](evidence/rust-settings-persistence-guidance-task-67.md) and the [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix). T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete.
+
+### Task 68 read-only settings inspection after persistence errors
+
+Task 68 adds a test-only inspector for the configuration visible through the public `load_settings` reader after a hypothetical write or reset error. It reports `OriginalVisible`, `AttemptedVisible`, `BothSnapshotsMatch`, `OtherValidSettingsVisible`, `Missing`, `InvalidDocument`, `UnsupportedSchema`, or `ReadFailure`. A valid third configuration is still valid settings, not corruption. If the supplied original and attempted snapshots are equal and both match, the result is `BothSnapshotsMatch`: the inspection cannot identify which write, if any, produced the visible state.
+
+The inspector uses `load_settings` instead of `initialize_settings` because a missing file must remain missing rather than be replaced with in-memory defaults. Malformed or unsupported files are reported without reset, repair, retry, backup, or rollback. The classification is a snapshot of what the loader sees at that moment; another operation can change the file later, and visibility does not establish crash durability.
+
+Proposed future workflow:
+
+```text
+Settings write or reset returns an error
+                  |
+                  v
+Optional, read-only settings inspection
+                  |
+                  v
+Visible-state classification
+                  |
+                  v
+Future caller guidance (Task 67 contract)
+```
+
+Run the focused contract with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test settings_post_error_inspection \
+  --locked -- --nocapture
+```
+
+The helper exists only in this integration-test target. It is not connected to a production settings service, Tauri command, UI, or automatic recovery workflow. Task 67's caller guidance remains a separate test-only contract. See the [Task 68 evidence](evidence/rust-settings-post-error-inspection-task-68.md) and [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix). T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete.
+
+### Task 69 settings snapshot boundaries
+
+Task 69 extends the test-only inspector introduced in Task 68 and changes no production settings API. Each inspection is a snapshot from one call to the public settings loader. A later explicit write does not update an earlier classification; a fresh inspection is needed to observe the newly visible configuration. Equal original and attempted values produce `BothSnapshotsMatch` whether no write occurred between observations or the same values were explicitly written again, so the result cannot establish operation history, reset, durable commit, or resolution of an earlier error. The A → B → A test observes `OriginalVisible`, then `AttemptedVisible`, then `OriginalVisible`; the final classification does not reveal the intermediate B state.
+
+The two-actor test uses channels to order a completed inspection of A, an explicit public write of B, and a fresh inspection of B. It demonstrates that separate actors can observe different snapshots in that schedule. It does not overlap filesystem operations or prove linearizability, locking, transaction isolation, lost-update prevention, or crash durability. Inspection remains read-only and cannot replace filesystem locking or transactional guarantees.
+
+Run the focused tests and assertion-backed summary with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  --test settings_post_error_inspection \
+  --locked -- --nocapture
+```
+
+All fixtures are synthetic and isolated in temporary directories. See the [Task 69 evidence](evidence/rust-settings-snapshot-boundaries-task-69.md) and [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix).
+
 Run the example from the repository root:
 
 ```sh
@@ -480,7 +621,7 @@ Troubleshooting:
 - **Reset says it was not confirmed:** the file is untouched. Obtain explicit user confirmation in the calling UI before passing `true`.
 - **Reset reports a missing or unsafe destination:** it only accepts an existing regular file, not a missing path, directory, or symbolic link. Create or select the intended settings file through the caller; reset itself does not create one.
 - **Initialization rejects malformed JSON or an unsupported version:** that behavior is intentional and leaves the file untouched. To recover, explicitly confirm a reset; reset does not need the old document to parse.
-- **Reset returns `ReplacementFailed`:** replacement did not occur and the prior file remains. Check that the parent directory is accessible and writable, then resolve the filesystem issue before invoking reset again.
+- **Reset returns `ReplacementFailed`:** the destination-replacement operation returned an error. This variant alone does not establish the destination state for every filesystem failure; do not assume rollback. Resolve the filesystem issue before a later user-directed action.
 - **Reset returns `ReplacementDurabilityUncertain`:** rename already happened and defaults are visible. Do not automatically retry; inspect the resulting file or let the user decide what to do next.
 - **Reset returns `UnsupportedPlatform`:** the current atomic writer has no owner-only implementation on that platform. It does not fall back to a less restrictive write.
 - **Old data remains in a system backup or snapshot:** reset replaces Outflow's settings file, but it does not securely erase snapshots or OS-managed backups.
@@ -550,7 +691,7 @@ Windows ACL verification: NOT RUN
 Linux filesystem verification: NOT RUN
 ```
 
-This proves one pre-replacement failure path on the local Unix filesystem. It does not prove power-loss or crash durability, actual disk-full recovery, temporary-file creation or rename failure handling, Windows ACL/replacement behavior, or Linux filesystem behavior. The writer synchronizes the parent directory after a successful rename, but this test does not simulate a crash around that metadata update. Task 54 cancellation is an in-memory review-draft operation; it is separate from this test's real filesystem preservation check and does not establish persistent migration rollback. T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete; no schema migration is implemented. See the [Task 55 audit evidence](evidence/rust-settings-writer-recovery-task-55.md) for the coverage matrix and full verification record.
+This proves one pre-replacement failure path on the local Unix filesystem. It does not prove power-loss or crash durability, actual disk-full recovery, actual temporary-directory creation or OS-level rename failures, Windows ACL/replacement behavior, or Linux filesystem behavior. Tasks 57 and 58 separately inject failures at temporary-file creation and synchronization callbacks; they do not reproduce OS-level failures at those operations. Task 59 separately injects a replacement-operation error without calling `fs::rename`. The writer synchronizes the parent directory after a successful rename, but this test does not simulate a crash around that metadata update. Task 54 cancellation is an in-memory review-draft operation; it is separate from this test's real filesystem preservation check and does not establish persistent migration rollback. T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete; no schema migration is implemented. See the [Task 55 audit evidence](evidence/rust-settings-writer-recovery-task-55.md) for the coverage matrix and full verification record.
 
 ### Task 56 temporary-write failure cleanup check
 
@@ -562,7 +703,217 @@ Run the focused test with:
 RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings temporary_write --locked -- --nocapture
 ```
 
-The test uses only synthetic schema-v1 settings in a unique temporary directory. Its injected error verifies cleanup and retry handling; it does not reproduce actual disk exhaustion, temporary-file creation failure, failures during `sync_all`, destination replacement failure, or process-crash recovery. Current filesystem evidence is macOS/APFS only. Windows ACL and replacement behavior, and Linux filesystem behavior, remain unverified. See the [Task 56 evidence and recovery coverage extension](evidence/rust-settings-temporary-write-recovery-task-56.md) for the scenario matrix and complete verification record.
+The test uses only synthetic schema-v1 settings in a unique temporary directory. Its injected error verifies cleanup and retry handling; it does not reproduce actual disk exhaustion, OS-level temporary-file creation or synchronization failures, an OS-level destination rename failure, or process-crash recovery. Task 59 injects separately at the replacement-operation callback. Current filesystem evidence is macOS/APFS only. Windows ACL and replacement behavior, and Linux filesystem behavior, remain unverified. See the [Task 56 evidence and recovery coverage extension](evidence/rust-settings-temporary-write-recovery-task-56.md) for the scenario matrix and complete verification record.
+
+### Task 57 temporary-file creation failure recovery check
+
+Task 57 injects a non-collision I/O error at the private callback used exactly where the writer normally calls `OpenOptions::create_new(true)` for its generated same-directory temporary path. The test proves the creation operation is reached once, then verifies the error is classified as `TemporaryFileCreationFailed`, no write or replacement stage is reached, the existing schema-v1 bytes and vocabulary still reload unchanged, and no temporary artifact was created. It then retries through the public writer and reloads the different valid settings. This covers the creation stage; Task 56 fails after a temporary file contains a partial write, and Task 55 fails after the file is fully prepared immediately before replacement.
+
+Run the focused test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  temporary_creation \
+  --locked -- --nocapture
+```
+
+Expected output after all assertions pass:
+
+```text
+Outflow atomic settings temporary-creation failure test
+
+Initial settings write: PASS
+Original settings reload: PASS
+Temporary-file creation failure: INJECTED
+Writer returned error: PASS
+Replacement attempted: NO
+Original destination bytes: PRESERVED
+Original settings reload after failure: PASS
+Unexpected temporary artifacts: NONE
+Subsequent normal write: PASS
+New settings reload: PASS
+
+Schema migration performed: NO
+Real user settings accessed: NO
+Actual OS permission failure tested: NO
+Actual disk-full failure tested: NO
+```
+
+The test uses only synthetic settings in an isolated temporary directory. It does not simulate actual temporary-directory permission denial or disk-full conditions. Actual OS-level synchronization or destination rename failures, crash or power-loss recovery, Windows ACL/replacement behavior, and Linux filesystem behavior remain unverified. See the [Task 57 evidence](evidence/rust-settings-temp-creation-recovery-task-57.md) and [writer recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix). T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete.
+
+### Task 58 temporary-file synchronization failure recovery check
+
+Task 58 injects a deterministic error through the existing private synchronization callback. The callback is the writer's temporary-file `sync_all` operation, after the complete JSON write and explicit flush and before destination replacement. It reads back and decodes the entire temporary file as schema-v1 settings before returning the error. The test then checks the typed synchronization error, that the replacement hook was not reached, byte-for-byte preservation and successful reload of the original settings, unchanged file permissions, and cleanup of the temporary path and any other unexpected directory entries. A subsequent write through the public writer must save and reload the replacement successfully.
+
+This covers the synchronization stage; Task 57 injects at temporary-file creation, Task 56 injects after a verified partial write, and Task 55 injects immediately before replacement after synchronization succeeds. Run the focused Task 58 test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  atomic_writer_temporary_sync_failure_preserves_valid_settings_and_allows_retry \
+  --locked -- --nocapture
+```
+
+Expected output after the assertions pass:
+
+```text
+Outflow atomic settings synchronization failure test
+
+Initial settings write: PASS
+Temporary replacement creation: PASS
+Complete temporary write: VERIFIED
+Temporary-file synchronization failure: INJECTED
+Writer returned error: PASS
+Destination replacement attempted: NO
+Original destination bytes: PRESERVED
+Original settings reload: PASS
+Temporary artifact cleanup: PASS
+Subsequent normal write: PASS
+New settings reload: PASS
+
+Schema migration performed: NO
+Real user settings accessed: NO
+Actual OS synchronization failure tested: NO
+Crash durability verified: NO
+```
+
+The injected callback error is not an actual operating-system synchronization failure and does not establish crash or power-loss durability. Parent-directory synchronization occurs after replacement and remains a separate boundary. Task 59 covers an injected replacement-operation error but does not test an actual OS-level rename failure. Windows ACL/replacement and Linux filesystem behavior also remain unverified. See the [Task 58 evidence](evidence/rust-settings-sync-failure-recovery-task-58.md) and the [writer recovery coverage matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix). T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete.
+
+### Task 59 destination replacement-operation failure recovery check
+
+Task 59 injects an I/O error from a private callback at the writer's destination replacement operation. This differs from Task 55, whose hook fails just before that operation. The Task 59 callback receives the generated temporary path and the existing destination path; it verifies the complete serialized replacement is present and decodes as schema v1 after the writer's real temporary-file `sync_all` returned successfully. Production still routes the callback to `fs::rename`.
+
+The test verifies `ReplacementFailed`, exact preservation and reload of the original settings, unchanged Unix permissions, cleanup of the failed temporary file, no parent-directory sync after the failed replacement, and a successful retry through the public writer. It uses only synthetic settings in an isolated temporary directory.
+
+Run the focused test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  atomic_writer_replacement_failure_preserves_valid_settings_and_allows_retry \
+  --locked -- --nocapture
+```
+
+Expected output after the assertions pass:
+
+```text
+Outflow atomic settings replacement failure test
+
+Initial settings write: PASS
+Original settings reload: PASS
+Temporary replacement fully written: VERIFIED
+Temporary-file synchronization: COMPLETED
+Replacement callback invoked: VERIFIED
+Replacement-operation error: INJECTED
+Writer returned replacement error: PASS
+Original destination bytes: PRESERVED
+Original settings reload after failure: PASS
+Original permissions: PRESERVED
+Temporary artifact cleanup: PASS
+Subsequent public write: PASS
+New settings reload: PASS
+
+Schema migration performed: NO
+Real user settings accessed: NO
+Actual OS rename failure tested: NO
+Post-replacement rollback verified: NO
+Crash durability verified: NO
+```
+
+The injected error substitutes for the `fs::rename` syscall, so this test verifies writer handling of a replacement-operation error; it does not test an actual OS rename failure, ambiguous replacement, platform-specific atomicity, post-replacement rollback, or crash durability. Evidence currently covers the local macOS/APFS filesystem only. Windows ACL/replacement and Linux filesystem behavior remain untested. See the [Task 59 evidence](evidence/rust-settings-replacement-failure-recovery-task-59.md) and the [writer recovery coverage matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix). T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete.
+
+### Task 60 parent-directory synchronization failure after replacement
+
+Task 60 reaches the parent's directory synchronization callback only after the writer's real `fs::rename` succeeds. The callback verifies that the destination contains the complete replacement bytes, decodes them as valid schema-v1 settings, and confirms the temporary path has been consumed before injecting a directory-sync error. The test establishes that the new settings are already visible. The returned `ReplacementDurabilityUncertain` error reports that directory durability could not be confirmed; it does not mean the previous settings survived or that a rollback occurred. This differs from Task 58, where temporary-file synchronization fails before rename and the old destination remains in place.
+
+Run the focused test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  parent_directory_sync \
+  --locked -- --nocapture
+```
+
+Expected output after the assertions pass:
+
+```text
+Outflow atomic settings parent-directory sync failure test
+
+Initial settings write: PASS
+Original settings reload: PASS
+Temporary replacement fully written: VERIFIED
+Temporary-file synchronization: COMPLETED
+Destination replacement: COMPLETED
+Parent-directory sync callback invoked: VERIFIED
+Parent-directory sync error: INJECTED
+Writer returned directory sync error: PASS
+New destination bytes visible: VERIFIED
+Replacement settings reload: PASS
+File permissions: VERIFIED
+Unexpected temporary artifacts: NONE
+Subsequent public write: PASS
+Third settings value reload: PASS
+
+Old configuration rolled back: NO
+Post-replacement visibility: VERIFIED
+Crash durability: NOT VERIFIED
+Actual OS-level directory sync failure: NOT TESTED
+Real user settings accessed: NO
+Schema migration performed: NO
+```
+
+This proves the observed post-error destination state and a subsequent normal write on the tested filesystem. The injected callback does not reproduce an OS-level directory-sync error, establish crash or power-loss durability, or verify rollback. Windows ACL/replacement and Linux filesystem behavior remain untested. See the [Task 60 evidence](evidence/rust-settings-directory-sync-recovery-task-60.md) and the [writer recovery coverage matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix). T-018, T-017, T-038, T-039, T-053, and AC-08 remain incomplete.
+
+### Task 61 caller-visible settings write error contract
+
+Both replacement-operation errors and post-replacement directory-sync errors return `Err`, but their typed variants and tested destination states differ. In the Task 59 injected replacement callback, rename is deliberately not performed, so `ReplacementFailed` accompanies the original bytes and settings remaining reloadable. In the Task 60 directory-sync callback, the real rename has already made the replacement visible; `ReplacementDurabilityUncertain` reports that durable persistence could not be confirmed. A generic `Err` therefore does not mean the destination is unchanged, and visible replacement contents do not prove crash durability.
+
+Future callers should report a verified pre-replacement failure as a failed save and may allow a deliberate retry. For `ReplacementDurabilityUncertain`, callers must not claim success, claim restoration of the old settings, or automatically overwrite the destination with stale settings; they should reload the visible configuration before further actions when appropriate. No settings-update command or higher-level production service currently exists in this checkout, so these requirements are documented at the writer boundary. The error's `Display` and `Debug` forms retain no settings JSON or vocabulary values.
+
+Run the focused contract test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  settings_write_error_outcome_contract \
+  --locked -- --nocapture
+```
+
+The test uses synthetic schema-v1 settings and the existing private fault hooks. Its two observed outcomes apply only to those injected scenarios; actual OS rename/synchronization errors, crash or power-loss durability, Windows replacement/ACL behavior, and Linux filesystem behavior remain untested. No automatic rollback is implemented, and T-018 remains incomplete. See the [Task 61 evidence](evidence/rust-settings-write-error-contract-task-61.md) and [recovery coverage matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#recovery-coverage-matrix).
+
+### Task 62 corrupted-settings preservation check
+
+The public loader distinguishes a missing path from an existing file it cannot decode. A missing file returns `Ok(None)`; initialization offers validated defaults in memory without creating a file. Truncated, malformed, empty, or structurally invalid existing JSON returns the redacted `InvalidDocument` error, while a valid document with an unsupported schema version remains `InvalidSettings(UnsupportedSchemaVersion { .. })`. Rejected files are left byte-for-byte intact because they may contain recoverable preferences or vocabulary; repeated reads must not turn an error into a reset or write.
+
+Run the focused synthetic test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  corrupted_settings \
+  --locked -- --nocapture
+```
+
+The test verifies the schema-v1 baseline, all four corruption classes, missing-file behavior, unchanged bytes and Unix permissions, stable file identity, unchanged directory entries, and repeated non-destructive failures. It uses temporary test directories and synthetic values only. Corruption is introduced by direct test setup; the loader does not modify the file. No backup restoration, automatic repair, schema-v2 loading, or recovery UI exists. A future manual recovery or reset flow needs separate design and explicit user confirmation. Windows and Linux filesystem behavior, cross-platform permissions, and crash recovery remain unverified. See the [Task 62 evidence](evidence/rust-settings-corruption-preservation-task-62.md); this read-side test is separate from the write-failure injection matrix below.
+
+### Task 63 unsupported-settings initialization preservation check
+
+Initialization returns validated defaults in memory when the settings file is missing, loads an existing supported schema-v1 file without rewriting it, and returns `InvalidSettings(UnsupportedSchemaVersion { .. })` for an unsupported version. The decoder checks the version header before requiring schema-v1 fields, so a newer document with a different shape is still classified as unsupported. Loading and initialization do not read schema v2, downgrade, migrate, reset, or rewrite an unsupported file because an older version cannot safely interpret or discard unfamiliar settings. The separate explicit reset API can replace a selected unsupported file with defaults after the caller passes confirmation; Task 64 tests that destructive behavior only on a synthetic fixture.
+
+Run the focused synthetic regression test with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test \
+  -p outflow-settings \
+  settings_initialization_preserves_unsupported_schema_files \
+  --locked -- --nocapture
+```
+
+Expected output reports PASS for missing-file defaults without a write, unchanged supported schema-v1 settings, and typed rejection plus byte preservation for schema v2 and a minimal future schema version. It then reports `Automatic downgrade: NO`, `Automatic reset: NO`, `Schema migration: NO`, and `Real user settings accessed: NO`. The unsupported fixtures are retried and checked for exact bytes, Unix permissions, file identity, modification time, and unchanged directory entries.
+
+This verifies only the storage and initialization boundary. In-memory defaults for a missing file are already supported; invalid or unsupported existing files remain preserved and return errors. An error is not a user-facing recovery flow. A future recovery interface must let users review safe options without silently losing unsupported settings; any downgrade or migration must be explicit and separately verified. FR-13.4 and T-017 remain incomplete. Task 62 separately covers malformed and corrupted JSON; see the [Task 63 evidence](evidence/rust-settings-initialization-preservation-task-63.md) and the [settings recovery matrix](evidence/rust-settings-temporary-write-recovery-task-56.md#separate-load-side-corruption-coverage).
 
 Run all requested local verification commands from the repository root:
 
