@@ -91,6 +91,7 @@ Environment: macOS 26.6.2 (25G83), arm64 Apple M3 Pro, 19,327,352,832 installed 
 - First explicit Start requested normal microphone access; user granted it. The real device reported 48,000 Hz, mono. A 47.8-second capture closed cleanly but produced no nonempty partial/final.
 - A subsequent user-spoken sentence produced a visible nonempty partial and final through Moonshine and returned to `Result ready — microphone released`. The final recognized wording was imperfect; no reference text or WER was recorded.
 - Start/Stop/Cancel, preview clearing, repeat sessions, microphone close on Stop/Cancel, and window display were exercised. Two visible app fixture sessions produced partial/final. Cancel in fixture mode cleared the preview and returned Cancelled.
+- Two physical mic sessions were completed. A third live session was requested during delivery to meet the “at least three where available” criterion, but no third result was observed before delivery; that subcriterion remains unverified.
 - Not individually hardware-tested: explicit denial then recovery, previously granted launch without prompt, absent/busy/disconnected physical mic, permission revocation mid-session, macOS sleep, or every device format. Pure policy/error injection tests cover software mapping but are not represented as OS tests.
 - The 100 worker Start/Stop/Cancel cycles use an injected fake C API and fixtures; they are not 100 physical microphone sessions. There were two actual microphone sessions, one with recognized speech.
 
