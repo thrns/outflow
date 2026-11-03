@@ -84,7 +84,7 @@ Environment: macOS 26.6.2 (25G83), arm64 Apple M3 Pro, 19,327,352,832 installed 
 - `python3 -m unittest discover -s scripts/tests -v` — PASS after correcting a test selector; final recorded result: 377 tests run, 1 skipped (the benchmark integration remains skipped because there is no ready corpus), no failures. This includes the new privacy and asset-header tests plus the 4 GB boundary tests.
 - Rust: `RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check`; `RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked`; `RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked`; `RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings`; `RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked` — all PASS. No Rust source changed in this prototype.
 - Frontend: `npm run typecheck`; `npm run test -- --run` (136 tests); `npm run lint`; `npm run build` — all PASS. The existing browser preview remains separate and does not capture audio.
-- `git diff --check` — run again as final delivery gate; see delivery section/result commit.
+- `git diff --check` — PASS on the final staged implementation diff and the delivery-metadata update.
 
 **Real OS/hardware checks**
 
@@ -197,8 +197,11 @@ Keep AVAudioEngine, AppKit, Objective-C++ TCC UI, bundle plist, ad-hoc signing, 
 - Development branch: `codex/prompt79e-mic-prototype`; no main branch changes.
 - Intended changes are limited to the standalone `dev/macos-mic-probe/` app/tests, three development scripts and their tests, the boundary classifier tests, README/TASKS notes, and the two Prompt 79E evidence files.
 - External model weights, fixture audio, generated app binaries, native libraries, per-run timing/RSS files, and transcripts are excluded from Git. No `.github/workflows` change is included.
-- Delivery commits and remote branch SHA are recorded here after commit/push. Remote target is `origin` (`https://github.com/thrns/outflow.git`). No force-push, PR, merge, release, or main update is part of this task.
-- Final worktree and diff review status will be appended with the delivery SHA and verification outcome.
+- Implementation commit: `e78b4aab39a272600235c7dea13701b72ca2988f` (`feat(native): add local macOS microphone streaming feasibility probe`), [GitHub commit](https://github.com/thrns/outflow/commit/e78b4aab39a272600235c7dea13701b72ca2988f).
+- Remote target is `origin` (`https://github.com/thrns/outflow.git`). `git ls-remote origin refs/heads/codex/prompt79e-mic-prototype` returned `e78b4aab39a272600235c7dea13701b72ca2988f`; it matched local HEAD at initial push verification.
+- This delivery record is a follow-up documentation commit on the same branch; its branch-head SHA is verified after push and is reported in the final response.
+- Final staged-diff checks passed. Generated `__pycache__` folders were removed. Only the intended 34 source, script, documentation, and measurement files are in the implementation commit. Model weights, fixture audio, transcript content, native binaries, secrets, and workflow files are absent. No force-push, PR, merge, release, or main update was performed.
+- Final worktree status after the handoff update and push: clean, tracking `origin/codex/prompt79e-mic-prototype`.
 
 ## L. Recommended next implementation milestone
 
