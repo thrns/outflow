@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <sys/resource.h>
 #include <vector>
@@ -74,8 +75,18 @@ static bool has_nonempty_line(const transcript_t* transcript) {
   return false;
 }
 
+static std::optional<double> process_cpu_seconds() {
+  struct rusage usage {};
+  if (getrusage(RUSAGE_SELF, &usage) != 0) return std::nullopt;
+  return static_cast<double>(usage.ru_utime.tv_sec) +
+         static_cast<double>(usage.ru_utime.tv_usec) / 1'000'000.0 +
+         static_cast<double>(usage.ru_stime.tv_sec) +
+         static_cast<double>(usage.ru_stime.tv_usec) / 1'000'000.0;
+}
+
 static int run_session(int32_t transcriber, const WavData& wav, int session_number) {
   const auto session_started = std::chrono::steady_clock::now();
+  const auto cpu_started = process_cpu_seconds();
   const int32_t stream = moonshine_create_stream(transcriber, 0);
   if (stream < 0) {
     std::cerr << "create_stream failed: " << moonshine_error_to_string(stream) << '\n';
@@ -158,6 +169,10 @@ static int run_session(int32_t transcriber, const WavData& wav, int session_numb
                                       .count();
   const double audio_seconds = static_cast<double>(max_samples) / wav.sample_rate;
   const double real_time_factor = (session_ms / 1000.0) / audio_seconds;
+  const auto cpu_finished = process_cpu_seconds();
+  const std::optional<double> cpu_ms = cpu_started.has_value() && cpu_finished.has_value()
+                                           ? std::optional<double>((*cpu_finished - *cpu_started) * 1000.0)
+                                           : std::nullopt;
   (void)moonshine_free_stream(transcriber, stream);
   std::cout << "SESSION " << session_number << " partial_calls=" << partial_calls
             << " partial_nonempty=" << (partial_nonempty ? "yes" : "no")
@@ -167,7 +182,8 @@ static int run_session(int32_t transcriber, const WavData& wav, int session_numb
             << std::fixed << std::setprecision(3)
             << " session_ms=" << session_ms
             << " stop_to_final_ms=" << stop_to_final_ms
-            << " rtf=" << real_time_factor << '\n';
+            << " rtf=" << real_time_factor
+            << " cpu_ms=" << (cpu_ms.has_value() ? *cpu_ms : -1.0) << '\n';
   return (partial_calls > 0 && partial_nonempty && final_nonempty && all_complete) ? 0 : 2;
 }
 
@@ -181,10 +197,13 @@ int main(int argc, char** argv) {
     std::cerr << "fixture is not PCM16 mono WAV\n";
     return 2;
   }
-  const moonshine_option_t options[] = {{"identify_speakers", "false"}};
+  const moonshine_option_t options[] = {
+      {"identify_speakers", "false"},
+      {"ort_providers", "CPU"},
+  };
   const auto model_load_started = std::chrono::steady_clock::now();
   const int32_t transcriber = moonshine_load_transcriber_from_files(
-      argv[1], MOONSHINE_MODEL_ARCH_SMALL_STREAMING, options, 1, MOONSHINE_HEADER_VERSION);
+      argv[1], MOONSHINE_MODEL_ARCH_SMALL_STREAMING, options, 2, MOONSHINE_HEADER_VERSION);
   const auto model_load_finished = std::chrono::steady_clock::now();
   if (transcriber < 0) {
     std::cerr << "model load failed: " << moonshine_error_to_string(transcriber) << '\n';
@@ -194,6 +213,7 @@ int main(int argc, char** argv) {
                                   model_load_finished - model_load_started)
                                   .count();
   std::cout << "MODEL_LOAD_OK architecture=" << MOONSHINE_MODEL_ARCH_SMALL_STREAMING
+            << " execution_provider=CPUExecutionProvider"
             << " sample_rate=" << wav.sample_rate << " sample_count=" << wav.samples.size()
             << std::fixed << std::setprecision(1) << " model_load_ms=" << model_load_ms << '\n';
   int result = run_session(transcriber, wav, 1);

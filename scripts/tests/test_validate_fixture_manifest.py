@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from scripts.validate_fixture_manifest import validate_manifest
+from scripts.validate_fixture_manifest import assess_corpus_coverage, validate_manifest
 
 
 MANIFEST_PATH = Path(__file__).resolve().parents[2] / "docs" / "benchmark-fixtures.json"
@@ -34,6 +34,9 @@ def ready_fixture(root: Path) -> dict[str, Any]:
         {
             "id": "synthetic_valid_fixture",
             "status": "ready",
+            "duration_class": "short",
+            "coverage_attributes": [],
+            "speaker_variety": None,
             "audio_file": "audio/synthetic.wav",
             "audio_sha256": hashlib.sha256(audio_bytes).hexdigest(),
             "reference_file": "references/synthetic.txt",
@@ -80,6 +83,94 @@ class FixtureManifestValidatorTests(unittest.TestCase):
         errors, _ = validate_manifest(manifest)
 
         self.assertTrue(any("duplicates another fixture identifier" in error for error in errors))
+
+    def test_corpus_coverage_rejects_short_and_long_only_collection(self) -> None:
+        entries = [
+            {"status": "ready", "duration_class": "short", "coverage_attributes": [], "speaker_variety": None,
+             "provenance_verified": True, "human_reference_verified": True}
+            for _ in range(100)
+        ] + [
+            {"status": "ready", "duration_class": "long", "coverage_attributes": [], "speaker_variety": None,
+             "provenance_verified": True, "human_reference_verified": True}
+            for _ in range(50)
+        ]
+
+        coverage = assess_corpus_coverage(entries)
+
+        self.assertEqual(coverage["short_utterance_count"], 100)
+        self.assertEqual(coverage["long_utterance_count"], 50)
+        self.assertFalse(coverage["complete"])
+        self.assertEqual(coverage["quiet_speech_count"], 0)
+        self.assertEqual(coverage["noisy_speech_count"], 0)
+        self.assertEqual(coverage["accent_variety_count"], 0)
+
+    def test_complete_coverage_requires_every_dimension_and_verified_input(self) -> None:
+        entries = [
+            {"status": "ready", "duration_class": "short", "coverage_attributes": [], "speaker_variety": None,
+             "provenance_verified": True, "human_reference_verified": True}
+            for _ in range(100)
+        ] + [
+            {"status": "ready", "duration_class": "long", "coverage_attributes": [], "speaker_variety": None,
+             "provenance_verified": True, "human_reference_verified": True}
+            for _ in range(50)
+        ]
+        entries[0]["coverage_attributes"] = ["quiet_environment", "proper_nouns", "technical_vocabulary", "numbers", "abbreviations"]
+        entries[1]["coverage_attributes"] = ["noisy_environment", "accented_english"]
+        entries[1]["speaker_variety"] = "source variety A"
+        entries[2]["coverage_attributes"] = ["accented_english"]
+        entries[2]["speaker_variety"] = "source variety B"
+        entries.append({
+            "status": "ready", "duration_class": "silence_control", "coverage_attributes": [], "speaker_variety": None,
+            "provenance_verified": True, "human_reference_verified": True,
+        })
+
+        coverage = assess_corpus_coverage(entries)
+
+        self.assertEqual(coverage["short_utterance_count"], 100)
+        self.assertEqual(coverage["long_utterance_count"], 50)
+        self.assertEqual(coverage["accent_variety_count"], 2)
+        self.assertTrue(coverage["complete"])
+        entries[-1]["human_reference_verified"] = False
+        self.assertFalse(assess_corpus_coverage(entries)["complete"])
+
+    def test_duplicate_and_malformed_coverage_metadata_are_rejected(self) -> None:
+        manifest = load_manifest()
+        fixture = copy.deepcopy(manifest["fixtures"][0])
+        fixture["coverage_attributes"] = ["numbers", "numbers"]
+        fixture["duration_class"] = "unexpected"
+        fixture["speaker_variety"] = 42
+        manifest["fixtures"] = [fixture]
+
+        errors, _ = validate_manifest(manifest)
+
+        self.assertTrue(any("unsupported or duplicate values" in error for error in errors))
+        self.assertTrue(any("duration_class is unsupported" in error for error in errors))
+        self.assertTrue(any("speaker_variety must be" in error for error in errors))
+
+    def test_unsupported_quiet_noisy_and_silence_speech_combinations_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest = load_manifest()
+            fixture = ready_fixture(root)
+            fixture["coverage_attributes"] = ["quiet_environment", "noisy_environment"]
+            manifest["collection_status"] = "in_progress"
+            manifest["fixtures"] = [fixture]
+
+            errors, _ = validate_manifest(manifest, root)
+
+        self.assertTrue(any("cannot be classified as both quiet and noisy" in error for error in errors))
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            manifest = load_manifest()
+            fixture = ready_fixture(root)
+            fixture.update({"category": "silence", "duration_class": "silence_control", "coverage_attributes": ["accented_english"], "speaker_variety": "source variety"})
+            manifest["collection_status"] = "in_progress"
+            manifest["fixtures"] = [fixture]
+
+            errors, _ = validate_manifest(manifest, root)
+
+        self.assertTrue(any("silence controls cannot carry speech coverage attributes" in error for error in errors))
 
     def test_unsupported_manifest_versions_are_rejected(self) -> None:
         manifest = load_manifest()

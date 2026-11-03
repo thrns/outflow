@@ -61,9 +61,9 @@
       "notice_required_if_shipped": true,
       "planned_notice_destination": null,
       "notice_verification_status": "blocked",
-      "status_explanation": "The pinned checkout's COPYING identifies BSD-3-Clause but points to a LICENSES/BSD-3-Clause file that is absent. The canonical SPDX BSD-3-Clause text was checked; no Outflow notice file or installer package has been assembled, so the shipped-notice obligation remains blocked.",
+      "status_explanation": "The pinned checkout's COPYING identifies BSD-3-Clause but points to an absent LICENSES/BSD-3-Clause file. Prompt 79D added the canonical text with Mark Borgerding's copyright at docs/licenses/KISS-FFT-BSD-3-Clause.txt; no release package or notice destination is verified, so the shipped-notice obligation remains blocked.",
       "outstanding_questions": [
-        "Provide the complete BSD-3-Clause notice in the selected release's source and binary materials, preserving the Mark Borgerding copyright and conditions.",
+        "Confirm the complete BSD-3-Clause notice is included in the selected release's source and binary materials, preserving the Mark Borgerding copyright and conditions.",
         "Confirm platform packaging preserves the BSD-3-Clause notices."
       ],
       "redistribution_approval": "undetermined"

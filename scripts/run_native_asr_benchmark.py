@@ -28,20 +28,20 @@ from typing import Any, Mapping, Sequence
 if __package__:
     from .score_corpus_wer import calculate_corpus_wer
     from .score_wer import NORMALIZATION_POLICY_VERSION, calculate_wer
-    from .validate_fixture_manifest import REPOSITORY_ROOT, validate_manifest
+    from .validate_fixture_manifest import REPOSITORY_ROOT, assess_corpus_coverage, validate_manifest
     from .validate_model_asset_inventory import load_manifest as load_asset_manifest
     from .validate_model_asset_inventory import validate_manifest as validate_asset_manifest
 else:
     from score_corpus_wer import calculate_corpus_wer
     from score_wer import NORMALIZATION_POLICY_VERSION, calculate_wer
-    from validate_fixture_manifest import REPOSITORY_ROOT, validate_manifest
+    from validate_fixture_manifest import REPOSITORY_ROOT, assess_corpus_coverage, validate_manifest
     from validate_model_asset_inventory import load_manifest as load_asset_manifest
     from validate_model_asset_inventory import validate_manifest as validate_asset_manifest
 
 
-RESULT_SCHEMA_VERSION = 1
+RESULT_SCHEMA_VERSION = 2
 RESULT_TYPE = "measured_native_asr"
-EVALUATION_VERSION = "outflow-native-asr-benchmark-v1"
+EVALUATION_VERSION = "outflow-native-asr-benchmark-v2"
 SOURCE_REVISION = "234f60faa0eb388b01cdf7e60aca232af37aefda"
 MODEL_CATALOG_PATH = "small-streaming-en/quantized_26_08_21"
 EXPECTED_ARCHITECTURE = 4
@@ -60,8 +60,11 @@ MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 MAX_REFERENCE_BYTES = 1024 * 1024
 MAX_AUDIO_BYTES = 64 * 1024 * 1024
 MAX_AUDIO_SECONDS = 120.0
+MAX_4GB_PHYSICAL_MEMORY_BYTES = 4_000_000_000
+APPROVED_4GB_REFERENCE_CLASSES: frozenset[str] = frozenset()
 SHA256_PATTERN = re.compile(r"[0-9a-fA-F]{64}\Z")
 MACHINE_LABEL_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}\Z")
+SYSTEM_LIBRARY_ROOTS = ("/System/Library/", "/usr/lib/", "/Library/Apple/System/Library/")
 
 
 class BenchmarkError(RuntimeError):
@@ -70,6 +73,9 @@ class BenchmarkError(RuntimeError):
 
 class _DuplicateJsonKey(ValueError):
     """Indicates a repeated key without exposing untrusted contents."""
+
+    def __str__(self) -> str:
+        return "duplicate JSON object key"
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -215,7 +221,13 @@ def load_verified_fixtures(manifest_path: Path, repository_root: Path) -> tuple[
         loaded.append(
             {
                 "id": fixture["id"],
+                "status": "ready",
                 "category": fixture["category"],
+                "duration_class": fixture["duration_class"],
+                "coverage_attributes": list(fixture["coverage_attributes"]),
+                "speaker_variety": fixture.get("speaker_variety"),
+                "provenance_verified": True,
+                "human_reference_verified": True,
                 "audio_path": audio_path,
                 "reference": reference,
                 "audio_sha256": actual_audio_hash,
@@ -228,6 +240,158 @@ def load_verified_fixtures(manifest_path: Path, repository_root: Path) -> tuple[
 
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and bool(SHA256_PATTERN.fullmatch(value))
+
+
+def _canonical_file(path: Path) -> Path:
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise BenchmarkError("a required native binary could not be resolved") from error
+    if not resolved.is_file():
+        raise BenchmarkError("a required native binary is not a regular file")
+    return resolved
+
+
+def _system_tool_output(command: Sequence[str]) -> str:
+    try:
+        completed = subprocess.run(
+            list(command), check=False, capture_output=True, text=True, encoding="utf-8",
+            errors="strict", timeout=10,
+        )
+    except (OSError, UnicodeError, subprocess.SubprocessError) as error:
+        raise BenchmarkError("macOS native-library inspection could not be completed") from error
+    if completed.returncode != 0:
+        raise BenchmarkError("macOS native-library inspection failed")
+    return completed.stdout
+
+
+def _otool_dependencies(path: Path) -> list[str]:
+    output = _system_tool_output(("otool", "-L", str(path)))
+    lines = output.splitlines()
+    if not lines or not lines[0].rstrip().endswith(":"):
+        raise BenchmarkError("otool returned an ambiguous dependency listing")
+    dependencies = []
+    for line in lines[1:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        dependencies.append(stripped.split(" (", 1)[0])
+    if len(dependencies) != len(set(dependencies)):
+        raise BenchmarkError("native dependency listing contains duplicate entries")
+    return dependencies
+
+
+def _is_system_library(path: str) -> bool:
+    return path.startswith(SYSTEM_LIBRARY_ROOTS)
+
+
+def verify_native_runtime(
+    native_runner: Path,
+    moonshine_library: Path,
+    onnxruntime_library: Path,
+    *,
+    host_architecture: str | None = None,
+) -> dict[str, Any]:
+    """Verify actual macOS dyld images against the exact benchmark inputs.
+
+    The helper reports the loaded image paths and the resolved image containing
+    `moonshine_get_version`; lipo/otool then verify the executable slice and
+    declared dependency chain. Caller-supplied paths alone are insufficient.
+    """
+    if sys.platform != "darwin":
+        raise BenchmarkError("actual native runtime identity is supported only on macOS")
+    runner = _canonical_file(native_runner)
+    moonshine = _canonical_file(moonshine_library)
+    onnxruntime = _canonical_file(onnxruntime_library)
+    initial_hashes = {
+        runner: file_sha256(runner),
+        moonshine: file_sha256(moonshine),
+        onnxruntime: file_sha256(onnxruntime),
+    }
+    expected_arch = host_architecture or platform.machine()
+    architecture_aliases = {"aarch64": "arm64", "x86_64": "x86_64", "arm64": "arm64"}
+    expected_arch = architecture_aliases.get(expected_arch, "")
+    if not expected_arch:
+        raise BenchmarkError("host architecture is unsupported for native verification")
+
+    probe = _run_json_command((str(runner), "--runtime-identity"), timeout_seconds=10)
+    if not isinstance(probe, dict) or set(probe) != {
+        "schema_version", "architecture", "pointer_bits", "c_api_version", "runner_path",
+        "moonshine_api_path", "loaded_images",
+    }:
+        raise BenchmarkError("native runtime identity probe has an invalid shape")
+    if (
+        type(probe["schema_version"]) is not int or probe["schema_version"] != 1
+        or probe["architecture"] != expected_arch
+        or type(probe["pointer_bits"]) is not int or probe["pointer_bits"] != 64
+        or type(probe["c_api_version"]) is not int or probe["c_api_version"] != EXPECTED_HEADER_VERSION
+        or not isinstance(probe["loaded_images"], list) or not probe["loaded_images"]
+    ):
+        raise BenchmarkError("native runtime identity or architecture is unsupported")
+    try:
+        probe_runner = str(Path(probe["runner_path"]).resolve(strict=True))
+        api_path = str(Path(probe["moonshine_api_path"]).resolve(strict=True))
+        loaded: list[str] = []
+        for value in probe["loaded_images"]:
+            if not isinstance(value, str) or not Path(value).is_absolute() or ".." in Path(value).parts:
+                raise ValueError
+            try:
+                loaded.append(str(Path(value).resolve(strict=True)))
+            except (OSError, RuntimeError):
+                # Apple dyld shared-cache images have logical paths but no
+                # standalone file to resolve or hash on current macOS.
+                if not _is_system_library(value):
+                    raise
+                loaded.append(value)
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        raise BenchmarkError("dyld returned an unresolved or malformed image path") from error
+    if probe_runner != str(runner) or api_path != str(moonshine):
+        raise BenchmarkError("the helper or Moonshine C API resolved to an unexpected binary")
+    if len(loaded) != len(set(loaded)):
+        raise BenchmarkError("dyld returned ambiguous duplicate loaded-image paths")
+    if loaded.count(str(runner)) != 1 or loaded.count(str(moonshine)) != 1 or loaded.count(str(onnxruntime)) != 1:
+        raise BenchmarkError("dyld did not load exactly the helper, Moonshine, and ONNX Runtime binaries supplied")
+    expected_images = {str(runner), str(moonshine), str(onnxruntime)}
+    unexpected = [path for path in loaded if path not in expected_images and not _is_system_library(path)]
+    if unexpected:
+        raise BenchmarkError("dyld loaded an unapproved non-system library")
+
+    for binary in (runner, moonshine, onnxruntime):
+        architectures = set(_system_tool_output(("lipo", "-archs", str(binary))).split())
+        if expected_arch not in architectures:
+            raise BenchmarkError("a loaded native binary does not contain the active architecture")
+
+    helper_deps = _otool_dependencies(runner)
+    moonshine_deps = _otool_dependencies(moonshine)
+    helper_moonshine = [name for name in helper_deps if Path(name).name == "libmoonshine.dylib"]
+    moonshine_ort = [name for name in moonshine_deps if Path(name).name.startswith("libonnxruntime")]
+    if len(helper_moonshine) != 1 or len(moonshine_ort) != 1:
+        raise BenchmarkError("native dependency chain is missing or ambiguous")
+    if Path(moonshine_ort[0]).name != onnxruntime.name:
+        raise BenchmarkError("Moonshine declares an unexpected ONNX Runtime dependency")
+    approved_rpath_dependencies = {helper_moonshine[0], moonshine_ort[0]}
+    for dependency in helper_deps + moonshine_deps:
+        name = Path(dependency).name
+        if dependency in approved_rpath_dependencies:
+            continue
+        if dependency.startswith("/usr/lib/") or dependency.startswith("/System/Library/"):
+            continue
+        raise BenchmarkError("otool found an unapproved native dependency")
+
+    final_hashes = {path: file_sha256(path) for path in initial_hashes}
+    if final_hashes != initial_hashes:
+        raise BenchmarkError("a native binary changed during runtime identity verification")
+    return {
+        "architecture": expected_arch,
+        "c_api_version": EXPECTED_HEADER_VERSION,
+        "loaded_image_count": len(loaded),
+        "unexpected_non_system_library_count": 0,
+        "resolved_paths_match_inputs": True,
+        "dependency_chain_verified": True,
+        "native_runner_sha256": final_hashes[runner],
+        "moonshine_sha256": final_hashes[moonshine],
+        "onnxruntime_sha256": final_hashes[onnxruntime],
+    }
 
 
 def verify_source(source_dir: Path) -> dict[str, Any]:
@@ -329,10 +493,14 @@ def _run_json_command(command: Sequence[str], *, timeout_seconds: float) -> Any:
 def parse_load_probe(value: Any, *, required_samples: int = 2) -> list[float]:
     """Validate cold-process and warm-reload timing samples from the helper."""
 
-    if not isinstance(value, dict) or set(value) != {"schema_version", "model_load_ms"}:
+    if not isinstance(value, dict) or set(value) != {"schema_version", "execution_provider", "model_load_ms"}:
         raise BenchmarkError("native model-load probe has an invalid shape")
     samples = value["model_load_ms"]
-    if value["schema_version"] != 1 or not isinstance(samples, list) or len(samples) < required_samples:
+    if (
+        type(value["schema_version"]) is not int or value["schema_version"] != 1
+        or value["execution_provider"] != "CPUExecutionProvider"
+        or not isinstance(samples, list) or len(samples) < required_samples
+    ):
         raise BenchmarkError("native model-load probe is incomplete")
     if any(
         isinstance(sample, bool)
@@ -348,11 +516,13 @@ def parse_load_probe(value: Any, *, required_samples: int = 2) -> list[float]:
 def parse_native_output(value: Any, expected_count: int) -> tuple[float, list[dict[str, Any]]]:
     """Validate batch inference output while keeping hypotheses in memory only."""
 
-    required_root = {"schema_version", "architecture", "header_version", "model_load_ms", "outputs"}
+    required_root = {"schema_version", "execution_provider", "architecture", "header_version", "model_load_ms", "outputs"}
     if not isinstance(value, dict) or set(value) != required_root:
         raise BenchmarkError("native inference output has an invalid shape")
     if (
-        value["schema_version"] != 1
+        type(value["schema_version"]) is not int
+        or value["schema_version"] != 1
+        or value["execution_provider"] != "CPUExecutionProvider"
         or value["architecture"] != EXPECTED_ARCHITECTURE
         or value["header_version"] != EXPECTED_HEADER_VERSION
     ):
@@ -416,6 +586,16 @@ def percentile(values: Sequence[float], fraction: float) -> float | None:
 
 
 def _physical_memory_bytes() -> int | None:
+    if sys.platform == "darwin":
+        try:
+            output = subprocess.run(
+                ["sysctl", "-n", "hw.memsize"], check=True, capture_output=True,
+                text=True, encoding="ascii", timeout=5,
+            ).stdout.strip()
+            value = int(output)
+            return value if value > 0 else None
+        except (OSError, UnicodeError, subprocess.SubprocessError, ValueError):
+            return None
     try:
         pages = os.sysconf("SC_PHYS_PAGES")
         page_size = os.sysconf("SC_PAGE_SIZE")
@@ -426,7 +606,28 @@ def _physical_memory_bytes() -> int | None:
     return None
 
 
-def machine_record(machine_label: str | None = None, cpu_label: str | None = None) -> dict[str, Any]:
+def _machine_identifier() -> str | None:
+    """Return a non-unique hardware model identifier, never a serial number."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        value = subprocess.run(
+            ["sysctl", "-n", "hw.model"], check=True, capture_output=True,
+            text=True, encoding="ascii", timeout=5,
+        ).stdout.strip()
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        return None
+    if not value or len(value) > 100 or not re.fullmatch(r"[A-Za-z0-9,._-]+", value):
+        return None
+    return value
+
+
+def machine_record(
+    machine_label: str | None = None,
+    cpu_label: str | None = None,
+    *,
+    cpu_only_inference_exercised: bool = False,
+) -> dict[str, Any]:
     """Return host facts without hostname, serial number, username, or paths."""
 
     if machine_label is not None and not MACHINE_LABEL_PATTERN.fullmatch(machine_label):
@@ -434,15 +635,48 @@ def machine_record(machine_label: str | None = None, cpu_label: str | None = Non
     safe_cpu = cpu_label or platform.processor() or None
     if safe_cpu is not None and (len(safe_cpu) > 100 or any(ord(char) < 32 for char in safe_cpu)):
         raise BenchmarkError("CPU label is invalid")
+    physical_memory = _physical_memory_bytes()
     return {
         "machine_label": machine_label,
+        "machine_identifier": _machine_identifier(),
         "os": platform.system(),
         "os_release": platform.release(),
         "architecture": platform.machine(),
-        "physical_memory_bytes": _physical_memory_bytes(),
+        "physical_memory_bytes": physical_memory,
+        "physical_memory_source": "sysctl_hw.memsize" if sys.platform == "darwin" and physical_memory is not None else "sysconf_pages" if physical_memory is not None else None,
+        "physical_hardware_status": "unknown",
+        "reference_hardware_class": None,
+        "cpu_only_inference_exercised": cpu_only_inference_exercised,
+        # A successful native run proves that a measurement happened, but this
+        # field is reserved for runs whose physical-hardware status was
+        # independently verified. The harness does not certify that status.
+        "real_hardware_measurements_completed": False,
         "logical_cpu_count": os.cpu_count(),
         "cpu_label": safe_cpu,
     }
+
+
+def assess_physical_4gb_eligibility(machine: Mapping[str, Any]) -> str:
+    """Classify conservative physical 4 GB reference-machine eligibility.
+
+    The limit uses decimal GB because the product requirement says 4 GB.
+    This repository currently has no approved reference-machine classes, so
+    a caller-provided class label cannot turn a machine into an eligible one.
+    """
+    ram = machine.get("physical_memory_bytes")
+    status = machine.get("physical_hardware_status")
+    reference_class = machine.get("reference_hardware_class")
+    if status == "virtual_or_simulated" or (type(ram) is int and ram > MAX_4GB_PHYSICAL_MEMORY_BYTES):
+        return "INELIGIBLE"
+    if (
+        type(ram) is int
+        and ram <= MAX_4GB_PHYSICAL_MEMORY_BYTES
+        and status == "verified_physical"
+        and isinstance(reference_class, str)
+        and reference_class in APPROVED_4GB_REFERENCE_CLASSES
+    ):
+        return "ELIGIBLE"
+    return "UNKNOWN"
 
 
 def _binary_record(path: Path) -> dict[str, Any]:
@@ -468,6 +702,7 @@ def build_measured_result(
     source: Mapping[str, Any],
     model: Mapping[str, Any],
     machine: Mapping[str, Any],
+    native_runtime_identity: Mapping[str, Any],
     created_at_utc: str,
 ) -> dict[str, Any]:
     """Score in-memory hypotheses and construct a transcript-free result."""
@@ -504,6 +739,11 @@ def build_measured_result(
             {
                 "fixture_id": fixture["id"],
                 "category": fixture["category"],
+                "duration_class": fixture["duration_class"],
+                "coverage_attributes": list(fixture["coverage_attributes"]),
+                "speaker_variety": fixture.get("speaker_variety"),
+                "provenance_verified": fixture.get("provenance_verified") is True,
+                "human_reference_verified": fixture.get("human_reference_verified") is True,
                 "audio_sha256": fixture["audio_sha256"],
                 "reference_sha256": fixture["reference_sha256"],
                 "audio_metadata": fixture["audio_metadata"],
@@ -542,13 +782,11 @@ def build_measured_result(
     recognition = [float(row["recognition_ms"]) for row in speech]
     stop_to_final = [float(row["stop_to_final_ms"]) for row in speech]
     rtfs = [float(row["real_time_factor"]) for row in speech]
-    ready_categories = [fixture["category"] for fixture in fixtures]
-    short_count = ready_categories.count("short_speech")
-    long_count = ready_categories.count("long_speech")
-    required_coverage_met = short_count >= 100 and long_count >= 50
+    coverage = assess_corpus_coverage(list(fixtures))
+    required_coverage_met = coverage["complete"]
     wer_value = aggregate_record["wer"]
-    physical_ram = machine.get("physical_memory_bytes")
-    physical_4gb = physical_ram is not None and physical_ram <= 4_500_000_000
+    physical_4gb_eligibility = assess_physical_4gb_eligibility(machine)
+    physical_4gb_ineligible = physical_4gb_eligibility == "INELIGIBLE"
     results = {
         "schema_version": RESULT_SCHEMA_VERSION,
         "result_type": RESULT_TYPE,
@@ -574,18 +812,9 @@ def build_measured_result(
             "license_review_status": model["license_review_status"],
         },
         "native_binaries": {name: _binary_record(path) for name, path in sorted(native_files.items())},
+        "native_runtime_identity": dict(native_runtime_identity),
         "machine": dict(machine),
-        "corpus": {
-            "verified_ready_fixture_count": len(fixtures),
-            "short_phrase_count": short_count,
-            "long_phrase_count": long_count,
-            "quiet_environment_count": ready_categories.count("quiet_environment"),
-            "noisy_environment_count": ready_categories.count("noisy_environment"),
-            "accented_english_count": ready_categories.count("accented_english"),
-            "proper_nouns_technical_vocabulary_count": ready_categories.count("proper_nouns_technical_vocabulary"),
-            "numbers_count": ready_categories.count("numbers"),
-            "silence_control_count": ready_categories.count("silence"),
-        },
+        "corpus": coverage,
         "aggregate": aggregate_record,
         "timing": {
             "recognition_p50_ms": percentile(recognition, 0.50),
@@ -610,7 +839,11 @@ def build_measured_result(
                 "NOT_ASSESSED" if not required_coverage_met or not stop_to_final
                 else "PASS" if percentile(stop_to_final, 0.95) < 1500 else "FAIL"
             ),
-            "physical_4gb_gate": "BLOCKED" if not physical_4gb else "NOT_ASSESSED",
+            "physical_4gb_eligibility": physical_4gb_eligibility,
+            "physical_4gb_gate": "BLOCKED" if physical_4gb_ineligible else "NOT_ASSESSED",
+            "cpu_only_inference": "PASS" if machine.get("cpu_only_inference_exercised") is True else "NOT_ASSESSED",
+            "real_hardware_measurements": "PASS" if machine.get("real_hardware_measurements_completed") is True else "NOT_ASSESSED",
+            "release_performance_requirements": "NOT_ASSESSED",
             "process_tree_memory": "NOT_MEASURED",
             "installed_application_size": "NOT_MEASURED",
             "redistribution_approval": "NOT_APPROVED",
@@ -622,6 +855,8 @@ def build_measured_result(
             "Warm reloads are later model loads in the same probe process and do not establish a cold-start distribution.",
             "The native library and model measurements do not represent a complete Outflow app.",
             "A 4 GB gate requires physical hardware; a host with more RAM cannot certify it.",
+            "Physical hardware and approved reference-class status are not inferred from a system RAM query or caller-supplied label.",
+            "CPU-only status is based on a successful native run explicitly configured with CPUExecutionProvider.",
         ],
     }
     # Drop all transcript-bearing local collections before returning the result.
@@ -632,6 +867,11 @@ def build_measured_result(
 def _write_result(result: dict[str, Any], output: Path) -> None:
     """Write a measured result once; never replace an existing evidence file."""
 
+    if __package__:
+        from .validate_measured_asr_results import validate_measured_results
+    else:
+        from validate_measured_asr_results import validate_measured_results
+    validate_measured_results(result)
     try:
         with output.open("x", encoding="utf-8") as destination:
             json.dump(result, destination, indent=2, sort_keys=True, ensure_ascii=False)
@@ -661,6 +901,11 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, Any]:
     }
     for native_file in native_files.values():
         _binary_record(native_file)
+    native_runtime_identity = verify_native_runtime(
+        native_runner,
+        native_files["moonshine_library"],
+        native_files["onnxruntime_library"],
+    )
     load_probe = _run_json_command(
         [str(native_runner), "--load-probe", str(arguments.model_dir), "3"],
         timeout_seconds=arguments.timeout_seconds,
@@ -675,7 +920,11 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, Any]:
     prepared = [dict(fixture) for fixture in fixtures]
     for fixture in prepared:
         fixture["audio_metadata"] = dict(fixture["audio_metadata"])
-    machine = machine_record(arguments.machine_label, arguments.cpu_label)
+    machine = machine_record(
+        arguments.machine_label,
+        arguments.cpu_label,
+        cpu_only_inference_exercised=True,
+    )
     result = build_measured_result(
         manifest=manifest,
         fixtures=prepared,
@@ -686,10 +935,16 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, Any]:
         source=source,
         model=model,
         machine=machine,
+        native_runtime_identity=native_runtime_identity,
         created_at_utc=datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
     )
     # Do not retain transcript-bearing native protocol objects after scoring.
     del fixtures, prepared, native_json, native_output, load_probe, manifest
+    if __package__:
+        from .validate_measured_asr_results import validate_measured_results
+    else:
+        from validate_measured_asr_results import validate_measured_results
+    validate_measured_results(result)
     if arguments.output is not None:
         _write_result(result, arguments.output)
     return result

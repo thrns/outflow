@@ -11,11 +11,14 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <limits.h>
 #include <optional>
 #include <string>
 #include <sys/resource.h>
 #include <utility>
 #include <vector>
+#include <dlfcn.h>
+#include <mach-o/dyld.h>
 
 struct WavData {
   int sample_rate = 0;
@@ -240,13 +243,83 @@ static void write_json_string(const std::string& value) {
 }
 
 static int32_t load_transcriber(const char* model_directory) {
-  const moonshine_option_t options[] = {{"identify_speakers", "false"}};
+  // The pinned C API documents CPU as its default. Select it explicitly so
+  // benchmark records prove the accelerator-free path was requested.
+  const moonshine_option_t options[] = {
+      {"identify_speakers", "false"},
+      {"ort_providers", "CPU"},
+  };
   return moonshine_load_transcriber_from_files(
       model_directory,
       MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
       options,
-      1,
+      2,
       MOONSHINE_HEADER_VERSION);
+}
+
+static std::string resolved_path(const char* path) {
+  if (path == nullptr) return {};
+  char buffer[PATH_MAX];
+  if (realpath(path, buffer) == nullptr) return {};
+  return std::string(buffer);
+}
+
+static int run_runtime_identity(const char* executable_path) {
+#if defined(__arm64__) || defined(__aarch64__)
+  constexpr const char* architecture = "arm64";
+#elif defined(__x86_64__)
+  constexpr const char* architecture = "x86_64";
+#else
+  constexpr const char* architecture = "unsupported";
+#endif
+  Dl_info api_info{};
+  if (dladdr(reinterpret_cast<const void*>(&moonshine_get_version), &api_info) == 0) {
+    std::cerr << "Moonshine C API symbol identity unavailable\n";
+    return 1;
+  }
+  const std::string runner = resolved_path(executable_path);
+  const std::string api_path = resolved_path(api_info.dli_fname);
+  if (runner.empty() || api_path.empty()) {
+    std::cerr << "Native runtime path resolution failed\n";
+    return 1;
+  }
+  std::vector<std::string> images;
+  const uint32_t image_count = _dyld_image_count();
+  images.reserve(image_count);
+  for (uint32_t index = 0; index < image_count; ++index) {
+    const char* image_name = _dyld_get_image_name(index);
+    std::string path = resolved_path(image_name);
+    if (path.empty() && image_name != nullptr) {
+      const std::string reported(image_name);
+      // macOS maps many Apple system libraries from the dyld shared cache;
+      // their logical paths do not resolve to standalone files on disk.
+      // Keep those system image names for allowlist checks, but require every
+      // non-system image to resolve to an actual file.
+      if (reported.rfind("/usr/lib/", 0) == 0 ||
+          reported.rfind("/System/Library/", 0) == 0) {
+        path = reported;
+      }
+    }
+    if (path.empty()) {
+      std::cerr << "A loaded native image path could not be resolved\n";
+      return 1;
+    }
+    images.push_back(path);
+  }
+  std::cout << "{\"schema_version\":1,\"architecture\":\"" << architecture
+            << "\",\"pointer_bits\":" << sizeof(void*) * 8
+            << ",\"c_api_version\":" << moonshine_get_version()
+            << ",\"runner_path\":";
+  write_json_string(runner);
+  std::cout << ",\"moonshine_api_path\":";
+  write_json_string(api_path);
+  std::cout << ",\"loaded_images\":[";
+  for (size_t index = 0; index < images.size(); ++index) {
+    if (index != 0) std::cout << ',';
+    write_json_string(images[index]);
+  }
+  std::cout << "]}\n";
+  return std::cout.good() ? 0 : 1;
 }
 
 static int run_load_probe(int argc, char** argv) {
@@ -272,7 +345,7 @@ static int run_load_probe(int argc, char** argv) {
     load_ms.push_back(std::chrono::duration<double, std::milli>(finished - started).count());
     moonshine_free_transcriber(transcriber);
   }
-  std::cout << "{\"schema_version\":1,\"model_load_ms\":[";
+  std::cout << "{\"schema_version\":1,\"execution_provider\":\"CPUExecutionProvider\",\"model_load_ms\":[";
   for (size_t index = 0; index < load_ms.size(); ++index) {
     if (index != 0) std::cout << ',';
     std::cout << std::fixed << std::setprecision(3) << load_ms[index];
@@ -282,6 +355,9 @@ static int run_load_probe(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
+  if (argc == 2 && std::string(argv[1]) == "--runtime-identity") {
+    return run_runtime_identity(argv[0]);
+  }
   if (argc >= 2 && std::string(argv[1]) == "--load-probe") return run_load_probe(argc, argv);
   if (argc < 3) {
     std::cerr << "usage: moonshine_asr_batch MODEL_DIR WAV_PATH...\n";
@@ -312,7 +388,7 @@ int main(int argc, char** argv) {
   }
   moonshine_free_transcriber(transcriber);
 
-  std::cout << "{\"schema_version\":1,\"architecture\":"
+  std::cout << "{\"schema_version\":1,\"execution_provider\":\"CPUExecutionProvider\",\"architecture\":"
             << MOONSHINE_MODEL_ARCH_SMALL_STREAMING << ",\"header_version\":"
             << MOONSHINE_HEADER_VERSION << ",\"model_load_ms\":"
             << std::fixed << std::setprecision(3) << model_load_ms << ",\"outputs\":[";

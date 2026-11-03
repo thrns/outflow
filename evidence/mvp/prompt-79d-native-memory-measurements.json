@@ -1,0 +1,1488 @@
+{
+  "build": {
+    "audio_fixture": {
+      "bytes": 5402230,
+      "description": "pinned upstream two_cities_librivox_48k.wav smoke fixture; not a verified WER fixture",
+      "sha256": "0c7c127dc1ccabb1384de70b2d4591fd37c4e843b6b395efe876846ccd30b1de"
+    },
+    "configuration": "CMake Release arm64; Apple Clang 21.0.0.21000101; same source revision and binary for all runs",
+    "configuration_note": "default_threading leaves MOONSHINE_ORT_SINGLE_THREAD unset; upstream_single_thread_reliability_switch sets MOONSHINE_ORT_SINGLE_THREAD=1. Pinned source documents this as a TSan/reliability-only escape hatch, not a production profile.",
+    "execution_provider": "CPUExecutionProvider",
+    "fixture_manifest_sha256": "2b8478d3976c18ce51d35f62290480b20977569f9fc2cde809f7a20cbbe1f6c4",
+    "model_asset_manifest_sha256": "b676045b9cad1844320c0549c285719d6e68e76bbe331762a77a0eab2030480a",
+    "model_assets": {
+      "adapter.ort": {
+        "bytes": 2870368,
+        "sha256": "c665f742364febad597cc9ac1e0b341ffbee0e24a1466e2f3bde95e6e4771762"
+      },
+      "cross_kv.ort": {
+        "bytes": 5356536,
+        "sha256": "e2d3417144e9514055ebfefe8dcc4c0a55a55adcb8530435844c75c53e352bf6"
+      },
+      "decoder_kv.ort": {
+        "bytes": 81878600,
+        "sha256": "1a05465b1dd955858dfcbee039c0020fb5dd982b0f5094c34e61735d518d771b"
+      },
+      "encoder.ort": {
+        "bytes": 44148576,
+        "sha256": "2d4d973e91e8aca08c51e7e7efa28a46ab265b63d809d5294d18b86bcd85b993"
+      },
+      "frontend.model.ort": {
+        "bytes": 26944,
+        "sha256": "09b1210ae30dc5f0f3e45f0ebab914c254741323114f53fbbe5ae62cca35058f"
+      },
+      "frontend.weights.ort": {
+        "bytes": 7769464,
+        "sha256": "7ef97521bd4bad3928f5bb6808586f4fcc6e92bd5990394112eed7d4052ec338"
+      },
+      "streaming_config.json": {
+        "bytes": 512,
+        "sha256": "26f02b6afb22d60871a5efd85c3d38e569cc0ddb6c5eb6e93d3260152ae8a47a"
+      },
+      "tokenizer.bin": {
+        "bytes": 249974,
+        "sha256": "6884b35fd6377d4c4d32336a0bc152f36b64d1e45b6503683cdc238250a8472d"
+      }
+    },
+    "model_total_bytes": 142300974,
+    "moonshine_library": {
+      "bytes": 10164432,
+      "sha256": "42128afcc4ad6f71d8f6c79012aa81d0b8755c3c6b393c8f9c38029a7de946f5"
+    },
+    "native_runner": {
+      "bytes": 39792,
+      "sha256": "0eefb71563a9a29bc04da5396e977d1d94feebd72fa90c2a2038ed5a50cabeb6"
+    },
+    "native_smoke_source_sha256": "88f882f774272a0e5efdee472b3607a00022f06b4d294ed8c076e64f98469ac1",
+    "onnxruntime_library": {
+      "bytes": 27623992,
+      "sha256": "480790a978a48ad3e06ce86b6025e037bd70221637f5c104a8dde19617364cf4"
+    },
+    "process_tree_definition": "root helper plus currently visible descendants; summed RSS, shared pages may be double counted",
+    "sampling_interval_ms": 100,
+    "session_count_per_process": 2,
+    "streamed_audio_per_session_seconds": 12
+  },
+  "captured_at_utc": "2026-11-03T20:39:53Z",
+  "interpretation": {
+    "full_application_release_gate": "NOT_ASSESSED",
+    "notes": [
+      "Native process-tree smoke only; excludes Tauri/UI and app-owned helper processes.",
+      "The fixture has no verified human reference; no WER was calculated.",
+      "Peak RSS is sampled every 100 ms and may miss brief peaks.",
+      "All runs are retained, including failures/timeouts if any."
+    ],
+    "physical_4gb_gate": "NOT_ASSESSED",
+    "wer_gate": "NOT_ASSESSED"
+  },
+  "measurement_method": {
+    "percentile_method": "linear interpolation (same as scripts/run_native_asr_benchmark.py::percentile)",
+    "sample_interval_ms": 100,
+    "sampler": "scripts/measure_process_tree_rss.py",
+    "statistics_use": "all 10 valid run peaks and all 20 valid session records per configuration; no outliers removed"
+  },
+  "model_load_profiles": {
+    "default_threading": {
+      "interpretation": "Process-cold first load with OS page-cache state uncontrolled; nine subsequent releases/reloads in the same helper process per run.",
+      "process_cold_load_ms_p50": 122.0245,
+      "process_cold_load_ms_p95": 326.16584999999964,
+      "process_tree_peak_rss_max_bytes": 508903424,
+      "runs": [
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 104,
+          "process_load_ms": [
+            482.58,
+            103.721,
+            87.688,
+            84.271,
+            82.708,
+            80.385,
+            83.842,
+            83.889,
+            83.145,
+            82.326
+          ],
+          "process_tree_peak_rss_bytes": 497991680,
+          "run": 1,
+          "sample_count": 19,
+          "status": "PASS",
+          "wall_ms": 1918.64
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            134.993,
+            82.71,
+            84.049,
+            82.35,
+            81.163,
+            84.648,
+            84.618,
+            82.5,
+            82.737,
+            80.988
+          ],
+          "process_tree_peak_rss_bytes": 508903424,
+          "run": 2,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1026.643
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 104,
+          "process_load_ms": [
+            121.411,
+            100.746,
+            89.036,
+            68.423,
+            80.529,
+            85.167,
+            80.275,
+            75.359,
+            65.627,
+            74.718
+          ],
+          "process_tree_peak_rss_bytes": 497041408,
+          "run": 3,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1021.229
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            119.139,
+            89.557,
+            87.721,
+            85.948,
+            85.253,
+            100.38,
+            77.993,
+            69.149,
+            66.511,
+            66.95
+          ],
+          "process_tree_peak_rss_bytes": 503119872,
+          "run": 4,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1014.356
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            119.799,
+            88.925,
+            83.041,
+            83.669,
+            85.291,
+            83.713,
+            85.349,
+            83.599,
+            82.917,
+            74.134
+          ],
+          "process_tree_peak_rss_bytes": 501563392,
+          "run": 5,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1009.928
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            121.174,
+            92.808,
+            99.634,
+            68.534,
+            73.681,
+            74.706,
+            80.115,
+            65.826,
+            70.695,
+            83.997
+          ],
+          "process_tree_peak_rss_bytes": 503742464,
+          "run": 6,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1012.673
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 104,
+          "process_load_ms": [
+            123.053,
+            90.563,
+            82.171,
+            89.617,
+            83.464,
+            82.127,
+            83.114,
+            83.183,
+            83.316,
+            66.151
+          ],
+          "process_tree_peak_rss_bytes": 500809728,
+          "run": 7,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1021.258
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 103,
+          "process_load_ms": [
+            121.213,
+            86.929,
+            82.134,
+            82.322,
+            83.666,
+            83.982,
+            81.342,
+            73.744,
+            65.156,
+            66.967
+          ],
+          "process_tree_peak_rss_bytes": 494632960,
+          "run": 8,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1013.991
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 103,
+          "process_load_ms": [
+            124.331,
+            84.787,
+            80.791,
+            86.139,
+            82.09,
+            83.983,
+            81.597,
+            80.266,
+            65.336,
+            71.911
+          ],
+          "process_tree_peak_rss_bytes": 503218176,
+          "run": 9,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1012.933
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            122.638,
+            92.689,
+            79.57,
+            85.658,
+            81.502,
+            85.005,
+            83.537,
+            85.299,
+            79.314,
+            68.453
+          ],
+          "process_tree_peak_rss_bytes": 506085376,
+          "run": 10,
+          "sample_count": 10,
+          "status": "PASS",
+          "wall_ms": 1014.105
+        }
+      ],
+      "successful_processes": 10,
+      "within_process_reload_ms_p50": 82.827,
+      "within_process_reload_ms_p95": 92.75445
+    },
+    "upstream_single_thread_reliability_switch": {
+      "interpretation": "Process-cold first load with OS page-cache state uncontrolled; nine subsequent releases/reloads in the same helper process per run.",
+      "process_cold_load_ms_p50": 145.11450000000002,
+      "process_cold_load_ms_p95": 160.3867,
+      "process_tree_peak_rss_max_bytes": 496533504,
+      "runs": [
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            141.84,
+            101.101,
+            95.739,
+            98.467,
+            99.326,
+            100.127,
+            97.955,
+            98.926,
+            100.373,
+            100.572
+          ],
+          "process_tree_peak_rss_bytes": 411959296,
+          "run": 1,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1216.743
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            142.6,
+            102.365,
+            99.147,
+            98.09,
+            95.764,
+            97.343,
+            98.723,
+            100.885,
+            96.478,
+            98.615
+          ],
+          "process_tree_peak_rss_bytes": 411090944,
+          "run": 2,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1216.372
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            144.316,
+            102.123,
+            102.698,
+            97.871,
+            98.841,
+            100.647,
+            97.394,
+            102.824,
+            100.434,
+            101.391
+          ],
+          "process_tree_peak_rss_bytes": 410943488,
+          "run": 3,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1218.588
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 103,
+          "process_load_ms": [
+            142.979,
+            103.377,
+            98.909,
+            100.615,
+            102.888,
+            101.848,
+            100.943,
+            100.991,
+            97.986,
+            96.553
+          ],
+          "process_tree_peak_rss_bytes": 408305664,
+          "run": 4,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1217.909
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            146.227,
+            104.878,
+            101.148,
+            100.203,
+            99.059,
+            102.816,
+            101.504,
+            99.405,
+            100.931,
+            100.815
+          ],
+          "process_tree_peak_rss_bytes": 483770368,
+          "run": 5,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1217.175
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            141.798,
+            105.759,
+            100.002,
+            102.504,
+            99.313,
+            100.537,
+            102.841,
+            98.49,
+            96.564,
+            100.082
+          ],
+          "process_tree_peak_rss_bytes": 411123712,
+          "run": 6,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1217.111
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 104,
+          "process_load_ms": [
+            148.145,
+            105.217,
+            104.496,
+            100.757,
+            100.821,
+            100.665,
+            105.404,
+            100.856,
+            107.484,
+            100.172
+          ],
+          "process_tree_peak_rss_bytes": 496533504,
+          "run": 7,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1228.889
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 103,
+          "process_load_ms": [
+            153.999,
+            106.552,
+            100.793,
+            109.034,
+            102.325,
+            102.013,
+            111.076,
+            101.784,
+            98.975,
+            99.891
+          ],
+          "process_tree_peak_rss_bytes": 495157248,
+          "run": 8,
+          "sample_count": 13,
+          "status": "PASS",
+          "wall_ms": 1322.694
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 102,
+          "process_load_ms": [
+            145.913,
+            103.817,
+            102.35,
+            101.146,
+            101.154,
+            100.858,
+            97.985,
+            99.793,
+            98.194,
+            99.834
+          ],
+          "process_tree_peak_rss_bytes": 404193280,
+          "run": 9,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1231.812
+        },
+        {
+          "exit_code": 0,
+          "max_observed_gap_ms": 105,
+          "process_load_ms": [
+            165.613,
+            107.937,
+            97.408,
+            97.231,
+            98.362,
+            101.111,
+            97.416,
+            99.619,
+            107.183,
+            96.986
+          ],
+          "process_tree_peak_rss_bytes": 494518272,
+          "run": 10,
+          "sample_count": 12,
+          "status": "PASS",
+          "wall_ms": 1225.451
+        }
+      ],
+      "successful_processes": 10,
+      "within_process_reload_ms_p50": 100.631,
+      "within_process_reload_ms_p95": 106.89905
+    }
+  },
+  "outflow_base_commit": "4be4e7b226f5a16d1c2104a66aa41d591d6adbca",
+  "platform": {
+    "cpu": "Apple M3 Pro",
+    "installed_physical_memory_bytes": 19327352832,
+    "machine": "arm64",
+    "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+  },
+  "runs": [
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 499.0,
+      "native_process_max_rss_bytes": 918126592,
+      "process_tree_peak_rss_bytes": 829472768,
+      "run": 1,
+      "sample_count": 27,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5884.428,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.093,
+          "session_ms": 1118.605,
+          "stop_to_final_ms": 0.01
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5267.419,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.079,
+          "session_ms": 944.464,
+          "stop_to_final_ms": 0.01
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2727.745
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 108,
+      "model_load_ms": 118.9,
+      "native_process_max_rss_bytes": 794853376,
+      "process_tree_peak_rss_bytes": 791756800,
+      "run": 1,
+      "sample_count": 62,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 2841.479,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.237,
+          "session_ms": 2841.818,
+          "stop_to_final_ms": 0.024
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3101.808,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.259,
+          "session_ms": 3107.949,
+          "stop_to_final_ms": 0.031
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6223.949
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 123,
+      "model_load_ms": 139.0,
+      "native_process_max_rss_bytes": 801144832,
+      "process_tree_peak_rss_bytes": 801144832,
+      "run": 2,
+      "sample_count": 61,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 2872.034,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.241,
+          "session_ms": 2896.404,
+          "stop_to_final_ms": 0.023
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 2918.228,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.249,
+          "session_ms": 2984.787,
+          "stop_to_final_ms": 0.025
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6166.853
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 108,
+      "model_load_ms": 119.2,
+      "native_process_max_rss_bytes": 1017643008,
+      "process_tree_peak_rss_bytes": 949501952,
+      "run": 2,
+      "sample_count": 23,
+      "sampled_process_names": [
+        "<defunct>",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5860.848,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.092,
+          "session_ms": 1100.652,
+          "stop_to_final_ms": 0.01
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5169.681,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.077,
+          "session_ms": 922.923,
+          "stop_to_final_ms": 0.01
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2312.263
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 98.3,
+      "native_process_max_rss_bytes": 1020248064,
+      "process_tree_peak_rss_bytes": 931577856,
+      "run": 3,
+      "sample_count": 22,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5478.559,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.085,
+          "session_ms": 1019.404,
+          "stop_to_final_ms": 0.01
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5261.329,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.079,
+          "session_ms": 946.112,
+          "stop_to_final_ms": 0.01
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2205.602
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 120.6,
+      "native_process_max_rss_bytes": 795754496,
+      "process_tree_peak_rss_bytes": 795459584,
+      "run": 3,
+      "sample_count": 67,
+      "sampled_process_names": [
+        "<defunct>",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3205.018,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.267,
+          "session_ms": 3205.104,
+          "stop_to_final_ms": 0.027
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3197.955,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.267,
+          "session_ms": 3198.542,
+          "stop_to_final_ms": 0.026
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6713.66
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 138.0,
+      "native_process_max_rss_bytes": 907902976,
+      "process_tree_peak_rss_bytes": 907902976,
+      "run": 4,
+      "sample_count": 63,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3010.833,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.251,
+          "session_ms": 3012.178,
+          "stop_to_final_ms": 0.027
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3003.067,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.251,
+          "session_ms": 3017.177,
+          "stop_to_final_ms": 0.027
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6322.241
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 123.4,
+      "native_process_max_rss_bytes": 924762112,
+      "process_tree_peak_rss_bytes": 924762112,
+      "run": 4,
+      "sample_count": 24,
+      "sampled_process_names": [
+        "<defunct>",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5918.897,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.094,
+          "session_ms": 1122.8,
+          "stop_to_final_ms": 0.063
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5367.95,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.08,
+          "session_ms": 960.772,
+          "stop_to_final_ms": 0.01
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2422.352
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 106,
+      "model_load_ms": 98.8,
+      "native_process_max_rss_bytes": 1017626624,
+      "process_tree_peak_rss_bytes": 930217984,
+      "run": 5,
+      "sample_count": 22,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5414.06,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.083,
+          "session_ms": 999.679,
+          "stop_to_final_ms": 0.011
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5334.94,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.08,
+          "session_ms": 963.223,
+          "stop_to_final_ms": 0.01
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2208.087
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 122.5,
+      "native_process_max_rss_bytes": 800456704,
+      "process_tree_peak_rss_bytes": 800456704,
+      "run": 5,
+      "sample_count": 67,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3233.694,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.269,
+          "session_ms": 3233.977,
+          "stop_to_final_ms": 0.025
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3231.095,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.269,
+          "session_ms": 3231.34,
+          "stop_to_final_ms": 0.029
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6725.089
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 139.4,
+      "native_process_max_rss_bytes": 795459584,
+      "process_tree_peak_rss_bytes": 795459584,
+      "run": 6,
+      "sample_count": 67,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3181.347,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.265,
+          "session_ms": 3182.113,
+          "stop_to_final_ms": 0.047
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3253.295,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.271,
+          "session_ms": 3255.128,
+          "stop_to_final_ms": 0.026
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6725.429
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 119.7,
+      "native_process_max_rss_bytes": 1010614272,
+      "process_tree_peak_rss_bytes": 1010614272,
+      "run": 6,
+      "sample_count": 23,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5806.568,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.091,
+          "session_ms": 1087.865,
+          "stop_to_final_ms": 0.01
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5323.977,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.081,
+          "session_ms": 971.163,
+          "stop_to_final_ms": 0.045
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2320.423
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 106.4,
+      "native_process_max_rss_bytes": 910868480,
+      "process_tree_peak_rss_bytes": 897400832,
+      "run": 7,
+      "sample_count": 27,
+      "sampled_process_names": [
+        "<defunct>",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 6478.48,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.103,
+          "session_ms": 1231.821,
+          "stop_to_final_ms": 0.011
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5989.123,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.101,
+          "session_ms": 1208.9,
+          "stop_to_final_ms": 0.011
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2736.449
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 121.9,
+      "native_process_max_rss_bytes": 829095936,
+      "process_tree_peak_rss_bytes": 829095936,
+      "run": 7,
+      "sample_count": 63,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3143.916,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.262,
+          "session_ms": 3147.377,
+          "stop_to_final_ms": 0.026
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 2881.417,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.242,
+          "session_ms": 2904.215,
+          "stop_to_final_ms": 0.025
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6335.938
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 140.0,
+      "native_process_max_rss_bytes": 863059968,
+      "process_tree_peak_rss_bytes": 863059968,
+      "run": 8,
+      "sample_count": 68,
+      "sampled_process_names": [
+        "<defunct>",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3259.999,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.272,
+          "session_ms": 3269.474,
+          "stop_to_final_ms": 0.016
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3235.978,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.27,
+          "session_ms": 3244.863,
+          "stop_to_final_ms": 0.028
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6835.654
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 109,
+      "model_load_ms": 146.8,
+      "native_process_max_rss_bytes": 984252416,
+      "process_tree_peak_rss_bytes": 963952640,
+      "run": 8,
+      "sample_count": 25,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "<defunct>",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 6144.192,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.101,
+          "session_ms": 1213.066,
+          "stop_to_final_ms": 0.01
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5294.083,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.08,
+          "session_ms": 958.605,
+          "stop_to_final_ms": 0.1
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2517.894
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 99.8,
+      "native_process_max_rss_bytes": 1015791616,
+      "process_tree_peak_rss_bytes": 938295296,
+      "run": 9,
+      "sample_count": 22,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5442.947,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.084,
+          "session_ms": 1005.747,
+          "stop_to_final_ms": 0.01
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5305.458,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.08,
+          "session_ms": 960.386,
+          "stop_to_final_ms": 0.01
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2207.252
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 119.6,
+      "native_process_max_rss_bytes": 815661056,
+      "process_tree_peak_rss_bytes": 815661056,
+      "run": 9,
+      "sample_count": 68,
+      "sampled_process_names": [
+        "<defunct>",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3228.084,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.269,
+          "session_ms": 3228.437,
+          "stop_to_final_ms": 0.027
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3267.475,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.273,
+          "session_ms": 3270.017,
+          "stop_to_final_ms": 0.027
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6816.541
+    },
+    {
+      "configuration": "upstream_single_thread_reliability_switch",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 110,
+      "model_load_ms": 138.5,
+      "native_process_max_rss_bytes": 889602048,
+      "process_tree_peak_rss_bytes": 889585664,
+      "run": 10,
+      "sample_count": 65,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3157.155,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.263,
+          "session_ms": 3159.709,
+          "stop_to_final_ms": 0.027
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 3078.72,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.257,
+          "session_ms": 3078.898,
+          "stop_to_final_ms": 0.025
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 6530.637
+    },
+    {
+      "configuration": "default_threading",
+      "execution_provider": "CPUExecutionProvider",
+      "exit_code": 0,
+      "max_observed_gap_ms": 107,
+      "model_load_ms": 119.5,
+      "native_process_max_rss_bytes": 1016758272,
+      "process_tree_peak_rss_bytes": 928088064,
+      "run": 10,
+      "sample_count": 23,
+      "sampled_process_names": [
+        "(prompt79d_moonsh)",
+        "prompt79d_moonshine_stream_smoke"
+      ],
+      "sampler_exit_code": 0,
+      "sampling_interval_requested_ms": 100,
+      "sessions": [
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5780.304,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.09,
+          "session_ms": 1084.902,
+          "stop_to_final_ms": 0.019
+        },
+        {
+          "all_final_lines_complete": true,
+          "cpu_ms": 5355.709,
+          "final_lines": 3,
+          "final_nonempty": true,
+          "partial_calls": 10,
+          "partial_nonempty": true,
+          "rtf": 0.08,
+          "session_ms": 962.879,
+          "stop_to_final_ms": 0.01
+        }
+      ],
+      "status": "PASS",
+      "wall_ms": 2318.759
+    }
+  ],
+  "schema_version": "outflow-prompt79d-native-memory-matrix-v1",
+  "source_revision": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+  "summary": {
+    "default_threading": {
+      "cpu_ms_median": 5428.503500000001,
+      "cpu_ms_p95": 6160.9064,
+      "model_load_median_ms": 119.35,
+      "model_load_ms_each_run": [
+        499.0,
+        119.2,
+        98.3,
+        123.4,
+        98.8,
+        119.7,
+        106.4,
+        146.8,
+        99.8,
+        119.5
+      ],
+      "model_load_p95_ms": 340.50999999999965,
+      "native_process_max_rss_p95_bytes": 1019075788.8,
+      "peak_rss_bytes_each_run": [
+        829472768,
+        949501952,
+        931577856,
+        924762112,
+        930217984,
+        1010614272,
+        897400832,
+        963952640,
+        938295296,
+        928088064
+      ],
+      "peak_rss_max_bytes": 1010614272,
+      "peak_rss_median_bytes": 930897920.0,
+      "peak_rss_min_bytes": 829472768,
+      "peak_rss_p95_bytes": 989616537.5999999,
+      "release_limit_exceedances": 2,
+      "rtf_median": 0.0835,
+      "rtf_p95": 0.10110000000000001,
+      "session_ms_median": 1002.713,
+      "session_ms_p95": 1214.00375,
+      "stop_to_final_ms_median": 0.01,
+      "stop_to_final_ms_p95": 0.06485000000000003,
+      "valid_runs": 10
+    },
+    "upstream_single_thread_reliability_switch": {
+      "cpu_ms_median": 3169.251,
+      "cpu_ms_p95": 3260.3727999999996,
+      "model_load_median_ms": 130.25,
+      "model_load_ms_each_run": [
+        118.9,
+        139.0,
+        120.6,
+        138.0,
+        122.5,
+        139.4,
+        121.9,
+        140.0,
+        119.6,
+        138.5
+      ],
+      "model_load_p95_ms": 139.73,
+      "native_process_max_rss_p95_bytes": 899667558.4,
+      "peak_rss_bytes_each_run": [
+        791756800,
+        801144832,
+        795459584,
+        907902976,
+        800456704,
+        795459584,
+        829095936,
+        863059968,
+        815661056,
+        889585664
+      ],
+      "peak_rss_max_bytes": 907902976,
+      "peak_rss_median_bytes": 808402944.0,
+      "peak_rss_min_bytes": 791756800,
+      "peak_rss_p95_bytes": 899660185.6,
+      "release_limit_exceedances": 0,
+      "rtf_median": 0.264,
+      "rtf_p95": 0.27205,
+      "session_ms_median": 3170.911,
+      "session_ms_p95": 3269.50115,
+      "stop_to_final_ms_median": 0.0265,
+      "stop_to_final_ms_p95": 0.03180000000000001,
+      "valid_runs": 10
+    }
+  }
+}

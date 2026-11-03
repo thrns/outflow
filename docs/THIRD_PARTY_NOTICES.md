@@ -31,7 +31,7 @@ A planned notice means only that a notice requirement has been identified and a 
 
 ## Known open questions
 
-- KISS FFT's `COPYING` identifies BSD-3-Clause but references a `LICENSES/BSD-3-Clause` file absent from the pinned checkout. The standard text is available in the [SPDX License List](https://raw.githubusercontent.com/spdx/license-list-data/main/text/BSD-3-Clause.txt); no Outflow notice package has been assembled.
+- KISS FFT's `COPYING` identifies BSD-3-Clause but references a `LICENSES/BSD-3-Clause` file absent from the pinned checkout. Prompt 79D added the standard text with Mark Borgerding's copyright to [`docs/licenses/KISS-FFT-BSD-3-Clause.txt`](licenses/KISS-FFT-BSD-3-Clause.txt), cross-checked against the [SPDX License List](https://spdx.org/licenses/BSD-3-Clause.html). Its inclusion in any actual source or binary distribution is not yet verified, so the planned notice remains blocked.
 - Eigen's exact covered files and applicable MPL-2.0 source and notice obligations need confirmation.
 - The Prompt 79 macOS arm64 build linked the local `libonnxruntime.1.23.2.dylib` (SHA-256 recorded in the evidence file). Its filename and matching runtime version do not prove build provenance. The official [ONNX Runtime v1.23.2 ThirdPartyNotices.txt](https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/ThirdPartyNotices.txt) is available, but the exact binary's full notice set has not been reconciled or packaged.
 - utf8proc's Unicode-related terms need assessment against the actual selected files, including whether `utf8proc_data.c` is present.
@@ -46,3 +46,7 @@ Troubleshooting:
 - **Unsafe destination rejected:** use `null` until a repository-relative destination is chosen; absolute paths, drive paths, backslashes, and `..` are not accepted.
 - **Blocked notice needs resolution:** update the source evidence and open questions only after the relevant files or terms have been inspected. Do not promote the state by assumption.
 - **Manifest passes but readiness is incomplete:** expected. Validation confirms metadata consistency; it does not inspect binaries, installers, or legal permissions.
+
+### Prompt 79D notice update (2026-11-03)
+
+Runtime identity is now checked against the libraries actually loaded by the macOS native helper, and the KISS FFT BSD-3-Clause text is present in the repository. The ONNX Runtime binary still lacks verified source/build provenance, the full transitive notice set has not been matched to that binary, and neither notice has a verified installer destination. The notice manifest therefore remains structurally valid but incomplete, with redistribution approval `undetermined`.

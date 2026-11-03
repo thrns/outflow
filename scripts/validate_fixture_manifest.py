@@ -27,6 +27,16 @@ ALLOWED_CATEGORIES = {
     "numbers",
     "silence",
 }
+ALLOWED_DURATION_CLASSES = {"short", "long", "silence_control"}
+ALLOWED_COVERAGE_ATTRIBUTES = {
+    "quiet_environment",
+    "noisy_environment",
+    "accented_english",
+    "proper_nouns",
+    "technical_vocabulary",
+    "numbers",
+    "abbreviations",
+}
 ALLOWED_VERIFICATION_STATUSES = {"not_verified", "verified"}
 SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
 REQUIRED_FIXTURE_FIELDS = {
@@ -118,10 +128,84 @@ def _file_sha256(path: Path) -> str | None:
     return digest.hexdigest()
 
 
-def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tuple[list[str], dict[str, int]]:
+def assess_corpus_coverage(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize ready-fixture coverage against explicit inclusion criteria.
+
+    This presence/count check does not claim statistical representativeness.
+    Coverage needs at least one example per condition and two source-reported
+    accent varieties, in addition to the established short/long counts.
+    """
+    ready = [fixture for fixture in fixtures if fixture.get("status") == "ready"]
+    attributes = [
+        {item for item in fixture.get("coverage_attributes", []) if isinstance(item, str)}
+        for fixture in ready
+        if isinstance(fixture.get("coverage_attributes", []), list)
+    ]
+    count = lambda name: sum(name in row for row in attributes)
+    accent_varieties = {
+        fixture.get("speaker_variety")
+        for fixture in ready
+        if isinstance(fixture.get("coverage_attributes"), list)
+        and "accented_english" in fixture["coverage_attributes"]
+        and isinstance(fixture.get("speaker_variety"), str)
+    }
+    durations = [fixture.get("duration_class") for fixture in ready]
+    coverage: dict[str, Any] = {
+        "ready_fixture_count": len(ready),
+        "short_utterance_count": durations.count("short"),
+        "long_utterance_count": durations.count("long"),
+        "quiet_speech_count": count("quiet_environment"),
+        "noisy_speech_count": count("noisy_environment"),
+        "accented_speech_count": count("accented_english"),
+        "accent_variety_count": len(accent_varieties),
+        "proper_nouns_count": count("proper_nouns"),
+        "technical_vocabulary_count": count("technical_vocabulary"),
+        "numbers_count": count("numbers"),
+        "abbreviations_count": count("abbreviations"),
+        "silence_control_count": durations.count("silence_control"),
+        "provenance_verified_fixture_count": sum(
+            fixture.get("provenance_verified") is True
+            or (
+                isinstance(fixture.get("provenance"), dict)
+                and all(_nonempty_string(fixture["provenance"].get(field)) for field in ("source", "source_release", "citation"))
+                and fixture.get("license_or_permission_status") == "verified"
+                and _nonempty_string(fixture.get("license_or_permission_evidence"))
+            )
+            for fixture in ready
+        ),
+        "human_verified_reference_count": sum(
+            fixture.get("human_reference_verified") is True
+            or (
+                fixture.get("human_transcription_status") == "verified"
+                and _nonempty_string(fixture.get("human_transcription_review_method"))
+                and _nonempty_string(fixture.get("reference_sha256"))
+            )
+            for fixture in ready
+        ),
+    }
+    requirements = {
+        "short_utterance_count": coverage["short_utterance_count"] >= 100,
+        "long_utterance_count": coverage["long_utterance_count"] >= 50,
+        "quiet_speech_coverage": coverage["quiet_speech_count"] >= 1,
+        "noisy_speech_coverage": coverage["noisy_speech_count"] >= 1,
+        "accent_and_speaker_variety": coverage["accent_variety_count"] >= 2,
+        "proper_noun_coverage": coverage["proper_nouns_count"] >= 1,
+        "technical_vocabulary_coverage": coverage["technical_vocabulary_count"] >= 1,
+        "number_coverage": coverage["numbers_count"] >= 1,
+        "abbreviation_coverage": coverage["abbreviations_count"] >= 1,
+        "silence_control_coverage": coverage["silence_control_count"] >= 1,
+        "verified_provenance_for_all_ready_fixtures": bool(ready) and coverage["provenance_verified_fixture_count"] == len(ready),
+        "human_verified_references_for_all_ready_fixtures": bool(ready) and coverage["human_verified_reference_count"] == len(ready),
+    }
+    coverage["requirements"] = requirements
+    coverage["complete"] = all(requirements.values())
+    return coverage
+
+
+def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tuple[list[str], dict[str, Any]]:
     """Return validation errors and readiness counts for parsed manifest data."""
     errors: list[str] = []
-    counts = {"planned_entries": 0, "ready_audio_fixtures": 0}
+    counts: dict[str, Any] = {"planned_entries": 0, "ready_audio_fixtures": 0}
 
     if not isinstance(data, dict):
         return ["manifest root must be a JSON object"], counts
@@ -191,6 +275,61 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
             errors.append(f"{label}.category must be one of {sorted(ALLOWED_CATEGORIES)}")
         if not _nonempty_string(fixture.get("recording_condition")):
             errors.append(f"{label}.recording_condition must be a non-empty string")
+
+        duration_class = fixture.get("duration_class")
+        coverage_attributes = fixture.get("coverage_attributes")
+        speaker_variety = fixture.get("speaker_variety")
+        if duration_class is not None and (
+            not isinstance(duration_class, str) or duration_class not in ALLOWED_DURATION_CLASSES
+        ):
+            errors.append(f"{label}.duration_class is unsupported")
+        if coverage_attributes is not None:
+            if (
+                not isinstance(coverage_attributes, list)
+                or any(not isinstance(item, str) or item not in ALLOWED_COVERAGE_ATTRIBUTES for item in coverage_attributes)
+                or len(coverage_attributes) != len(set(coverage_attributes))
+            ):
+                errors.append(f"{label}.coverage_attributes contains unsupported or duplicate values")
+                coverage_attributes = None
+        if speaker_variety is not None and (
+            not _nonempty_string(speaker_variety) or len(speaker_variety) > 100
+        ):
+            errors.append(f"{label}.speaker_variety must be a non-empty non-identifying label of at most 100 characters or null")
+        if status == "ready":
+            if not isinstance(duration_class, str) or duration_class not in ALLOWED_DURATION_CLASSES:
+                errors.append(f"{label}.duration_class is required for a ready fixture")
+            if coverage_attributes is None:
+                errors.append(f"{label}.coverage_attributes is required for a ready fixture")
+            attrs = set(coverage_attributes or [])
+            if duration_class == "silence_control" and attrs:
+                errors.append(f"{label} silence controls cannot carry speech coverage attributes")
+            if duration_class == "silence_control" and category != "silence":
+                errors.append(f"{label} silence_control duration requires the silence category")
+            if isinstance(duration_class, str) and duration_class in {"short", "long"} and category == "silence":
+                errors.append(f"{label} speech duration cannot use the silence category")
+            if isinstance(category, str):
+                if category == "short_speech" and duration_class != "short":
+                    errors.append(f"{label} short_speech category conflicts with duration_class")
+                if category == "long_speech" and duration_class != "long":
+                    errors.append(f"{label} long_speech category conflicts with duration_class")
+                if category == "silence" and duration_class != "silence_control":
+                    errors.append(f"{label} silence category conflicts with duration_class")
+                legacy_attribute = {
+                    "quiet_environment": "quiet_environment",
+                    "noisy_environment": "noisy_environment",
+                    "accented_english": "accented_english",
+                    "numbers": "numbers",
+                }.get(category)
+                if legacy_attribute and legacy_attribute not in attrs:
+                    errors.append(f"{label}.category must be included in coverage_attributes")
+                if category == "proper_nouns_technical_vocabulary" and not attrs.intersection({"proper_nouns", "technical_vocabulary"}):
+                    errors.append(f"{label}.category requires proper_nouns or technical_vocabulary coverage")
+            if {"quiet_environment", "noisy_environment"}.issubset(attrs):
+                errors.append(f"{label} cannot be classified as both quiet and noisy")
+            if "accented_english" in attrs and not _nonempty_string(speaker_variety):
+                errors.append(f"{label}.speaker_variety is required for accented English coverage")
+            if "accented_english" not in attrs and speaker_variety is not None:
+                errors.append(f"{label}.speaker_variety requires accented English coverage")
 
         audio_file_value = fixture.get("audio_file")
         audio_file = _safe_repository_file(
@@ -264,6 +403,10 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
                     and abs(duration - audio_metadata["frame_count"] / audio_metadata["sample_rate_hz"]) > 0.001
                 ):
                     errors.append(f"{label}.audio_metadata duration does not match its frame count")
+                elif status == "ready" and duration_class == "short" and duration > 5.0:
+                    errors.append(f"{label}.duration_class short requires an audio duration of at most 5 seconds")
+                elif status == "ready" and duration_class == "long" and duration <= 5.0:
+                    errors.append(f"{label}.duration_class long requires an audio duration over 5 seconds")
 
         review_method = fixture.get("human_transcription_review_method")
         if review_method is not None and not _nonempty_string(review_method):
@@ -335,6 +478,10 @@ def validate_manifest(data: Any, base_dir: Path | str = REPOSITORY_ROOT) -> tupl
         if status == "ready" and len(errors) == entry_error_start:
             counts["ready_audio_fixtures"] += 1
 
+    counts["coverage"] = assess_corpus_coverage(fixtures)
+    if collection_status == "complete" and not counts["coverage"]["complete"]:
+        errors.append("collection_status cannot be complete while required fixture coverage is missing")
+
     return errors, counts
 
 
@@ -362,8 +509,21 @@ def main() -> int:
     print(f"Manifest version: {data['schema_version']}")
     print(f"Planned entries: {counts['planned_entries']}")
     print(f"Ready audio fixtures: {counts['ready_audio_fixtures']}")
+    coverage = counts["coverage"]
+    print(
+        "Coverage: "
+        f"short={coverage['short_utterance_count']}/100, "
+        f"long={coverage['long_utterance_count']}/50, "
+        f"quiet={coverage['quiet_speech_count']}, noisy={coverage['noisy_speech_count']}, "
+        f"accent varieties={coverage['accent_variety_count']}, "
+        f"proper nouns={coverage['proper_nouns_count']}, "
+        f"technical vocabulary={coverage['technical_vocabulary_count']}, "
+        f"numbers={coverage['numbers_count']}, abbreviations={coverage['abbreviations_count']}, "
+        f"silence={coverage['silence_control_count']}"
+    )
     readiness = "READY" if counts["ready_audio_fixtures"] > 0 else "NOT READY"
     print(f"ASR benchmark readiness: {readiness}")
+    print(f"Required diverse corpus coverage: {'PASS' if coverage['complete'] else 'NOT ASSESSED'}")
     return 0
 
 

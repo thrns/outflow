@@ -62,6 +62,8 @@ The third-party source inventory still distinguishes conditional source paths fr
 
 The intended Outflow-minimal CPU-only ASR build has **not** been compiled, linked, or tested. Prompt 79 did compile the pinned upstream target with TTS enabled, link it to the local macOS arm64 ONNX Runtime dylib, and inspect its symbols and runtime measurements. That development artifact contains or retains the source modules described in the linked evidence; it does not establish behavior on other platforms, an installer package, or redistribution permission. The machine-readable build-scope checklist remains intentionally source-only and continues to report compiled status as not tested for the future Outflow target.
 
+Prompt 79D explicitly selected `ort_providers=CPU` in the native smoke and batch harnesses and verified successful partial/final inference with `CPUExecutionProvider`. This establishes CPU-only inference for these local harnesses only. The pinned `core/ort-utils/ort-utils.cpp` also exposes `MOONSHINE_ORT_SINGLE_THREAD`; upstream documents it as a ThreadSanitizer/reliability-only escape hatch. A paired smoke experiment measured it but did not adopt it as an application setting. No production CPU/thread configuration or cross-platform provider contract has been selected.
+
 T-009 remains unchecked, and this supplement does not complete T-010, T-013, AC-01, or AC-06.
 
 Validate the manifest and run its tests from the repository root:

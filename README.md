@@ -1355,6 +1355,145 @@ CLANG_MODULE_CACHE_PATH=/private/tmp/prompt79c-clang-module-cache swift -e \
   'import ApplicationServices; print(AXIsProcessTrusted() ? "AX_TRUSTED" : "AX_NOT_TRUSTED")'
 ```
 
+### Prompt 79D reproduction: feasibility corrections and paired memory runs
+
+Prompt 79D tightened the fixture-coverage, physical-hardware, native-linkage, and measured-result checks. The current host is macOS arm64 with 19,327,352,832 installed physical bytes, so it is ineligible for the 4,000,000,000-byte reference-machine cap. The reference-class allowlist is empty. The fixture manifest has 0 ready fixtures, so no real WER result exists and the full quality gate remains `NOT_ASSESSED`.
+
+Set the same local source, build, and model locations used by the recorded experiment. These paths are outside Git and must already exist; the commands do not download source, models, or speech data.
+
+```sh
+MOONSHINE_SOURCE_DIR=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
+BUILD_DIR=/private/tmp/prompt79-moonshine-wrapper-build-onnx
+MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+ORT_DIR="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64"
+
+python3 scripts/moonshine_model_source_audit.py --source-dir "$MOONSHINE_SOURCE_DIR"
+python3 scripts/validate_model_asset_inventory.py \
+  --manifest evidence/mvp/prompt-79-model-assets.json --asset-root "$MODEL_DIR"
+python3 scripts/validate_fixture_manifest.py
+```
+
+Rebuild the development-only native helpers against the existing Release library. The batch helper has a private stdout protocol that contains hypotheses; never run its inference mode directly in a terminal. `--runtime-identity` is sanitized, and the Python evaluator captures inference output in memory.
+
+```sh
+clang++ -std=c++17 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
+  tests/native/moonshine_streaming_smoke.cpp \
+  -L"$BUILD_DIR/moonshine-core" -lmoonshine \
+  -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
+  -Wl,-rpath,"$ORT_DIR" \
+  -o /private/tmp/prompt79d_moonshine_stream_smoke
+
+clang++ -std=c++20 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
+  tests/native/moonshine_asr_batch.cpp \
+  -L"$BUILD_DIR/moonshine-core" -lmoonshine \
+  -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
+  -Wl,-rpath,"$ORT_DIR" \
+  -o /private/tmp/prompt79d_moonshine_asr_batch
+
+DYLD_LIBRARY_PATH="$BUILD_DIR/moonshine-core:$ORT_DIR" \
+  python3 scripts/verify_native_runtime.py \
+    --native-runner /private/tmp/prompt79d_moonshine_asr_batch \
+    --moonshine-library "$BUILD_DIR/moonshine-core/libmoonshine.dylib" \
+    --onnxruntime-library "$ORT_DIR/libonnxruntime.1.23.2.dylib"
+```
+
+The runtime verifier asks the helper which dyld image contains `moonshine_get_version`, records all active image paths in volatile memory, and checks that the loaded helper, Moonshine library, and ONNX Runtime exactly match the supplied inputs. It checks architecture with `lipo`, dependency declarations with `otool -L`, hashes before and after the probe, and rejects unresolved/ambiguous identities or unapproved non-system images. Apple shared-cache images do not always have standalone files to hash; only documented system roots are accepted. The sanitized output includes the helper, Moonshine, and ONNX Runtime SHA-256 values without persisting local absolute paths.
+
+The native smoke used two sequential 12-second streaming sessions over the same upstream audio slice. Reproduce both measured configurations with ten fresh process-tree runs each; use a new output directory because the sampler refuses to overwrite evidence.
+
+```sh
+RUNS_DIR=/private/tmp/prompt79d-repro-runs
+mkdir -p "$RUNS_DIR"
+for mode in default single_thread; do
+  for run in $(seq -w 1 10); do
+    output="$RUNS_DIR/${mode}-${run}.json"
+    if [ "$mode" = single_thread ]; then
+      python3 scripts/measure_process_tree_rss.py --interval-ms 100 \
+        --output "$output" -- env MOONSHINE_ORT_SINGLE_THREAD=1 \
+        /private/tmp/prompt79d_moonshine_stream_smoke "$MODEL_DIR" \
+        "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
+    else
+      python3 scripts/measure_process_tree_rss.py --interval-ms 100 \
+        --output "$output" -- \
+        /private/tmp/prompt79d_moonshine_stream_smoke "$MODEL_DIR" \
+        "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
+    fi
+  done
+done
+```
+
+`MOONSHINE_ORT_SINGLE_THREAD=1` is the pinned source's ThreadSanitizer/reliability escape hatch, not a production profile. In the recorded matrix it reduced the ten-run median sampled RSS to 808,402,944 bytes and maximum to 907,902,976 bytes, while session p95 rose from 1,214.004 ms to 3,269.501 ms. Default-thread maximum was 1,010,614,272 bytes, with 2/10 over the 950,000,000-byte cap. The complete paired measurements, all run peaks, warm/cold load probes, exact artifacts, and sampler caveats are in [`prompt-79d-native-memory-measurements.json`](evidence/mvp/prompt-79d-native-memory-measurements.json). This native-only experiment does not certify the Tauri app or 4 GB hardware.
+
+The measured evaluator and validator commands are:
+
+```sh
+DYLD_LIBRARY_PATH="$BUILD_DIR/moonshine-core:$ORT_DIR" \
+  python3 scripts/run_native_asr_benchmark.py \
+    --model-dir "$MODEL_DIR" --asset-root "$MODEL_DIR" \
+    --source-dir "$MOONSHINE_SOURCE_DIR" \
+    --native-runner /private/tmp/prompt79d_moonshine_asr_batch \
+    --moonshine-library "$BUILD_DIR/moonshine-core/libmoonshine.dylib" \
+    --onnxruntime-library "$ORT_DIR/libonnxruntime.1.23.2.dylib" \
+    --machine-label MAC-ARM64-01 --cpu-label "Apple M3 Pro" \
+    --output /private/tmp/prompt79d-measured-asr.json
+
+python3 scripts/validate_measured_asr_results.py \
+  --file /private/tmp/prompt79d-measured-asr.json
+```
+
+With the checked-in manifest, the evaluator currently exits with `no verified ready fixtures are available for native evaluation` before loading the model and writes no result. The checked-in manifest contains eight planned rows and zero ready rows. Do not use the smoke WAV as a WER fixture: it has no reviewed reference or Outflow fixture permission record. A ready fixture requires the exact audio and reference hashes, measured audio metadata, file-level provenance and permission evidence, independent coverage attributes, and a human-verified transcription. `collection_status: complete` must wait until all minimum counts and diversity requirements in [`docs/BENCHMARK_FIXTURES.md`](docs/BENCHMARK_FIXTURES.md) pass. The validator rejects duplicate IDs, malformed fields, missing/changed reference files, incomplete coverage, and unsupported attribute combinations.
+
+After a specific recording's redistribution and commercial-evaluation rights have been approved, add its WAV and a separate human-verified UTF-8 reference under the policy-approved repository paths. Listen to the complete recording and adjudicate names, numbers, abbreviations, and punctuation before marking it ready. These commands only hash exact bytes and read WAV metadata; they do not generate or review a reference:
+
+```sh
+AUDIO=fixtures/benchmark-audio/example.wav
+REFERENCE=fixtures/benchmark-references/example.txt
+shasum -a 256 "$AUDIO" "$REFERENCE"
+python3 - "$AUDIO" <<'PY'
+import json
+import sys
+import wave
+
+with wave.open(sys.argv[1], "rb") as audio:
+    if audio.getcomptype() != "NONE" or audio.getsampwidth() != 2 or audio.getnchannels() != 1:
+        raise SystemExit("fixture WAV must be uncompressed PCM16 mono")
+    frames = audio.getnframes()
+    rate = audio.getframerate()
+    print(json.dumps({
+        "sample_format": "PCM_S16LE",
+        "sample_rate_hz": rate,
+        "channels": audio.getnchannels(),
+        "frame_count": frames,
+        "duration_seconds": frames / rate,
+    }, sort_keys=True))
+PY
+python3 scripts/validate_fixture_manifest.py
+```
+
+Record the resulting hashes and measured metadata in the manifest, along with source release/file ID, permission evidence, duration class, independent coverage attributes, source-reported variety if relevant, and the human-review method/status. Do not add Common Voice files without written clarification on its no-mirroring terms; do not infer file rights from a catalog page.
+
+The measured-results writer runs `validate_measured_results` before opening the output file and refuses to overwrite an existing path. The separate synthetic schema remains `result_type: synthetic`; synthetic counts or hypotheses must not be substituted for real ASR results. Result validation checks schema, exact hardware fields, corpus coverage, WER arithmetic, timing summaries, native binary hashes, runtime identity assertions, release-gate consistency, and transcript/audio/path content exclusion.
+
+Current dataset blockers: Mozilla's [Common Voice terms](https://commonvoice.mozilla.org/dav/terms) ask users not to mirror any dataset subset outside Mozilla Data Collective, so do not check its files into this repository without written clarification and review. [LibriSpeech SLR12](https://us.openslr.org/12/) lists CC BY 4.0; a selected file still needs exact release/file attribution, permission review, and human audio/reference adjudication. No candidate dataset was downloaded for Prompt 79D.
+
+Run the complete requested local regression set from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -v
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+git diff --check
+```
+
+The full checked suite results and exact platform limits for this correction are recorded in [`prompt-79d-detailed-implementation-handoff.md`](evidence/mvp/prompt-79d-detailed-implementation-handoff.md). A passing native smoke, source audit, or schema test is not a WER result, physical 4 GB measurement, application RSS result, or release approval.
+
 Run the complete applicable repository checks from the root:
 
 ```sh

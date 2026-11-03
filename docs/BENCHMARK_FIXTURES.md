@@ -10,10 +10,10 @@ The future corpus target is at least **100 short speech phrases and 50 longer sp
 
 ### Public corpus leads checked 2026-11-03 (not selected or ready)
 
-- Mozilla's [Common Voice Data Collective](https://commonvoice.mozilla.org/en/datasets) currently lists English spontaneous-speech ASR data under CC0-1.0. This is a plausible source for spontaneous speech and contributor-reported accent metadata where present. The dataset page is JavaScript-rendered and access may require an email address. A catalog entry is not file-level provenance or privacy review; inspect the exact release, metadata fields, each chosen recording, permitted use, and any non-sensitive-content constraints before selecting clips.
-- [OpenSLR LibriSpeech SLR12](https://www.openslr.org/12/) lists read English speech under CC BY 4.0 and has clean and more challenging subsets. It is a plausible source for read speech, but does not by itself establish broad accent, conversational, or environmental-noise coverage. Preserve attribution and review the exact source files and references.
+- Mozilla's [Common Voice Data Collective](https://commonvoice.mozilla.org/dav/datasets) lists English speech under CC0, but the current [Common Voice Legal Terms](https://commonvoice.mozilla.org/dav/terms) ask users not to post, distribute, or mirror any Common Voice dataset, in whole or part, outside Mozilla Data Collective. That conflicts with checking fixture audio into Outflow's repository. Do not copy a subset into this corpus without written clarification from Mozilla and the project's legal reviewer. Its current catalog scale also makes full-dataset acquisition unsuitable.
+- [OpenSLR LibriSpeech SLR12](https://us.openslr.org/12/) lists read English speech under CC BY 4.0 and provides clean and more challenging sets. This may support a small selected subset if exact files, attribution, release metadata, and references are verified. It does not establish broad accent, conversational, or real-world noise coverage; the listed archives are hundreds of megabytes, so obtain a small subset only through a lawful reproducible method.
 
-These are research leads only: neither corpus has been acquired into the repository or approved for this frozen benchmark. There are still **0 ready fixtures**. No file hashes, verified references, permission records, or category counts are inferred from these source listings.
+Neither source has been acquired into the repository or approved for this frozen benchmark. No file hashes, verified references, permission records, or coverage counts are inferred from catalog listings. There are still **0 ready fixtures**. Mozilla's no-mirroring request is a concrete blocker for Common Voice; LibriSpeech still needs exact-file provenance and human audio/reference review.
 
 ## Manifest fields
 
@@ -32,6 +32,9 @@ The JSON document uses schema version `1`. The Python validator rejects unsuppor
 | `id` | Stable, unique fixture identifier. Do not recycle an ID for changed audio. |
 | `status` | `planned` or `ready`. Only validated `ready` entries with all required files count as ready. |
 | `category` | One coverage label: `short_speech`, `long_speech`, `quiet_environment`, `noisy_environment`, `accented_english`, `proper_nouns_technical_vocabulary`, `numbers`, or `silence`. |
+| `duration_class` | Backward-compatible optional field for planned rows; required for ready rows. Use `short` (measured duration ≤5 seconds), `long` (>5 seconds), or `silence_control`. This is independent of the descriptive `category`. |
+| `coverage_attributes` | Backward-compatible optional list for planned rows; required for ready rows. Allowed independent tags: `quiet_environment`, `noisy_environment`, `accented_english`, `proper_nouns`, `technical_vocabulary`, `numbers`, and `abbreviations`. A fixture cannot be both quiet and noisy. |
+| `speaker_variety` | Optional non-identifying, source-reported English variety label; required only when `accented_english` is tagged. Do not infer demographic identity or label speakers from voice alone. |
 | `recording_condition` | Non-sensitive description of the planned or observed recording condition. For ready entries, record the actual condition and relevant source metadata. |
 | `audio_file` | Repository-relative path to the exact audio file, or `null` while unavailable. |
 | `audio_sha256` | SHA-256 hex digest of the exact audio-file bytes, or `null` while unavailable. |
@@ -71,6 +74,8 @@ The frozen English set must meet the TECH_STACK Phase 0 minimum of at least 100 
 - Silence/no-speech controls, kept separate from speech WER denominators and reported as no-speech behavior.
 
 Balance categories across short/long utterances and quiet/noisy conditions where the source permits. Document actual counts and known gaps when freezing the set; category labels alone do not prove representative coverage.
+
+The manifest validator independently counts each ready fixture's `duration_class` and coverage attributes. Complete coverage requires at least 100 short and 50 long utterances; at least one quiet and one noisy speech fixture; accented English with at least two distinct source-reported variety labels; at least one proper-noun, technical-vocabulary, number, abbreviation, and silence-control fixture; and verified provenance plus human-reviewed references for every ready fixture. These are minimum inclusion criteria, not a claim of statistical representativeness. `collection_status: "complete"` is rejected unless every criterion passes. One hundred short and fifty long labels alone never establish coverage.
 
 ## Audio integrity and versioning
 

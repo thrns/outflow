@@ -95,7 +95,7 @@
       "license_evidence_urls": [
         "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/kissfft/COPYING"
       ],
-      "attribution_or_notice_requirements": "The bundled COPYING records Mark Borgerding's copyright and identifies BSD-3-Clause. Preserve the copyright notice, conditions and disclaimer in source or binary redistribution materials, and do not use contributor names to endorse a product without permission. COPYING refers to LICENSES/BSD-3-Clause; confirm the complete license text is included in the release notice set.",
+      "attribution_or_notice_requirements": "The bundled COPYING records Mark Borgerding's copyright and identifies BSD-3-Clause. Preserve the copyright notice, conditions and disclaimer in source or binary redistribution materials, and do not use contributor names to endorse a product without permission. COPYING refers to LICENSES/BSD-3-Clause; Prompt 79D reproduced the canonical text in docs/licenses/KISS-FFT-BSD-3-Clause.txt, but inclusion in the release notice set must still be confirmed.",
       "source_build_evidence_urls": [
         "https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/CMakeLists.txt"
       ],
@@ -104,7 +104,7 @@
       "runtime_use_assessment": "The core CMake source list compiles kiss_fft.c and kiss_fftr.c as part of cpp-annote, which is added to the Moonshine target. This is source build evidence, not a check of a packaged library.",
       "binary_verification_status": "not-verified",
       "outstanding_questions": [
-        "Provide the complete BSD-3-Clause notice in the selected release's source and binary materials, preserving the Mark Borgerding copyright and conditions.",
+        "Confirm the complete BSD-3-Clause notice is included in the selected release's source and binary materials, preserving the Mark Borgerding copyright and conditions.",
         "Confirm platform packaging preserves the BSD-3-Clause notices."
       ]
     },
