@@ -195,8 +195,8 @@ Run all Python/Rust/frontend checks with the exact commands recorded in README. 
 - Changed code: fixture manifest evaluator, measured ASR runner/result validator, standalone runtime verifier, native batch/smoke helpers, focused Python tests.
 - Changed docs/evidence: README, benchmark fixture/results guidance, task ledger, model decision, Moonshine build/license/third-party/notice records, KISS FFT text, runtime identity evidence, paired native memory evidence, licensing review, and this handoff.
 - Excluded from Git: model weights, upstream smoke audio, generated native binaries, raw process output and private WER hypotheses. The committed memory/identity JSON contains only sanitized machine/build hashes and numeric evidence.
-- Final commit SHA and GitHub commit URL: resolve from the pushed branch after commit. A commit cannot contain its own hash without another commit; the delivery response is the exact final reference.
-- Worktree state: record after final `git diff --check`, path audit, commit, and push. No push is complete until the remote branch SHA is queried and matches local `HEAD`.
+- Final commit reference: `origin/codex/prompt79d-feasibility` is the branch ref containing this handoff. Resolve its current SHA with `git rev-parse HEAD` and verify it against `git ls-remote origin refs/heads/codex/prompt79d-feasibility`; the delivery response records the exact verified SHA and GitHub commit URL because a commit cannot embed its own hash.
+- Worktree state at delivery: clean; local `codex/prompt79d-feasibility` tracks `origin/codex/prompt79d-feasibility`. The exact final SHA is confirmed in the delivery response.
 
 ## J. Next engineering milestone
 
