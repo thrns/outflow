@@ -50,20 +50,122 @@ class MacMicProbePrivacyTests(unittest.TestCase):
         self.assertNotIn("_partial_text", writer_region)
         self.assertNotIn("_final_text", writer_region)
 
-    def test_probe_has_no_clipboard_or_cross_application_injection_api(self) -> None:
+    def test_probe_has_no_cross_application_injection_api(self) -> None:
         sources = "\n".join(
             path.read_text(encoding="utf-8")
             for path in PROBE_ROOT.rglob("*")
             if path.is_file() and path.suffix in {".mm", ".cpp", ".hpp"}
         )
         for forbidden in (
-            "NSPasteboard",
             "CGEventPost",
             "AXUIElement",
             "CGPreflightPostEventAccess",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, sources)
+
+    def test_clipboard_write_is_bound_to_one_explicit_button_action(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        action = self.app_method(
+            app, "- (void)copyResultPressed:(id)sender {", "- (void)settingsPressed:(id)sender {"
+        )
+        writer_start = app.index("bool write_clipboard_text(std::string_view text) {")
+        writer_end = app.index("bool print_runtime_identity(", writer_start)
+        writer = app[writer_start:writer_end]
+
+        self.assertIn('make_button(@"Copy Result", self,', app)
+        self.assertIn("@selector(copyResultPressed:)", app)
+        self.assertEqual(action.count("request_copy_result("), 1)
+        self.assertIn("_copy_result_text, write_clipboard_text", action)
+        self.assertEqual(app.count("writeObjects:@[value]"), 1)
+        self.assertIn("clipboard_write_failure_message()", action)
+        self.assertIn("accessBehavior", app)
+        self.assertNotIn("NSPasteboard generalPasteboard].stringForType", app)
+        self.assertEqual(writer.count("writeObjects:@[value]"), 1)
+        self.assertNotIn("clearContents", writer)
+        self.assertNotIn("declareTypes", writer)
+        for clipboard_read in ("stringForType:", "dataForType:", "readObjectsForClasses:",
+                               "URLFromPasteboard"):
+            with self.subTest(clipboard_read=clipboard_read):
+                self.assertNotIn(clipboard_read, app)
+
+        lifecycle_handlers = (
+            ("- (void)startPressed:(id)sender {", "- (void)stopPressed:(id)sender {"),
+            ("- (void)stopPressed:(id)sender {", "- (void)cancelPressed:(id)sender {"),
+            ("- (void)cancelPressed:(id)sender {", "- (void)dismissPressed:(id)sender {"),
+            ("- (void)dismissPressed:(id)sender {", "- (void)copyResultPressed:(id)sender {"),
+            ("- (std::uint64_t)prepareSession {", "- (void)startWorkerForSession:"),
+            ("- (void)handleWorkerEvent:(WorkerEvent)event {", "- (void)refreshControls {"),
+            ("- (void)applicationWillTerminate:(NSNotification*)notification {",
+             "- (BOOL)windowShouldClose:"),
+        )
+        for start, end in lifecycle_handlers:
+            body = self.app_method(app, start, end)
+            with self.subTest(handler=start):
+                self.assertNotIn("write_clipboard_text", body)
+                self.assertNotIn("request_copy_result", body)
+
+    def test_copy_policy_requires_ready_nonempty_current_session_text(self) -> None:
+        policy = (PROBE_ROOT / "copy_result_policy.hpp").read_text(encoding="utf-8")
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        refresh = self.app_method(
+            app, "- (void)refreshControls {", "- (void)stopSourcesForShutdown {"
+        )
+        final = self.app_method(
+            app, "- (void)handleWorkerEvent:(WorkerEvent)event {", "- (void)refreshControls {"
+        )
+
+        self.assertIn("state == SessionState::ResultReady", policy)
+        self.assertIn("accepted_session_id != 0", policy)
+        self.assertIn("result_session_id == accepted_session_id", policy)
+        self.assertIn("!final_text.empty()", policy)
+        self.assertIn("state, _state.session_id(), _copy_result_session_id, _copy_result_text",
+                      refresh)
+        self.assertIn("_copy_result_text = std::move(event.text);", final)
+        self.assertIn('"No speech was recognized in this session."', final)
+        self.assertIn("_copy_result_text.empty()", final)
+        self.assertNotIn("_partial_text.string", final.split("case WorkerEventKind::Final:", 1)[1]
+                         .split("case WorkerEventKind::Cancelled:", 1)[0])
+
+    def test_copy_result_memory_clears_on_cancel_dismiss_and_shutdown(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        clear = self.app_method(app, "- (void)clearFinalResult {",
+                                "- (void)cancelActiveSessionForDismissal {")
+        cancel = self.app_method(app, "- (void)cancelPressed:(id)sender {",
+                                 "- (void)dismissPressed:(id)sender {")
+        dismiss = self.app_method(app, "- (void)dismissPressed:(id)sender {",
+                                  "- (void)copyResultPressed:(id)sender {")
+        shutdown = self.app_method(
+            app, "- (void)applicationWillTerminate:(NSNotification*)notification {",
+            "- (BOOL)windowShouldClose:")
+        prepare = self.app_method(app, "- (std::uint64_t)prepareSession {",
+                                  "- (void)startWorkerForSession:")
+        handler = self.app_method(
+            app, "- (void)handleWorkerEvent:(WorkerEvent)event {", "- (void)refreshControls {")
+
+        self.assertIn("clear_sensitive_text(_copy_result_text)", clear)
+        self.assertIn("_copy_result_session_id = 0", clear)
+        self.assertIn("[self clearFinalResult]", cancel)
+        self.assertIn("[self clearFinalResult]", dismiss)
+        self.assertIn("[self clearFinalResult]", shutdown)
+        self.assertIn("[self clearFinalResult]", prepare)
+        self.assertGreaterEqual(handler.count("[self clearFinalResult]"), 2)
+
+    def test_copy_button_and_result_preview_are_keyboard_accessible(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        self.assertIn("button.accessibilityLabel = title", app)
+        self.assertIn("_copy_result_button.accessibilityHelp", app)
+        self.assertIn('_copy_result_button.keyEquivalent = @"\\r"', app)
+        self.assertIn("[_final_text setNextKeyView:_copy_result_button]", app)
+        self.assertIn("view.editable = NO", app)
+        self.assertIn("view.selectable = YES", app)
+        self.assertIn('_copy_warning_label.accessibilityLabel = @"Clipboard privacy warning"', app)
+        self.assertIn('_copy_status_label.accessibilityLabel = @"Copy Result status"', app)
+        self.assertIn(
+            "Copied text may be retained by clipboard managers or synced to other devices.",
+            app,
+        )
+        self.assertIn("Copy failed. Select the text above, then press ⌘C", app)
 
     def test_only_idle_start_and_preparing_worker_ready_can_open_capture(self) -> None:
         app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")

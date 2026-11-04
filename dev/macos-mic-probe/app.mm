@@ -2,6 +2,7 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 
+#include "copy_result_policy.hpp"
 #include "fixture_producer.hpp"
 #include "macos_capture.hpp"
 #include "model_verifier.hpp"
@@ -186,6 +187,31 @@ bool write_metrics_exclusive(const std::filesystem::path& path,
   return ::close(descriptor) == 0;
 }
 
+bool write_clipboard_text(std::string_view text) {
+  // Convert before touching the system pasteboard. A single writeObjects:
+  // call reports the OS result; no clear/declare pre-write is performed, and
+  // NSPasteboard does not promise transactional rollback.
+  NSString* value = [[NSString alloc] initWithBytes:text.data()
+                                             length:text.size()
+                                           encoding:NSUTF8StringEncoding];
+  if (value == nil) return false;
+  return [[NSPasteboard generalPasteboard] writeObjects:@[value]];
+}
+
+NSString* clipboard_write_failure_message() {
+  // This reads only macOS's per-app access policy, never pasteboard contents.
+  switch ([NSPasteboard generalPasteboard].accessBehavior) {
+    case NSPasteboardAccessBehaviorAlwaysDeny:
+      return @"macOS blocks clipboard access for this app. Check System Settings, or select the text above and press ⌘C.";
+    case NSPasteboardAccessBehaviorAsk:
+      return @"macOS did not allow the clipboard write. Check System Settings, or select the text above and press ⌘C.";
+    case NSPasteboardAccessBehaviorDefault:
+    case NSPasteboardAccessBehaviorAlwaysAllow:
+      return @"Copy failed. Select the text above, then press ⌘C to copy it manually.";
+  }
+  return @"Copy failed. Select the text above, then press ⌘C to copy it manually.";
+}
+
 bool print_runtime_identity(const char* executable_path) {
   char resolved_executable[PATH_MAX]{};
   if (executable_path == nullptr ||
@@ -274,13 +300,18 @@ PreviewViews make_preview() {
   NSTextField* __strong _partial_label;
   NSTextField* __strong _final_label;
   NSTextField* __strong _metrics_label;
+  NSTextField* __strong _copy_warning_label;
+  NSTextField* __strong _copy_status_label;
   NSTextView* __strong _partial_text;
   NSTextView* __strong _final_text;
   NSButton* __strong _start_button;
   NSButton* __strong _stop_button;
   NSButton* __strong _cancel_button;
   NSButton* __strong _dismiss_button;
+  NSButton* __strong _copy_result_button;
   NSButton* __strong _settings_button;
+  std::string _copy_result_text;
+  std::uint64_t _copy_result_session_id;
   SessionStateMachine _state;
   std::uint64_t _next_session_id;
   std::unique_ptr<SessionWorker> _worker;
@@ -298,7 +329,9 @@ PreviewViews make_preview() {
 - (void)stopPressed:(id)sender;
 - (void)cancelPressed:(id)sender;
 - (void)dismissPressed:(id)sender;
+- (void)copyResultPressed:(id)sender;
 - (void)settingsPressed:(id)sender;
+- (void)clearFinalResult;
 - (std::uint64_t)prepareSession;
 - (void)startWorkerForSession:(std::uint64_t)session_id;
 - (void)invalidatePermissionRequest;
@@ -318,6 +351,7 @@ PreviewViews make_preview() {
     _permission_request_generation = 0;
     _stop_request_ns = 0;
     _microphone_release_ns = 0;
+    _copy_result_session_id = 0;
   }
   return self;
 }
@@ -325,7 +359,7 @@ PreviewViews make_preview() {
 - (void)applicationDidFinishLaunching:(NSNotification*)notification {
   (void)notification;
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-  NSRect frame = NSMakeRect(0, 0, 650, 520);
+  NSRect frame = NSMakeRect(0, 0, 650, 570);
   _window = [[NSWindow alloc] initWithContentRect:frame
                                         styleMask:(NSWindowStyleMaskTitled |
                                                    NSWindowStyleMaskClosable |
@@ -334,7 +368,7 @@ PreviewViews make_preview() {
                                           backing:NSBackingStoreBuffered
                                             defer:NO];
   _window.title = @"Outflow Mic Probe — Development Only";
-  _window.minSize = NSMakeSize(560, 470);
+  _window.minSize = NSMakeSize(560, 520);
   _window.delegate = self;
 
   NSView* content = _window.contentView;
@@ -348,6 +382,12 @@ PreviewViews make_preview() {
   _final_label = make_label(@"Final result", 12.0, YES);
   _metrics_label = make_label(@"No session measurements yet.", 11.0, NO);
   _metrics_label.textColor = NSColor.secondaryLabelColor;
+  _copy_warning_label = make_label(
+      @"Copied text may be retained by clipboard managers or synced to other devices.",
+      12.0, NO);
+  _copy_warning_label.accessibilityLabel = @"Clipboard privacy warning";
+  _copy_status_label = make_label(@"", 12.0, NO);
+  _copy_status_label.accessibilityLabel = @"Copy Result status";
   const auto partial_preview = make_preview();
   const auto final_preview = make_preview();
   NSScrollView* partial_scroll = partial_preview.scroll;
@@ -359,8 +399,35 @@ PreviewViews make_preview() {
   _stop_button = make_button(@"Stop", self, @selector(stopPressed:));
   _cancel_button = make_button(@"Cancel", self, @selector(cancelPressed:));
   _dismiss_button = make_button(@"Dismiss result", self, @selector(dismissPressed:));
+  _copy_result_button = make_button(@"Copy Result", self,
+                                    @selector(copyResultPressed:));
+  _copy_result_button.keyEquivalent = @"\r";
+  _copy_result_button.accessibilityHelp =
+      @"After a nonempty final result appears, activate this button or press Return to copy it.";
+  [_copy_result_button setContentHuggingPriority:NSLayoutPriorityRequired
+                                     forOrientation:NSLayoutConstraintOrientationHorizontal];
   _settings_button = make_button(@"Microphone Settings", self,
                                  @selector(settingsPressed:));
+
+  NSStackView* copy_row = [[NSStackView alloc] initWithFrame:NSZeroRect];
+  [copy_row addArrangedSubview:_copy_result_button];
+  [copy_row addArrangedSubview:_copy_status_label];
+  copy_row.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  copy_row.alignment = NSLayoutAttributeCenterY;
+  copy_row.distribution = NSStackViewDistributionFill;
+  copy_row.spacing = 12.0;
+  copy_row.translatesAutoresizingMaskIntoConstraints = NO;
+
+  // Make the copy action part of the explicit key-view path even when the
+  // system's general Full Keyboard Access preference is disabled.
+  [_partial_text setNextKeyView:_final_text];
+  [_final_text setNextKeyView:_copy_result_button];
+  [_copy_result_button setNextKeyView:_start_button];
+  [_start_button setNextKeyView:_stop_button];
+  [_stop_button setNextKeyView:_cancel_button];
+  [_cancel_button setNextKeyView:_dismiss_button];
+  [_dismiss_button setNextKeyView:_settings_button];
+  [_settings_button setNextKeyView:_partial_text];
 
   NSArray<NSView*>* controls = @[_start_button, _stop_button, _cancel_button,
                                  _dismiss_button, _settings_button];
@@ -374,7 +441,7 @@ PreviewViews make_preview() {
 
   for (NSView* view in @[title, subtitle, _permission_label, _state_label,
                          _partial_label, partial_scroll, _final_label, final_scroll,
-                         _metrics_label, button_row]) {
+                         copy_row, _copy_warning_label, _metrics_label, button_row]) {
     [content addSubview:view];
   }
   [NSLayoutConstraint activateConstraints:@[
@@ -402,9 +469,15 @@ PreviewViews make_preview() {
     [final_scroll.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
     [final_scroll.topAnchor constraintEqualToAnchor:_final_label.bottomAnchor constant:4],
     [final_scroll.heightAnchor constraintGreaterThanOrEqualToConstant:74],
+    [copy_row.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+    [copy_row.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+    [copy_row.topAnchor constraintEqualToAnchor:final_scroll.bottomAnchor constant:8],
+    [_copy_warning_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+    [_copy_warning_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+    [_copy_warning_label.topAnchor constraintEqualToAnchor:copy_row.bottomAnchor constant:4],
     [_metrics_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [_metrics_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
-    [_metrics_label.topAnchor constraintEqualToAnchor:final_scroll.bottomAnchor constant:10],
+    [_metrics_label.topAnchor constraintEqualToAnchor:_copy_warning_label.bottomAnchor constant:8],
     [_metrics_label.bottomAnchor constraintLessThanOrEqualToAnchor:button_row.topAnchor constant:-8],
     [button_row.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [button_row.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
@@ -446,7 +519,7 @@ PreviewViews make_preview() {
     _worker.reset();
   }
   _partial_text.string = @"";
-  _final_text.string = @"";
+  [self clearFinalResult];
 }
 
 - (BOOL)windowShouldClose:(NSWindow*)sender {
@@ -463,7 +536,7 @@ PreviewViews make_preview() {
   [self invalidatePermissionRequest];
   [self cancelActiveSessionForDismissal];
   _partial_text.string = @"";
-  _final_text.string = @"";
+  [self clearFinalResult];
 }
 
 - (void)startPressed:(id)sender {
@@ -572,7 +645,7 @@ PreviewViews make_preview() {
   }
   const auto cleanup_complete_ns = monotonic_time_ns();
   _partial_text.string = @"";
-  _final_text.string = @"";
+  [self clearFinalResult];
   if (_launch.fixture_mode) {
     _metrics_label.stringValue = [NSString stringWithFormat:
         @"Cancelled. Temporary preview cleared. Fixture stopped; worker cleanup complete. Queue at cancel %llu/16, max %llu/16, overflow %llu. No cancellation metrics file was written.",
@@ -610,12 +683,30 @@ PreviewViews make_preview() {
     _worker.reset();
   }
   _partial_text.string = @"";
-  _final_text.string = @"";
+  [self clearFinalResult];
   _metrics_label.stringValue = @"No session measurements yet.";
   if (_state.dismiss()) {
     _state_label.stringValue = @"State: Idle";
   }
   [self refreshControls];
+}
+
+- (void)copyResultPressed:(id)sender {
+  (void)sender;
+  const auto outcome = request_copy_result(
+      _state.state(), _state.session_id(), _copy_result_session_id,
+      _copy_result_text, write_clipboard_text);
+  switch (outcome) {
+    case CopyResultAttempt::Rejected:
+      return;
+    case CopyResultAttempt::Succeeded:
+      _copy_status_label.stringValue =
+          @"Copied. Paste manually where you want the text.";
+      break;
+    case CopyResultAttempt::Failed:
+      _copy_status_label.stringValue = clipboard_write_failure_message();
+      break;
+  }
 }
 
 - (void)settingsPressed:(id)sender {
@@ -637,7 +728,7 @@ PreviewViews make_preview() {
   const auto session_id = _next_session_id++;
   if (!_state.begin(session_id)) return 0;
   _partial_text.string = @"";
-  _final_text.string = @"";
+  [self clearFinalResult];
   _metrics_label.stringValue = @"Verifying local model files and preparing one CPU stream…";
   _state_label.stringValue = @"State: Preparing";
   _stop_request_ns = 0;
@@ -790,9 +881,15 @@ PreviewViews make_preview() {
         clear_sensitive_text(event.text);
         return;
       }
-      _final_text.string = event.text.empty() ? @"No speech was recognized in this session."
-                                               : ns_string(event.text);
+      _copy_result_text = std::move(event.text);
+      _copy_result_session_id = event.session_id;
+      _final_text.string = _copy_result_text.empty()
+          ? @"No speech was recognized in this session."
+          : ns_string(_copy_result_text);
       clear_sensitive_text(event.text);
+      _copy_status_label.stringValue = _copy_result_text.empty()
+          ? @"No final text is available to copy."
+          : @"";
       const bool metrics_saved = write_metrics_exclusive(_launch.metrics_path,
                                                          event.metrics);
       _metrics_label.stringValue = [NSString stringWithFormat:
@@ -832,7 +929,7 @@ PreviewViews make_preview() {
       }
       [self stopSourcesForShutdown];
       _partial_text.string = @"";
-      _final_text.string = @"";
+      [self clearFinalResult];
       if (_state.state() != SessionState::Cancelled) (void)_state.cancel(event.session_id);
       if (_worker) {
         _worker->join();
@@ -855,7 +952,7 @@ PreviewViews make_preview() {
       }
       [self stopSourcesForShutdown];
       _partial_text.string = @"";
-      _final_text.string = @"";
+      [self clearFinalResult];
       if (_state.state() != SessionState::Error) (void)_state.fail(event.session_id);
       if (_worker) {
         _worker->join();
@@ -881,6 +978,8 @@ PreviewViews make_preview() {
   _stop_button.enabled = state == SessionState::Listening;
   _cancel_button.enabled = active;
   _dismiss_button.enabled = terminal;
+  _copy_result_button.enabled = copy_result_eligible(
+      state, _state.session_id(), _copy_result_session_id, _copy_result_text);
   _settings_button.enabled = !_launch.fixture_mode;
   if (!_launch.fixture_mode) _permission_label.stringValue = permission_status_text();
 }
@@ -896,6 +995,13 @@ PreviewViews make_preview() {
   }
 }
 
+- (void)clearFinalResult {
+  clear_sensitive_text(_copy_result_text);
+  _copy_result_session_id = 0;
+  _final_text.string = @"";
+  _copy_status_label.stringValue = @"";
+}
+
 - (void)cancelActiveSessionForDismissal {
   [self stopSourcesForShutdown];
   if (_worker) {
@@ -909,7 +1015,7 @@ PreviewViews make_preview() {
     (void)_state.cancel(_state.session_id());
   }
   _partial_text.string = @"";
-  _final_text.string = @"";
+  [self clearFinalResult];
 }
 
 @end

@@ -1,4 +1,5 @@
 #include "audio_pipeline.hpp"
+#include "copy_result_policy.hpp"
 #include "fixture_producer.hpp"
 #include "permission_policy.hpp"
 #include "session_state.hpp"
@@ -298,6 +299,73 @@ void test_microphone_permission_decisions() {
   assert(!is_current_permission_request(3, 3, true, false, 41, state));
 }
 
+void test_explicit_copy_result_policy_and_exact_text() {
+  std::size_t write_requests = 0;
+  std::string written_text;
+  const auto fake_writer = [&](std::string_view text) {
+    ++write_requests;
+    written_text.assign(text.data(), text.size());
+    return true;
+  };
+  const std::string final_text = "Café — line one!\nSecond line 😀…";
+
+  // Merely receiving a final result does not invoke the injected writer.
+  assert(write_requests == 0);
+  assert(copy_result_eligible(SessionState::ResultReady, 71, 71, final_text));
+
+  for (const auto state : {SessionState::Idle, SessionState::Preparing,
+                           SessionState::Listening, SessionState::Finalizing,
+                           SessionState::Cancelled, SessionState::Error}) {
+    assert(!copy_result_eligible(state, 71, 71, final_text));
+    assert(request_copy_result(state, 71, 71, final_text, fake_writer) ==
+           CopyResultAttempt::Rejected);
+  }
+  assert(!copy_result_eligible(SessionState::ResultReady, 71, 71, {}));
+  assert(request_copy_result(SessionState::ResultReady, 71, 71, {}, fake_writer) ==
+         CopyResultAttempt::Rejected);
+
+  // A visible no-speech message is display-only: empty transcript data is
+  // passed to the policy, so the placeholder can never reach the writer.
+  const std::string placeholder = "No speech was recognized in this session.";
+  const std::string empty_final_text;
+  assert(!copy_result_eligible(SessionState::ResultReady, 71, 71,
+                               empty_final_text));
+  assert(request_copy_result(SessionState::ResultReady, 71, 71,
+                             empty_final_text, fake_writer) ==
+         CopyResultAttempt::Rejected);
+  assert(written_text != placeholder);
+
+  assert(!copy_result_eligible(SessionState::ResultReady, 72, 71, final_text));
+  assert(request_copy_result(SessionState::ResultReady, 72, 71, final_text,
+                             fake_writer) == CopyResultAttempt::Rejected);
+  assert(write_requests == 0);
+
+  // The explicit action makes one request and preserves all UTF-8 bytes,
+  // including punctuation, a newline, and a multi-byte emoji.
+  assert(request_copy_result(SessionState::ResultReady, 71, 71, final_text,
+                             fake_writer) == CopyResultAttempt::Succeeded);
+  assert(write_requests == 1);
+  assert(written_text == final_text);
+
+  // A failed writer does not alter the session-owned result or eligibility.
+  const auto failed_writer = [&](std::string_view text) {
+    ++write_requests;
+    written_text.assign(text.data(), text.size());
+    return false;
+  };
+  assert(request_copy_result(SessionState::ResultReady, 71, 71, final_text,
+                             failed_writer) == CopyResultAttempt::Failed);
+  assert(write_requests == 2);
+  assert(written_text == final_text);
+  assert(copy_result_eligible(SessionState::ResultReady, 71, 71, final_text));
+
+  // Cancel, Dismiss/new-session identity, and errors all disable the action.
+  assert(!copy_result_eligible(SessionState::Cancelled, 71, 71, final_text));
+  assert(!copy_result_eligible(SessionState::Idle, 72, 0, final_text));
+  assert(!copy_result_eligible(SessionState::Error, 71, 71, final_text));
+  assert(write_requests == 2);
+}
+
 void test_bounded_pcm16_wav_fixture_reader() {
   std::vector<std::uint8_t> bytes{
       'R','I','F','F', 40,0,0,0, 'W','A','V','E',
@@ -345,7 +413,8 @@ int main() {
   test_timed_fixture_clock();
   test_timed_fixture_producer_supports_two_sessions();
   test_microphone_permission_decisions();
+  test_explicit_copy_result_policy_and_exact_text();
   test_bounded_pcm16_wav_fixture_reader();
-  std::cout << "mic probe core tests passed: 12 groups; 100 state cycles; "
+  std::cout << "mic probe core tests passed: 13 groups; 100 state cycles; "
                "permission generation and restart guards; 2 fixture starts\n";
 }

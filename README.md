@@ -1371,6 +1371,59 @@ Permission grant is accepted only for the still-current request generation and s
 
 This evidence applies only to the development-only AppKit/AVFoundation probe on the tested macOS machine. It does not complete T-011, T-025–T-034, AC-06, T-010, or any production/release gate. The 4 GB hardware, model quality, full app resource limits, and cross-platform behavior remain unverified.
 
+### Prompt 79G — explicit Copy Result in the development probe
+
+Prompt 79G adds a development-only **Copy Result** action to the existing AppKit probe. It does not implement the production Tauri result panel, target identity checks, or insertion. **T-046, T-047, T-010, T-011, AC-10, and the MVP remain incomplete.** The final preview stays selectable and is retained in volatile memory only while its accepted session is ResultReady.
+
+#### Build and launch
+
+Use the already-authorized local Moonshine source, libraries, model, and fixture. These paths match the environment used for the Prompt 79G verification on the local macOS host; choose a fresh build directory if it already exists:
+
+```sh
+export MOONSHINE_SOURCE_DIR=/private/tmp/outflow-feasibility/moonshine-234f60faa0eb388b01cdf7e60aca232af37aefda
+export MOONSHINE_SOURCE_REVISION=234f60faa0eb388b01cdf7e60aca232af37aefda
+export MOONSHINE_LIBRARY=/private/tmp/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
+export MOONSHINE_ORT_LIBRARY="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib"
+export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
+export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-prompt79g-build
+scripts/build_macos_mic_probe.sh
+export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
+scripts/run_macos_mic_probe.sh \
+  --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
+  --fixture-seconds 12
+```
+
+Press **Start timed fixture**, wait for temporary partial text, then press **Stop**. For microphone capture, launch without fixture options with `scripts/run_macos_mic_probe.sh`, press **Start recording**, speak, and press **Stop**. Model loading, partial recognition, Stop, automatic finalization, Cancel, Dismiss, and shutdown do not write to the clipboard.
+
+#### Copy, failure recovery, and privacy
+
+**Copy Result** is disabled before a result, during Preparing/Listening/Finalizing, after an empty or silent result, and after Cancel, Dismiss, or Error. It becomes enabled only when a nonempty actual final transcript belongs to the current accepted ResultReady session. A display-only “No speech was recognized in this session.” message is never eligible. Click **Copy Result** or activate it with **Return**; then paste manually into the destination field. The final preview stays visible until **Dismiss result**.
+
+The warning shown before copying is: **“Copied text may be retained by clipboard managers or synced to other devices.”** Clipboard managers or OS synchronization may retain copied content. If the operating system reports a write failure, the app keeps the final text visible and selectable and suggests selecting it and pressing **⌘C**. It does not automatically retry, read the prior clipboard, or intentionally clear the clipboard first. NSPasteboard does not promise rollback/atomicity after a failed write, so the app does not claim the previous clipboard is always preserved. Cancel stops capture and clears in-app text; Dismiss clears the final preview and returns to Idle. Neither action writes clipboard content.
+
+#### Tests and observed results
+
+Run the focused development-probe suites and full repository regressions with:
+
+```sh
+scripts/test_macos_mic_probe.sh
+scripts/test_macos_mic_probe.sh --real-fixture
+python3 -m unittest discover -s scripts/tests -v
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+git diff --check
+```
+
+The focused native suite reports 13 core groups and 9 worker lifecycle groups, including 100 repeated start/stop/cancel/dismiss cycles. The real-fixture suite uses the authorized 12-second local WAV and must report nonempty partial and final recognition. The source-level privacy suite checks that writes are limited to the explicit guarded action and that no normal clipboard-content read is added. Full regression results and any unavailable repository-wide commands are recorded in `evidence/mvp/prompt-79g-detailed-implementation-handoff.md`; this local AppKit work is not evidence for production AC-10 or release gates.
+
 ### Authorized local development model preparation
 
 The pinned source commit `234f60faa0eb388b01cdf7e60aca232af37aefda` selects the English Small Streaming catalog path `https://download.moonshine.ai/model/small-streaming-en/quantized_26_08_21/`. The path is a dated catalog directory, not a separate immutable artifact revision. The eight files total 142,300,974 bytes. Their observed hashes are recorded in the evidence manifest; the existing verifier checks every byte and SHA-256:
