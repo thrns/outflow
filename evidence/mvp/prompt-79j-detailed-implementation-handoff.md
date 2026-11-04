@@ -126,7 +126,9 @@ The shell launcher needed the desktop user context for LaunchServices in this en
 - Task branch: `codex/prompt79j-synthetic-copy-diagnostic`.
 - Base branch and SHA: `codex/prompt79i-copy-result-identity` at `0f256777d8a0f29239b9b7e017b3f4ca9b770da5`.
 - Changed files: `README.md`; `dev/macos-mic-probe/app.mm`; `dev/macos-mic-probe/launch_policy.hpp`; `dev/macos-mic-probe/synthetic_copy_diagnostic.hpp`; `dev/macos-mic-probe/tests/core_test.cpp`; `scripts/run_macos_mic_probe.sh`; `scripts/test_macos_mic_probe.sh`; `scripts/tests/test_macos_mic_probe_privacy.py`; `docs/TASKS.md`; and this handoff.
-- Commit SHA, pushed remote head, and final worktree status are to be recorded after the requested commit/push. A commit cannot embed its own hash; the handoff will identify the code/evidence commit and the final user report will state the exact final remote head.
+- Implementation commit: `97a7963583bccc18e767c1e41d45362cc8641f0d` (`test(native): isolate desktop copy paste with synthetic result`).
+- `git push -u origin codex/prompt79j-synthetic-copy-diagnostic` succeeded. `git ls-remote origin refs/heads/codex/prompt79j-synthetic-copy-diagnostic` returned `97a7963583bccc18e767c1e41d45362cc8641f0d`; local `HEAD` matched. The worktree was clean and tracking `origin/codex/prompt79j-synthetic-copy-diagnostic` after this push.
+- This delivery note records the first pushed implementation head. A metadata-only evidence update follows this commit so the Return-key outcome and delivery record are durable. A commit cannot embed its own hash; the exact final branch head after that update is reported in the final delivery message.
 - No GitHub Actions workflow, runtime dependency, lockfile, production UI, model artifact, real transcript, recording, screenshot, or clipboard content was added.
 
 ## K. Recommended next small step
