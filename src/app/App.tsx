@@ -110,6 +110,12 @@ export default function App() {
     setVocabularyDraft({ spoken: "", written: "" });
   }
 
+  function saveVocabularyPreviewEntry(id: number, value: VocabularyDraft) {
+    setVocabularyEntries((current) =>
+      current.map((entry) => (entry.id === id ? { ...entry, ...value } : entry)),
+    );
+  }
+
   function handleTabKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
     currentIndex: number,
@@ -276,6 +282,7 @@ export default function App() {
                     />
                     <VocabularyPreviewList
                       entries={vocabularyEntries}
+                      onSave={saveVocabularyPreviewEntry}
                       onRemove={(id) =>
                         setVocabularyEntries((current) =>
                           current.filter((entry) => entry.id !== id),

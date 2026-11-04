@@ -15,7 +15,7 @@ type VocabularyEntryFormProps = {
   isAtLimit: boolean;
 };
 
-type VocabularyValidationError =
+export type VocabularyValidationError =
   | "required"
   | "whitespace"
   | "too-long"
@@ -57,7 +57,7 @@ export function validateVocabularyValue(
   return null;
 }
 
-function validationMessage(
+export function getVocabularyValidationMessage(
   error: VocabularyValidationError,
   fieldLabel: string,
 ): string {
@@ -103,10 +103,10 @@ export default function VocabularyEntryForm({
     ? validateVocabularyValue(value.written)
     : null;
   const spokenError = spokenValidation
-    ? validationMessage(spokenValidation, "Spoken phrase")
+    ? getVocabularyValidationMessage(spokenValidation, "Spoken phrase")
     : null;
   const writtenError = writtenValidation
-    ? validationMessage(writtenValidation, "Written replacement")
+    ? getVocabularyValidationMessage(writtenValidation, "Written replacement")
     : null;
   const limitMessageId = `${idPrefix}-limit-message`;
 

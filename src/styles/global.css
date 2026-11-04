@@ -551,6 +551,10 @@ body {
   color: var(--card-foreground);
 }
 
+.vocabulary-preview-entry-editor {
+  grid-column: 1 / -1;
+}
+
 .vocabulary-preview-entry-values {
   display: grid;
   min-width: 0;
@@ -577,6 +581,31 @@ body {
   line-height: 1.5;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.vocabulary-preview-editing-note {
+  margin: 0.75rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.vocabulary-preview-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-self: end;
+  gap: 0.5rem;
+}
+
+.vocabulary-preview-entry-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.vocabulary-preview-entry-actions button:disabled:hover {
+  background: var(--card);
+  color: var(--foreground);
 }
 
 .vocabulary-remove-button {

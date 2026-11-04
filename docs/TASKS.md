@@ -43,6 +43,14 @@ The browser-only Settings → Text & Vocabulary form now adds validated spoken/w
 
 Environment: macOS Darwin 25.6.0 arm64, Node.js v22.23.3, npm 10.9.9. Commands/results: `npm ci` — PASS; `npm run dev` — PASS, Vite 8.3.5 served `http://localhost:5173/`; `npm run typecheck` — PASS; `npm run test -- --run` — PASS, 11 files and 148 tests; `npm run lint` — PASS; `npm run build` — PASS, Vite built 29 modules; `git diff --check` — PASS.
 
+### Vocabulary entry editing — development-preview extension (2026-11-04)
+
+The browser-only list now also supports editing one existing entry at a time. Save updates its spoken and written values in place while preserving its ID and list order; Cancel keeps the original entry. Both fields use the preview form's existing nonempty, whitespace, 128-Unicode-scalar, and malformed-surrogate validation. The edit form has labeled fields and linked descriptions/errors, blocks edits to other rows until Save or Cancel, focuses Spoken phrase on open, returns focus to Edit on exit, and supports native keyboard actions. Saved values remain in React memory across Settings/Home navigation and reset after a fresh `App` mount. The automated suite covers Save, Cancel, stable row identity/order, invalid values in both fields, Unicode/emoji, keyboard/focus, navigation, Add/Remove, and the 500-entry limit.
+
+Browser verification: `npm run dev` — PASS; Vite 8.3.5 served `http://localhost:5174/` because port 5173 was occupied. In the browser, I opened Settings → Text & Vocabulary, added `café 東京 😀` → `Café 東京 ✨`, edited and saved it as `naïve 文 📍` → `Naïve 文 🧭`, then changed a second edit draft and canceled. The saved pair remained visible, the row count stayed at 1 of 500, and focus returned to its Edit button. This remains development-preview evidence only; no data is persisted or applied to speech. Production **T-038 remains unchecked** and this does not satisfy F-08, AC-08, T-038, T-039, or T-053.
+
+Environment: macOS Darwin 25.6.0 arm64, Node.js v22.23.3, npm 10.9.9. Commands/results: `npm run typecheck` — PASS; `npm run test -- --run` — PASS, 11 files and 160 tests; `npm run lint` — PASS; `npm run build` — PASS, Vite built 29 modules (CSS 16.33 kB, JavaScript 247.07 kB); `git diff --check` — PASS. The edit-list test file also passed independently: 22/22. The Impeccable detector returned no findings for the changed interface files.
+
 ## 1. Milestone map / critical path
 
 ```mermaid

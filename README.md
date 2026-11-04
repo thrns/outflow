@@ -1010,7 +1010,29 @@ npm run dev
 
 Open the local URL printed by Vite, then go to **Settings → Text & Vocabulary**. Enter a spoken phrase and its written replacement and select **Add to preview list**. Both fields must pass the existing validation (nonempty, valid Unicode, and at most 128 Unicode scalar values). Each accepted pair appears in the list below the form; the draft clears after adding. Select that row's **Remove** button to remove it. The accessible count shows the current total out of 500; when full, remove an entry before adding another. An accessible empty message appears when the list has no entries.
 
-Entries remain in React memory while moving between Settings sections or Home and Settings. A full page reload or fresh application mount clears them. This development preview does not persist entries, connect to native settings, or apply replacements to actual speech. The illustrative sentence remains synthetic. Run the frontend checks listed under [Testing and checks](#testing-and-checks) to verify the UI.
+To edit an entry, select its **Edit** button. The Spoken phrase and Written replacement fields open with the saved preview values. Change either field and select **Save changes** to update that entry in place; its order and stable identity are preserved. Select **Cancel editing** to discard the unsaved changes and return focus to the row's Edit button. Only one row can be edited at a time. Empty, whitespace-only, malformed Unicode, and values over 128 Unicode scalar values show the existing inline validation and cannot be saved. Unicode and emoji that pass validation are kept as entered.
+
+Entries and saved edits remain in React memory while moving between Settings sections or Home and Settings. A full page reload or fresh application mount clears them. This development preview does not persist entries, connect to native settings, check duplicate spoken phrases, or apply replacements to actual speech. The illustrative sentence remains synthetic.
+
+Run the frontend verification commands from the repository root:
+
+```sh
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+git diff --check
+```
+
+Expected result: each command exits successfully; the test command reports the frontend test files and passing test count, and the build prints the generated asset sizes. For the manual browser check, run `npm run dev`, open the URL Vite prints, add a pair, edit and save it, then edit again and cancel. The updated pair should remain in its original row; cancellation should restore the saved values and focus should return to Edit. Check **Remove**, the 500-entry count, and Settings/Home navigation, then refresh to confirm the list resets.
+
+Troubleshooting:
+
+- **Save leaves the editor open:** correct both fields; empty, whitespace-only, malformed Unicode, and values longer than 128 Unicode scalar values are rejected with inline errors.
+- **Edits disappear after navigation:** keep preview entries in `App.tsx` state above the conditional Home/Settings views; entry editor drafts are intentionally discarded if editing is canceled or the view is left before saving.
+- **Cancel changes the displayed entry:** keep edits in the editor's local draft until Save changes invokes the parent update callback.
+- **Focus is lost after Save or Cancel:** preserve the row Edit button ref and focus it after the editor closes.
+- **Data survives a full reload:** inspect `App.tsx` for accidental storage; this preview must remain in memory only.
 
 The General section displays: **“Start Outflow automatically when you sign in to your computer.”** and **“Preview only — this setting does not change your computer's startup behavior yet.”** No operating-system login item is registered, and the preference is not written to a configuration file, localStorage, or sessionStorage. The section selection is not persisted. Microphone access, shortcut settings, diagnostics, native Tauri tray/window behavior, and all other dictation features remain unimplemented. The browser preview does not complete F-11, AC-11, T-051, or native startup integration in [`docs/TASKS.md`](docs/TASKS.md). The Rust schema contributes to T-017 but does not complete its migration behavior or its T-001 prerequisite.
 
