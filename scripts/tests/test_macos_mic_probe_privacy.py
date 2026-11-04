@@ -49,12 +49,13 @@ class MacMicProbePrivacyTests(unittest.TestCase):
 
     def test_launcher_validates_and_forwards_the_verification_id_once(self) -> None:
         launcher = LAUNCHER.read_text(encoding="utf-8")
-        forwarding = 'APP_ARGUMENTS+=(--verification-id "$VERIFICATION_ID")'
+        forwarding = 'FORWARDED_ARGUMENTS+=(--verification-id "$VERIFICATION_ID")'
         self.assertEqual(launcher.count(forwarding), 1)
         self.assertIn('[[ "$2" =~ ^[A-Za-z0-9-]{1,32}$ ]] ||', launcher)
         self.assertIn('VERIFICATION_ID_SET == 0', launcher)
-        self.assertIn('APP_ARGUMENTS=(--model-dir "$OUTFLOW_MIC_PROBE_MODEL_DIR")', launcher)
-        self.assertIn('APP_ARGUMENTS+=(--timed-fixture "$2")', launcher)
+        self.assertIn('APP_ARGUMENTS+=(--model-dir "$OUTFLOW_MIC_PROBE_MODEL_DIR")', launcher)
+        self.assertIn('FORWARDED_ARGUMENTS+=(--timed-fixture "$2")', launcher)
+        self.assertIn('FORWARDED_ARGUMENTS+=("$1")', launcher)
         for option in (
             "--fixture-seconds",
             "--metrics-file",
@@ -66,6 +67,111 @@ class MacMicProbePrivacyTests(unittest.TestCase):
                 self.assertIn(option, launcher)
         self.assertIn('exec /usr/bin/open -n -a "$OUTFLOW_MIC_PROBE_APP" --args "${APP_ARGUMENTS[@]}"',
                       launcher)
+
+    def test_synthetic_diagnostic_launch_is_explicit_and_model_free_at_runtime(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        launch_policy = (PROBE_ROOT / "launch_policy.hpp").read_text(encoding="utf-8")
+        synthetic = (PROBE_ROOT / "synthetic_copy_diagnostic.hpp").read_text(encoding="utf-8")
+        launcher = LAUNCHER.read_text(encoding="utf-8")
+        startup = self.app_method(
+            app,
+            "- (void)applicationDidFinishLaunching:(NSNotification*)notification {",
+            "- (BOOL)applicationShouldTerminateAfterLastWindowClosed:",
+        )
+        diagnostic_branch = startup.split(
+            "if (_launch.synthetic_copy_diagnostic) {", 1
+        )[1].split("} else if (_launch.fixture_mode)", 1)[0]
+        start = self.app_method(
+            app, "- (void)startPressed:(id)sender {", "- (void)stopPressed:(id)sender {"
+        )
+        worker_start = self.app_method(
+            app,
+            "- (void)startWorkerForSession:(std::uint64_t)session_id {",
+            "- (void)beginAudioSourceForSession:",
+        )
+        audio_start = self.app_method(
+            app,
+            "- (void)beginAudioSourceForSession:(std::uint64_t)session_id {",
+            "- (void)handleWorkerEvent:",
+        )
+
+        self.assertIn("--synthetic-copy-diagnostic", launch_policy)
+        self.assertIn("--timed-fixture", launch_policy)
+        self.assertIn("--microphone-capture", launch_policy)
+        self.assertIn("has_verification_id", launch_policy)
+        self.assertIn("return ProbeInputMode::Microphone", launch_policy)
+        self.assertIn("establish_synthetic_copy_result(_state, session_id)", diagnostic_branch)
+        self.assertIn("kSyntheticCopyDiagnosticSample", diagnostic_branch)
+        for forbidden in ("permission_status_text", "microphone_permission", "MacMicrophoneCapture",
+                          "SessionWorker", "request_copy_result", "write_plain_text_to_pasteboard"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, diagnostic_branch)
+        self.assertIn("_launch.synthetic_copy_diagnostic || _closing", start)
+        self.assertIn("_launch.synthetic_copy_diagnostic || _closing", worker_start)
+        self.assertIn("_launch.synthetic_copy_diagnostic ||", audio_start)
+        self.assertIn("No microphone, fixture, recognition worker, or model was used.", app)
+        self.assertIn("Synthetic clipboard diagnostic", startup)
+        self.assertIn("not recognized speech", startup)
+
+        self.assertIn("if ((SYNTHETIC_COPY_DIAGNOSTIC)); then", launcher)
+        synthetic_launcher_branch = launcher.split(
+            "if ((SYNTHETIC_COPY_DIAGNOSTIC)); then", 1
+        )[1].split("else", 1)[0]
+        self.assertIn("--verification-id", synthetic_launcher_branch)
+        self.assertNotIn("OUTFLOW_MIC_PROBE_MODEL_DIR", synthetic_launcher_branch)
+        self.assertIn("APP_ARGUMENTS+=(--model-dir", launcher)
+        self.assertIn('FORWARDED_ARGUMENTS+=("$1")', launcher)
+        self.assertIn("kSyntheticCopyDiagnosticSample", synthetic)
+
+    def test_synthetic_startup_has_no_clipboard_access_and_dismiss_clears_result(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        startup = self.app_method(
+            app,
+            "- (void)applicationDidFinishLaunching:(NSNotification*)notification {",
+            "- (BOOL)applicationShouldTerminateAfterLastWindowClosed:",
+        )
+        diagnostic_branch = startup.split(
+            "if (_launch.synthetic_copy_diagnostic) {", 1
+        )[1].split("} else if (_launch.fixture_mode)", 1)[0]
+        dismiss = self.app_method(
+            app,
+            "- (void)dismissPressed:(id)sender {",
+            "- (void)copyResultPressed:(id)sender {",
+        )
+        self.assertNotIn("NSPasteboard", startup)
+        self.assertNotIn("request_copy_result", diagnostic_branch)
+        self.assertNotIn("write_plain_text_to_pasteboard", diagnostic_branch)
+        self.assertIn("[self clearFinalResult]", dismiss)
+        self.assertIn("_state.dismiss()", dismiss)
+        self.assertIn("[self refreshControls]", dismiss)
+        self.assertIn("_copy_result_button.enabled = copy_result_eligible(", app)
+
+    def test_synthetic_copy_uses_the_existing_mouse_and_return_action(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        action = self.app_method(
+            app,
+            "- (void)copyResultPressed:(id)sender {",
+            "- (void)settingsPressed:(id)sender {",
+        )
+        self.assertIn('make_button(@"Copy Result", self,', app)
+        self.assertIn("@selector(copyResultPressed:)", app)
+        self.assertIn('_copy_result_button.keyEquivalent = @"\\r"', app)
+        self.assertEqual(action.count("request_copy_result("), 1)
+        self.assertIn("string_from_utf8(text)", action)
+        self.assertIn("write_plain_text_to_pasteboard(", action)
+
+    def test_fixed_sample_is_single_source_and_isolated_pasteboard_tests_stay_separate(self) -> None:
+        diagnostic = (PROBE_ROOT / "synthetic_copy_diagnostic.hpp").read_text(encoding="utf-8")
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        pasteboard_test = (PROBE_ROOT / "tests" / "pasteboard_integration_test.mm").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(diagnostic.count('"OUTFLOW-SYNTHETIC-COPY-START'), 1)
+        self.assertEqual(diagnostic.count('"OUTFLOW-SYNTHETIC-COPY-END"'), 1)
+        self.assertIn("kSyntheticCopyDiagnosticSample", app)
+        self.assertIn("pasteboardWithUniqueName", pasteboard_test)
+        self.assertNotIn("[NSPasteboard generalPasteboard]", pasteboard_test)
+        self.assertIn("releaseGlobally", pasteboard_test)
 
     def test_launch_identity_diagnostics_exclude_session_content_and_model_paths(self) -> None:
         app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")

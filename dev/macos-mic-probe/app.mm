@@ -4,12 +4,14 @@
 
 #include "copy_result_policy.hpp"
 #include "fixture_producer.hpp"
+#include "launch_policy.hpp"
 #include "macos_capture.hpp"
 #include "model_verifier.hpp"
 #include "pasteboard_writer.hpp"
 #include "permission_policy.hpp"
 #include "session_state.hpp"
 #include "session_worker.hpp"
+#include "synthetic_copy_diagnostic.hpp"
 #include "tests/pasteboard_integration_test.hpp"
 #include "verification_identity.hpp"
 #include "wav_fixture.hpp"
@@ -46,6 +48,7 @@ struct LaunchOptions {
   std::uint32_t fixture_seconds = 12;
   std::uint32_t auto_cancel_after_ms = 0;
   bool fixture_mode = false;
+  bool synthetic_copy_diagnostic = false;
   bool auto_exit_after_final = false;
   bool auto_exit_after_cancel = false;
 };
@@ -97,6 +100,8 @@ LaunchOptions read_launch_options() {
         result.fixture_path = value.fileSystemRepresentation;
         result.fixture_mode = true;
       }
+    } else if ([argument isEqualToString:@"--synthetic-copy-diagnostic"]) {
+      result.synthetic_copy_diagnostic = true;
     } else if ([argument isEqualToString:@"--fixture-seconds"]) {
       NSString* value = next_value();
       if (const auto parsed = parse_unsigned(value.UTF8String)) {
@@ -421,14 +426,27 @@ PreviewViews make_preview() {
   _window.delegate = self;
 
   NSView* content = _window.contentView;
-  NSTextField* title = make_label(@"Local microphone → Moonshine", 20.0, YES);
+  NSTextField* title = make_label(
+      _launch.synthetic_copy_diagnostic ? @"Synthetic clipboard diagnostic"
+                                        : @"Local microphone → Moonshine",
+      20.0, YES);
   NSTextField* subtitle = make_label(
-      @"Development feasibility probe. Audio and preview text stay in memory.",
+      _launch.synthetic_copy_diagnostic
+          ? @"Fixed development sample only — not recognized speech. No microphone or model is used."
+          : @"Development feasibility probe. Audio and preview text stay in memory.",
       12.0, NO);
-  _permission_label = make_label(permission_status_text(), 12.0, NO);
+  _permission_label = make_label(
+      _launch.synthetic_copy_diagnostic
+          ? @"Microphone permission: not requested in this diagnostic mode."
+          : permission_status_text(),
+      12.0, NO);
   _state_label = make_label(@"State: Idle", 13.0, YES);
   _partial_label = make_label(@"Partial", 12.0, YES);
-  _final_label = make_label(@"Final result", 12.0, YES);
+  _final_label = make_label(
+      _launch.synthetic_copy_diagnostic
+          ? @"Synthetic sample — not recognized speech"
+          : @"Final result",
+      12.0, YES);
   _metrics_label = make_label(@"No session measurements yet.", 11.0, NO);
   _metrics_label.textColor = NSColor.secondaryLabelColor;
   _copy_warning_label = make_label(
@@ -443,6 +461,12 @@ PreviewViews make_preview() {
   NSScrollView* final_scroll = final_preview.scroll;
   _partial_text = partial_preview.text;
   _final_text = final_preview.text;
+  const auto input_mode = probe_input_mode(_launch.fixture_mode,
+                                           _launch.synthetic_copy_diagnostic);
+  if (input_mode == ProbeInputMode::SyntheticCopyDiagnostic) {
+    _final_text.accessibilityLabel =
+        @"Synthetic clipboard diagnostic sample; not recognized speech";
+  }
   NSString* start_title = _launch.fixture_mode ? @"Start timed fixture" : @"Start recording";
   _start_button = make_button(start_title, self, @selector(startPressed:));
   _stop_button = make_button(@"Stop", self, @selector(stopPressed:));
@@ -489,13 +513,19 @@ PreviewViews make_preview() {
   button_row.translatesAutoresizingMaskIntoConstraints = NO;
 
   NSMutableArray<NSView*>* window_views = [NSMutableArray arrayWithArray:
-      @[title, subtitle, _permission_label, _state_label,
-        _partial_label, partial_scroll, _final_label, final_scroll,
-        copy_row, _copy_warning_label, _metrics_label, button_row]];
+      @[title, subtitle, _permission_label, _state_label, _final_label,
+        final_scroll, copy_row, _copy_warning_label, _metrics_label, button_row]];
+  if (!_launch.synthetic_copy_diagnostic) {
+    [window_views insertObject:_partial_label atIndex:4];
+    [window_views insertObject:partial_scroll atIndex:5];
+  }
   if (verification_label != nil) [window_views insertObject:verification_label atIndex:2];
   for (NSView* view in window_views) {
     [content addSubview:view];
   }
+  NSLayoutYAxisAnchor* final_section_top =
+      _launch.synthetic_copy_diagnostic ? _state_label.bottomAnchor
+                                        : partial_scroll.bottomAnchor;
   [NSLayoutConstraint activateConstraints:@[
     [title.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:24],
     [title.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-24],
@@ -511,14 +541,8 @@ PreviewViews make_preview() {
     [_state_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [_state_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
     [_state_label.topAnchor constraintEqualToAnchor:_permission_label.bottomAnchor constant:8],
-    [_partial_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
-    [_partial_label.topAnchor constraintEqualToAnchor:_state_label.bottomAnchor constant:14],
-    [partial_scroll.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
-    [partial_scroll.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
-    [partial_scroll.topAnchor constraintEqualToAnchor:_partial_label.bottomAnchor constant:4],
-    [partial_scroll.heightAnchor constraintEqualToConstant:86],
     [_final_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
-    [_final_label.topAnchor constraintEqualToAnchor:partial_scroll.bottomAnchor constant:12],
+    [_final_label.topAnchor constraintEqualToAnchor:final_section_top constant:12],
     [final_scroll.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [final_scroll.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
     [final_scroll.topAnchor constraintEqualToAnchor:_final_label.bottomAnchor constant:4],
@@ -538,6 +562,16 @@ PreviewViews make_preview() {
     [button_row.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-18],
     [final_scroll.bottomAnchor constraintLessThanOrEqualToAnchor:_metrics_label.topAnchor constant:-8],
   ]];
+  if (!_launch.synthetic_copy_diagnostic) {
+    [NSLayoutConstraint activateConstraints:@[
+      [_partial_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+      [_partial_label.topAnchor constraintEqualToAnchor:_state_label.bottomAnchor constant:14],
+      [partial_scroll.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+      [partial_scroll.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+      [partial_scroll.topAnchor constraintEqualToAnchor:_partial_label.bottomAnchor constant:4],
+      [partial_scroll.heightAnchor constraintEqualToConstant:86],
+    ]];
+  }
   if (verification_label != nil) {
     [NSLayoutConstraint activateConstraints:@[
       [verification_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
@@ -545,7 +579,22 @@ PreviewViews make_preview() {
       [verification_label.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:4],
     ]];
   }
-  if (_launch.fixture_mode) {
+  if (_launch.synthetic_copy_diagnostic) {
+    const auto session_id = _next_session_id++;
+    if (establish_synthetic_copy_result(_state, session_id)) {
+      _copy_result_text.assign(kSyntheticCopyDiagnosticSample.data(),
+                               kSyntheticCopyDiagnosticSample.size());
+      _copy_result_session_id = session_id;
+      _final_text.string = ns_string(_copy_result_text);
+      _state_label.stringValue =
+          @"State: Result ready — fixed synthetic sample; no recognition performed.";
+      _metrics_label.stringValue =
+          @"No microphone, fixture, recognition worker, or model was used.";
+    } else {
+      _state_label.stringValue =
+          @"State: Error — synthetic result session could not be established.";
+    }
+  } else if (input_mode == ProbeInputMode::TimedFixture) {
     _permission_label.stringValue = @"Microphone: not used — this mode replays a local fixture in real time.";
     std::string error;
     if (!load_pcm16_mono_wav(_launch.fixture_path, _fixture, error)) {
@@ -555,7 +604,7 @@ PreviewViews make_preview() {
       _fixture_loaded = true;
     }
   }
-  if (_launch.model_directory.empty()) {
+  if (!_launch.synthetic_copy_diagnostic && _launch.model_directory.empty()) {
     _state_label.stringValue = @"State: Error — launch with --model-dir <local-model-directory>.";
   }
   [self refreshControls];
@@ -602,7 +651,8 @@ PreviewViews make_preview() {
 
 - (void)startPressed:(id)sender {
   (void)sender;
-  if (_closing || _state.state() != SessionState::Idle ||
+  if (_launch.synthetic_copy_diagnostic || _closing ||
+      _state.state() != SessionState::Idle ||
       _launch.model_directory.empty()) return;
   if (_launch.fixture_mode) {
     if (!_fixture_loaded) {
@@ -784,19 +834,22 @@ PreviewViews make_preview() {
 
 - (void)settingsPressed:(id)sender {
   (void)sender;
+  if (_launch.synthetic_copy_diagnostic) return;
   NSURL* url = [NSURL URLWithString:
       @"x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"];
   if (url != nil) [[NSWorkspace sharedWorkspace] openURL:url];
 }
 
 - (void)beginSession {
+  if (_launch.synthetic_copy_diagnostic) return;
   const auto session_id = [self prepareSession];
   if (session_id == 0) return;
   [self startWorkerForSession:session_id];
 }
 
 - (std::uint64_t)prepareSession {
-  if (_closing || _state.state() != SessionState::Idle ||
+  if (_launch.synthetic_copy_diagnostic || _closing ||
+      _state.state() != SessionState::Idle ||
       _launch.model_directory.empty()) return 0;
   const auto session_id = _next_session_id++;
   if (!_state.begin(session_id)) return 0;
@@ -814,7 +867,8 @@ PreviewViews make_preview() {
 }
 
 - (void)startWorkerForSession:(std::uint64_t)session_id {
-  if (_closing || !_state.accepts(session_id) ||
+  if (_launch.synthetic_copy_diagnostic || _closing ||
+      !_state.accepts(session_id) ||
       _state.state() != SessionState::Preparing || _permission_request_pending) return;
   __weak MicProbeAppDelegate* weak_self = self;
   const auto source = _launch.fixture_mode ? AudioSourceKind::TimedFixture
@@ -849,7 +903,8 @@ PreviewViews make_preview() {
 }
 
 - (void)beginAudioSourceForSession:(std::uint64_t)session_id {
-  if (!_state.accepts(session_id) || _state.state() != SessionState::Preparing ||
+  if (_launch.synthetic_copy_diagnostic || !_state.accepts(session_id) ||
+      _state.state() != SessionState::Preparing ||
       !_worker) return;
   std::string error;
   if (_launch.fixture_mode) {
@@ -1046,15 +1101,22 @@ PreviewViews make_preview() {
                       state == SessionState::Finalizing;
   const bool terminal = state == SessionState::ResultReady || state == SessionState::Cancelled ||
                         state == SessionState::Error;
-  _start_button.enabled = state == SessionState::Idle && !_launch.model_directory.empty() &&
+  _start_button.enabled = !_launch.synthetic_copy_diagnostic &&
+                          state == SessionState::Idle && !_launch.model_directory.empty() &&
                           (!_launch.fixture_mode || _fixture_loaded);
   _stop_button.enabled = state == SessionState::Listening;
   _cancel_button.enabled = active;
   _dismiss_button.enabled = terminal;
   _copy_result_button.enabled = copy_result_eligible(
       state, _state.session_id(), _copy_result_session_id, _copy_result_text);
-  _settings_button.enabled = !_launch.fixture_mode;
-  if (!_launch.fixture_mode) _permission_label.stringValue = permission_status_text();
+  _settings_button.enabled = !_launch.fixture_mode &&
+                             !_launch.synthetic_copy_diagnostic;
+  if (_launch.synthetic_copy_diagnostic) {
+    _permission_label.stringValue =
+        @"Microphone permission: not requested in this diagnostic mode.";
+  } else if (!_launch.fixture_mode) {
+    _permission_label.stringValue = permission_status_text();
+  }
 }
 
 - (void)stopSourcesForShutdown {
@@ -1076,6 +1138,8 @@ PreviewViews make_preview() {
 }
 
 - (void)cancelActiveSessionForDismissal {
+  // Synthetic diagnostic sessions own no capture or worker resources; the
+  // shared cleanup still clears their result on window close.
   [self stopSourcesForShutdown];
   if (_worker) {
     _worker->request_cancel();
@@ -1096,9 +1160,9 @@ PreviewViews make_preview() {
 @end
 
 int main(int argc, const char* argv[]) {
-  if (!verification_id_arguments_valid(argc, argv)) {
-    std::cerr << "mic probe launch rejected: invalid or repeated --verification-id; "
-                 "use 1-32 ASCII letters, digits, or hyphens.\n";
+  if (!probe_launch_arguments_valid(argc, argv)) {
+    std::cerr << "mic probe launch rejected: invalid verification ID or conflicting "
+                 "synthetic-copy diagnostic options.\n";
     return 2;
   }
   for (int index = 1; index < argc; ++index) {

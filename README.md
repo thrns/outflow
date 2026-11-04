@@ -2733,6 +2733,110 @@ Conflict reports are restricted to indices, classifications, group counts, and p
 
 Future user-facing review still requires a local review interface, explicit decisions, cancellation that preserves all originals, full-collection revalidation, validated vocabulary CRUD for edits or deletion, trusted provenance, an approved atomic migration, and a recoverable original configuration. Those are future requirements; this test contract implements none of those actions. See the [manual review grouping contract](docs/VOCABULARY_MATCHING_MIGRATION.md#manual-conflict-review-grouping-contract-task-52) for the full requirements.
 
+## Prompt 79J — synthetic macOS clipboard diagnostic
+
+The AppKit probe has a development-only `--synthetic-copy-diagnostic` mode for isolating the explicit Copy Result → NSPasteboard → destination-app path without speech. It requires a valid `--verification-id` and rejects timed-fixture or explicit microphone-capture combinations. With the flag absent, the usual microphone and timed-fixture startup paths remain in effect.
+
+The diagnostic uses one fixed source constant, `kSyntheticCopyDiagnosticSample`, displayed in the existing selectable final-result area:
+
+```text
+OUTFLOW-SYNTHETIC-COPY-START
+Café — plain-text clipboard check! 😀
+OUTFLOW-SYNTHETIC-COPY-END
+```
+
+This is a test fixture, not recognized speech. Diagnostic startup does not request microphone permission, query microphone authorization, open audio capture, create a recognition worker, or load a model. It creates a session-owned `ResultReady` result through the existing state machine so the ordinary Copy Result button, Return key equivalent, eligibility policy, UTF-8 conversion, `clearContents`, `writeObjects:`, and AppKit result handling remain in use. Startup, Cancel, Dismiss, and shutdown do not write to the clipboard. Dismiss clears the synthetic result and disables Copy Result. The existing clipboard replacement warning stays visible.
+
+### Build and launch
+
+Use the already-authorized pinned Moonshine source/runtime paths described in [Pinned macOS native build and smoke test](#pinned-macos-native-build-and-smoke-test). A fresh output directory is required. The build still links the existing native runtime, but the diagnostic launch needs no model directory and performs no model verification or model load:
+
+```sh
+export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d /private/tmp/outflow-prompt79j.XXXXXX)"
+scripts/build_macos_mic_probe.sh
+
+export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
+
+scripts/run_macos_mic_probe.sh \
+  --verification-id "79J-SYNTH-01" \
+  --synthetic-copy-diagnostic
+```
+
+The expected window title includes `Outflow Mic Probe — Dev — 79J-SYNTH-01 — PID <pid>`. The view title is **Synthetic clipboard diagnostic**; it says the sample is not recognized speech and the microphone was not requested; there is no partial-recognition area; the fixed three-line sample appears in the selectable final-result area; Copy Result is enabled; and the clipboard-replacement warning remains visible. The verification ID and PID also appear in the window as a noneditable label. Cross-check the PID shown there against the executable inside this fresh bundle before interacting:
+
+```sh
+PID_FROM_WINDOW=12345 # replace with the PID shown in the window
+ps -p "$PID_FROM_WINDOW" -o pid=,comm=
+```
+
+The executable path must resolve to the newly built `OutflowMicProbe.app`. Do not select an older probe window based on its bundle name. The launcher does not inspect the general pasteboard; startup code has no pasteboard access. Automated source-contract tests check that invariant. No automated test reads or writes the user's general clipboard.
+
+### Controlled TextEdit comparison
+
+Before Copy Result, tell the operator that this action replaces the system clipboard and a failed write after clearing it may lose the previous contents. The diagnostic performs no startup copy. Copy Result is the only action in this test that replaces the clipboard.
+
+1. Confirm the exact verification ID and PID, the synthetic diagnostic label, the fixed sample, the enabled button, and the visible clipboard warning.
+2. Click Copy Result **once**. Record only whether the UI reports AppKit success or its sanitized failure status.
+3. Open a genuinely new, blank, unsaved TextEdit document. Switch it to plain-text mode, verify the document is empty, and put keyboard focus in its text view.
+4. Press ⌘V once as a normal operator action. Compare the complete in-memory plain-text document with the fixed sample: exact characters, whitespace, both newline positions, punctuation, accented text, and emoji. Read TextEdit's in-memory value only after confirming the blank target and that TextEdit's text view received the paste. Record only equality, paste occurrence, and sanitized observations; do not log arbitrary TextEdit content.
+5. If accessible-text and visual comparison disagree, verify the complete document value, target selection, focus, line-ending representation, Unicode normalization, and text-substitution behavior. Do not label an accessibility mismatch as a clipboard defect without an independent observation.
+6. Discard the TextEdit document without saving. Dismiss the result in the diagnostic app and confirm the sample clears and Copy Result becomes disabled.
+
+Classify only the observed result:
+
+| Observation | Classification |
+|---|---|
+| AppKit success and exact TextEdit equality | Basic desktop clipboard path verified for the synthetic sample |
+| AppKit failure | Clipboard writer or host write failure remains |
+| AppKit success, no pasted text | Destination delivery, target, focus, or paste problem remains |
+| TextEdit receives different synthetic text | Investigate verified transformation, stale item, or wrong target value |
+| Visual text matches but accessibility comparison differs | Investigate the inspection/comparison method |
+| Desktop interaction cannot be completed | Desktop verification blocked |
+
+A passing synthetic check verifies this fixed sample through this host and does not explain the earlier real-transcript mismatch by itself. Do not change the clipboard writer unless this controlled experiment establishes a reproducible defect.
+
+### Return-key check
+
+Only after the mouse comparison, and only after the operator separately approves another clipboard replacement, start a fresh identified synthetic diagnostic process. Confirm the same button is available, activate the existing Return-key action, record its AppKit status separately, and paste once into a new verified blank plain-text TextEdit document. Compare against the same fixed constant, discard without saving, then Dismiss and confirm the result clears. If the mouse test cannot be compared reliably, stop without claiming keyboard verification.
+
+### Automated checks and troubleshooting
+
+Run the native focused suite and real-fixture regression separately. The isolated AppKit integration test uses its existing unique pasteboard and synthetic values; it does not access the general pasteboard and cannot establish TextEdit delivery. The native app also rejects invalid synthetic-mode arguments before opening AppKit.
+
+```sh
+scripts/build_macos_mic_probe.sh
+scripts/run_macos_mic_probe.sh \
+  --verification-id "79J-SYNTH-01" \
+  --synthetic-copy-diagnostic
+scripts/test_macos_mic_probe.sh
+scripts/test_macos_mic_probe.sh --real-fixture
+python3 -m unittest discover -s scripts/tests -v
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+bash -n scripts/build_macos_mic_probe.sh \
+  scripts/run_macos_mic_probe.sh \
+  scripts/test_macos_mic_probe.sh
+git diff --check
+```
+
+- **The diagnostic flag is rejected:** supply one valid 1–32-character ASCII verification ID; remove `--timed-fixture` and any explicit microphone-capture flag.
+- **The runner asks for a model directory:** confirm `--synthetic-copy-diagnostic` was forwarded. Normal microphone and fixture launches still verify the configured local model.
+- **The expected ID/PID is absent:** stop before copying; check the newly built `OUTFLOW_MIC_PROBE_APP` path and select the window whose title contains the exact ID.
+- **Copy Result is disabled:** confirm the diagnostic reached `Result ready` and the view shows the fixed sample. Dismissed or cleared results must remain ineligible.
+- **AppKit reports failure:** keep the visible synthetic sample; do not retry speculatively. The warning explains that previous clipboard contents may already be lost.
+- **AppKit succeeds but TextEdit does not match:** verify blank-document state, plain-text mode, TextEdit selection and text-view focus, full-document inspection, and observed line-ending/Unicode transformations before assigning a cause.
+- **TextEdit cannot be reached or compared:** record desktop verification as blocked. Automated policy and isolated-pasteboard tests are not substitutes for the desktop test.
+- **A WER corpus test is unconfigured:** record it as not run, not passed. The licensed reference corpus remains a separate gate.
+
+Prompt 79J is development-prototype evidence only. It does not complete T-046, T-047, T-010, T-011, AC-10, or the MVP. See [`evidence/mvp/prompt-79j-detailed-implementation-handoff.md`](evidence/mvp/prompt-79j-detailed-implementation-handoff.md) for exact outcomes and unresolved causes.
+
 ## Hypothetical vocabulary resolution proposals (Task 53)
 
 [`crates/settings/tests/vocabulary_resolution_proposal.rs`](crates/settings/tests/vocabulary_resolution_proposal.rs) contains a test-only in-memory validator for explicit `Retain` and `OmitFromProposedCollection` decisions. Every original index needs exactly one decision. Retained entries stay in original order, and candidate validation reuses the core Unicode 18 collection rules. Any remaining conflict reports original indices, even when omitted entries leave gaps. The validator borrows the original strings and does not edit, delete, or persist them.

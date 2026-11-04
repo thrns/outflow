@@ -136,6 +136,26 @@ reject_invalid_verification_id "repeated" \
   --verification-id first --verification-id second
 printf 'PASS native app rejected 5 malformed verification ID launches without crashing.\n'
 
+reject_invalid_launch() {
+  local description="$1"
+  shift
+  local exit_status=0
+  "$PASTEBOARD_APP/Contents/MacOS/OutflowMicProbe" "$@" >/dev/null 2>&1 || \
+    exit_status=$?
+  [[ "$exit_status" == 2 ]] || \
+    fail "native app did not reject ${description} synthetic diagnostic launch (exit ${exit_status})"
+}
+
+reject_invalid_launch "missing verification ID" --synthetic-copy-diagnostic
+reject_invalid_launch "invalid verification ID" \
+  --verification-id "bad id" --synthetic-copy-diagnostic
+reject_invalid_launch "timed fixture combination" \
+  --verification-id 79J-INVALID --synthetic-copy-diagnostic \
+  --timed-fixture /private/tmp/unused.wav
+reject_invalid_launch "microphone capture combination" \
+  --verification-id 79J-INVALID --synthetic-copy-diagnostic --microphone-capture
+printf 'PASS native app rejected 4 invalid synthetic diagnostic launches without opening AppKit.\n'
+
 PASTEBOARD_RESULT="$TEST_DIR/pasteboard-integration-result.txt"
 PASTEBOARD_OPEN_STATUS=0
 if /usr/bin/open -n -W -a "$PASTEBOARD_APP" --args \

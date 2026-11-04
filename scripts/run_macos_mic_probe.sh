@@ -10,11 +10,60 @@ fail() {
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "the development app runs only on macOS"
 : "${OUTFLOW_MIC_PROBE_APP:?set OUTFLOW_MIC_PROBE_APP to the built .app bundle}"
-: "${OUTFLOW_MIC_PROBE_MODEL_DIR:?set OUTFLOW_MIC_PROBE_MODEL_DIR to the locally authorized Small Streaming model directory}"
 [[ -d "$OUTFLOW_MIC_PROBE_APP/Contents/MacOS" ]] || fail "the development app bundle is missing"
 [[ -x "$OUTFLOW_MIC_PROBE_APP/Contents/MacOS/OutflowMicProbe" ]] || fail "the app executable is missing"
 
-python3 - "$REPOSITORY_ROOT" "$OUTFLOW_MIC_PROBE_MODEL_DIR" <<'PY'
+APP_ARGUMENTS=()
+FORWARDED_ARGUMENTS=()
+VERIFICATION_ID=""
+VERIFICATION_ID_SET=0
+SYNTHETIC_COPY_DIAGNOSTIC=0
+TIMED_FIXTURE_SET=0
+while (($#)); do
+  case "$1" in
+    --verification-id)
+      (($# >= 2)) || fail "--verification-id requires a value"
+      ((VERIFICATION_ID_SET == 0)) || fail "--verification-id may be supplied only once"
+      [[ "$2" =~ ^[A-Za-z0-9-]{1,32}$ ]] || \
+        fail "--verification-id must be 1-32 ASCII letters, digits, or hyphens"
+      VERIFICATION_ID="$2"
+      VERIFICATION_ID_SET=1
+      FORWARDED_ARGUMENTS+=(--verification-id "$VERIFICATION_ID")
+      shift 2
+      ;;
+    --timed-fixture)
+      (($# >= 2)) || fail "--timed-fixture requires a PCM16 mono WAV path"
+      TIMED_FIXTURE_SET=1
+      FORWARDED_ARGUMENTS+=(--timed-fixture "$2")
+      shift 2
+      ;;
+    --fixture-seconds|--metrics-file|--auto-cancel-after-ms)
+      (($# >= 2)) || fail "$1 requires a value"
+      FORWARDED_ARGUMENTS+=("$1" "$2")
+      shift 2
+      ;;
+    --auto-exit-after-final|--auto-exit-after-cancel)
+      FORWARDED_ARGUMENTS+=("$1")
+      shift
+      ;;
+    --synthetic-copy-diagnostic)
+      ((SYNTHETIC_COPY_DIAGNOSTIC == 0)) || fail "--synthetic-copy-diagnostic may be supplied only once"
+      SYNTHETIC_COPY_DIAGNOSTIC=1
+      FORWARDED_ARGUMENTS+=("$1")
+      shift
+      ;;
+    *)
+      fail "unsupported option: $1"
+      ;;
+  esac
+done
+
+if ((SYNTHETIC_COPY_DIAGNOSTIC)); then
+  ((VERIFICATION_ID_SET)) || fail "--synthetic-copy-diagnostic requires --verification-id"
+  ((TIMED_FIXTURE_SET == 0)) || fail "synthetic copy diagnostic cannot be combined with --timed-fixture"
+else
+  : "${OUTFLOW_MIC_PROBE_MODEL_DIR:?set OUTFLOW_MIC_PROBE_MODEL_DIR to the locally authorized Small Streaming model directory}"
+  python3 - "$REPOSITORY_ROOT" "$OUTFLOW_MIC_PROBE_MODEL_DIR" <<'PY'
 from pathlib import Path
 import sys
 
@@ -30,41 +79,9 @@ except BenchmarkError as error:
     raise SystemExit(1)
 print(f"Verified {len(result['asset_sha256'])} local model files ({result['total_bytes']} bytes).")
 PY
-
-APP_ARGUMENTS=(--model-dir "$OUTFLOW_MIC_PROBE_MODEL_DIR")
-VERIFICATION_ID=""
-VERIFICATION_ID_SET=0
-while (($#)); do
-  case "$1" in
-    --verification-id)
-      (($# >= 2)) || fail "--verification-id requires a value"
-      ((VERIFICATION_ID_SET == 0)) || fail "--verification-id may be supplied only once"
-      [[ "$2" =~ ^[A-Za-z0-9-]{1,32}$ ]] || \
-        fail "--verification-id must be 1-32 ASCII letters, digits, or hyphens"
-      VERIFICATION_ID="$2"
-      VERIFICATION_ID_SET=1
-      APP_ARGUMENTS+=(--verification-id "$VERIFICATION_ID")
-      shift 2
-      ;;
-    --timed-fixture)
-      (($# >= 2)) || fail "--timed-fixture requires a PCM16 mono WAV path"
-      APP_ARGUMENTS+=(--timed-fixture "$2")
-      shift 2
-      ;;
-    --fixture-seconds|--metrics-file|--auto-cancel-after-ms)
-      (($# >= 2)) || fail "$1 requires a value"
-      APP_ARGUMENTS+=("$1" "$2")
-      shift 2
-      ;;
-    --auto-exit-after-final|--auto-exit-after-cancel)
-      APP_ARGUMENTS+=("$1")
-      shift
-      ;;
-    *)
-      fail "unsupported option: $1"
-      ;;
-  esac
-done
+  APP_ARGUMENTS+=(--model-dir "$OUTFLOW_MIC_PROBE_MODEL_DIR")
+fi
+APP_ARGUMENTS+=("${FORWARDED_ARGUMENTS[@]}")
 
 printf 'Requesting LaunchServices launch for app bundle: %s\n' "$OUTFLOW_MIC_PROBE_APP"
 if ((VERIFICATION_ID_SET)); then

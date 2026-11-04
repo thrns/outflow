@@ -1,8 +1,10 @@
 #include "audio_pipeline.hpp"
 #include "copy_result_policy.hpp"
 #include "fixture_producer.hpp"
+#include "launch_policy.hpp"
 #include "permission_policy.hpp"
 #include "session_state.hpp"
+#include "synthetic_copy_diagnostic.hpp"
 #include "verification_identity.hpp"
 #include "wav_fixture.hpp"
 
@@ -24,6 +26,38 @@
 using namespace outflow::mic_probe;
 
 namespace {
+
+bool valid_utf8(std::string_view value) {
+  const auto* bytes = reinterpret_cast<const unsigned char*>(value.data());
+  std::size_t index = 0;
+  while (index < value.size()) {
+    const auto lead = bytes[index];
+    std::size_t length = 0;
+    if (lead <= 0x7f) {
+      length = 1;
+    } else if (lead >= 0xc2 && lead <= 0xdf) {
+      length = 2;
+    } else if (lead >= 0xe0 && lead <= 0xef) {
+      length = 3;
+    } else if (lead >= 0xf0 && lead <= 0xf4) {
+      length = 4;
+    } else {
+      return false;
+    }
+    if (index + length > value.size()) return false;
+    for (std::size_t continuation = 1; continuation < length; ++continuation) {
+      if ((bytes[index + continuation] & 0xc0) != 0x80) return false;
+    }
+    if ((lead == 0xe0 && bytes[index + 1] < 0xa0) ||
+        (lead == 0xed && bytes[index + 1] >= 0xa0) ||
+        (lead == 0xf0 && bytes[index + 1] < 0x90) ||
+        (lead == 0xf4 && bytes[index + 1] >= 0x90)) {
+      return false;
+    }
+    index += length;
+  }
+  return true;
+}
 
 void test_float_downmix_and_rate_conversion() {
   const std::array<float, 6> left{0.0F, 0.25F, 0.5F, 0.75F, 1.0F, 0.5F};
@@ -406,6 +440,87 @@ void test_development_verification_identity_is_bounded_and_title_safe() {
   assert(verification_diagnostic("bad\nID", 12345).empty());
 }
 
+void test_synthetic_copy_diagnostic_uses_a_fixed_session_and_shared_policy() {
+  const auto sample = kSyntheticCopyDiagnosticSample;
+  const auto same_sample = kSyntheticCopyDiagnosticSample;
+  assert(sample.data() == same_sample.data());
+  assert(sample == same_sample);
+  assert(valid_utf8(sample));
+  assert(sample.find("OUTFLOW-SYNTHETIC-COPY-START\n") == 0);
+  assert(sample.find("Café") != std::string_view::npos);
+  assert(sample.find("plain-text clipboard check!") != std::string_view::npos);
+  assert(sample.find("😀") != std::string_view::npos);
+  assert(sample.find("\nOUTFLOW-SYNTHETIC-COPY-END") != std::string_view::npos);
+  std::size_t newline_count = 0;
+  for (const char character : sample) {
+    if (character == '\n') ++newline_count;
+    assert(character != '\r');
+  }
+  assert(newline_count == 2);
+
+  assert(probe_input_mode(false, false) == ProbeInputMode::Microphone);
+  assert(probe_input_mode(true, false) == ProbeInputMode::TimedFixture);
+  assert(probe_input_mode(false, true) == ProbeInputMode::SyntheticCopyDiagnostic);
+  assert(probe_input_mode(true, true) == ProbeInputMode::Invalid);
+
+  const char* normal_arguments[]{"probe"};
+  const char* missing_id_arguments[]{"probe", "--synthetic-copy-diagnostic"};
+  const char* valid_arguments[]{"probe", "--verification-id", "79J-SYNTH-01",
+                                "--synthetic-copy-diagnostic"};
+  const char* invalid_id_arguments[]{"probe", "--verification-id", "bad id",
+                                     "--synthetic-copy-diagnostic"};
+  const char* fixture_conflict_arguments[]{"probe", "--verification-id",
+                                           "79J-SYNTH-01", "--synthetic-copy-diagnostic",
+                                           "--timed-fixture", "/tmp/fixed.wav"};
+  const char* microphone_conflict_arguments[]{"probe", "--verification-id",
+                                              "79J-SYNTH-01", "--synthetic-copy-diagnostic",
+                                              "--microphone-capture"};
+  assert(probe_launch_arguments_valid(1, normal_arguments));
+  assert(!probe_launch_arguments_valid(2, missing_id_arguments));
+  assert(probe_launch_arguments_valid(4, valid_arguments));
+  assert(!probe_launch_arguments_valid(4, invalid_id_arguments));
+  assert(!probe_launch_arguments_valid(6, fixture_conflict_arguments));
+  assert(!probe_launch_arguments_valid(5, microphone_conflict_arguments));
+
+  SessionStateMachine session;
+  assert(!establish_synthetic_copy_result(session, 0));
+  assert(establish_synthetic_copy_result(session, 79));
+  assert(session.state() == SessionState::ResultReady);
+  assert(session.session_id() == 79);
+
+  std::string result(sample);
+  std::uint64_t result_session_id = session.session_id();
+  std::size_t injected_writer_calls = 0;
+  std::string written_sample;
+  const auto injected_writer = [&](std::string_view text) {
+    ++injected_writer_calls;
+    written_sample.assign(text.data(), text.size());
+    return true;
+  };
+  assert(copy_result_eligible(session.state(), session.session_id(),
+                              result_session_id, result));
+  assert(injected_writer_calls == 0);
+  assert(request_copy_result(session.state(), session.session_id(),
+                             result_session_id, result, injected_writer) ==
+         CopyResultAttempt::Succeeded);
+  assert(injected_writer_calls == 1);
+  assert(written_sample == sample);
+
+  assert(request_copy_result(SessionState::ResultReady, 80, result_session_id,
+                             result, injected_writer) ==
+         CopyResultAttempt::RejectedBySessionPolicy);
+  assert(injected_writer_calls == 1);
+  assert(session.dismiss());
+  result.clear();
+  result_session_id = 0;
+  assert(!copy_result_eligible(session.state(), session.session_id(),
+                               result_session_id, result));
+  assert(request_copy_result(session.state(), session.session_id(),
+                             result_session_id, result, injected_writer) ==
+         CopyResultAttempt::RejectedBySessionPolicy);
+  assert(injected_writer_calls == 1);
+}
+
 void test_bounded_pcm16_wav_fixture_reader() {
   std::vector<std::uint8_t> bytes{
       'R','I','F','F', 40,0,0,0, 'W','A','V','E',
@@ -455,7 +570,8 @@ int main() {
   test_microphone_permission_decisions();
   test_explicit_copy_result_policy_and_exact_text();
   test_development_verification_identity_is_bounded_and_title_safe();
+  test_synthetic_copy_diagnostic_uses_a_fixed_session_and_shared_policy();
   test_bounded_pcm16_wav_fixture_reader();
-  std::cout << "mic probe core tests passed: 14 groups; 100 state cycles; "
+  std::cout << "mic probe core tests passed: 15 groups; 100 state cycles; "
                "permission generation and restart guards; 2 fixture starts\n";
 }
