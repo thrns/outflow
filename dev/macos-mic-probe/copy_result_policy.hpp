@@ -1,5 +1,6 @@
 #pragma once
 
+#include "final_result_parity.hpp"
 #include "session_state.hpp"
 
 #include <cstdint>
@@ -10,6 +11,7 @@ namespace outflow::mic_probe {
 
 enum class CopyResultAttempt : std::uint8_t {
   RejectedBySessionPolicy,
+  RejectedByFinalResultParity,
   Succeeded,
   Failed,
 };
@@ -27,6 +29,19 @@ inline bool copy_result_eligible(SessionState state,
          result_session_id == accepted_session_id && !final_text.empty();
 }
 
+/// Returns whether copy is allowed by both the current session and, when
+/// requested by a development fixture verification, an exact display check.
+inline bool copy_result_eligible(SessionState state,
+                                 std::uint64_t accepted_session_id,
+                                 std::uint64_t result_session_id,
+                                 std::string_view final_text,
+                                 bool require_final_result_parity,
+                                 FinalResultParity parity) noexcept {
+  return copy_result_eligible(state, accepted_session_id, result_session_id,
+                              final_text) &&
+         (!require_final_result_parity || parity == FinalResultParity::Match);
+}
+
 /// Requests one clipboard write only when the accepted final result is ready.
 ///
 /// `clipboard_writer` is called exactly once for an eligible request and is
@@ -38,14 +53,33 @@ CopyResultAttempt request_copy_result(SessionState state,
                                       std::uint64_t accepted_session_id,
                                       std::uint64_t result_session_id,
                                       std::string_view final_text,
+                                      bool require_final_result_parity,
+                                      FinalResultParity parity,
                                       ClipboardWriter&& clipboard_writer) {
   if (!copy_result_eligible(state, accepted_session_id, result_session_id,
                             final_text)) {
     return CopyResultAttempt::RejectedBySessionPolicy;
   }
+  if (require_final_result_parity && parity != FinalResultParity::Match) {
+    return CopyResultAttempt::RejectedByFinalResultParity;
+  }
   return std::forward<ClipboardWriter>(clipboard_writer)(final_text)
              ? CopyResultAttempt::Succeeded
              : CopyResultAttempt::Failed;
+}
+
+/// Preserves the existing ordinary and synthetic copy path, which has no
+/// development fixture parity requirement.
+template <typename ClipboardWriter>
+CopyResultAttempt request_copy_result(SessionState state,
+                                      std::uint64_t accepted_session_id,
+                                      std::uint64_t result_session_id,
+                                      std::string_view final_text,
+                                      ClipboardWriter&& clipboard_writer) {
+  return request_copy_result(state, accepted_session_id, result_session_id,
+                             final_text, false,
+                             FinalResultParity::Unavailable,
+                             std::forward<ClipboardWriter>(clipboard_writer));
 }
 
 }  // namespace outflow::mic_probe

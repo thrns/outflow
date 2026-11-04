@@ -160,6 +160,73 @@ class MacMicProbePrivacyTests(unittest.TestCase):
         self.assertIn("string_from_utf8(text)", action)
         self.assertIn("write_plain_text_to_pasteboard(", action)
 
+    def test_final_result_parity_uses_the_actual_text_view_and_fixture_identity_only(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        parity = (PROBE_ROOT / "final_result_parity.hpp").read_text(encoding="utf-8")
+        update = self.app_method(
+            app,
+            "- (void)updateFinalDisplayParity {",
+            "- (void)settingsPressed:(id)sender {",
+        )
+        final_event = self.app_method(
+            app,
+            "- (void)handleWorkerEvent:(WorkerEvent)event {",
+            "- (void)refreshControls {",
+        )
+        policy = (PROBE_ROOT / "copy_result_policy.hpp").read_text(encoding="utf-8")
+
+        self.assertIn("_launch.fixture_mode", app)
+        self.assertIn("!synthetic_copy_diagnostic", parity)
+        self.assertIn("verification_id.has_value()", parity)
+        self.assertIn("is_valid_verification_id", parity)
+        self.assertIn("NSString* displayed_text = _final_text.string", update)
+        self.assertIn("dataUsingEncoding:NSUTF8StringEncoding", update)
+        self.assertIn("allowLossyConversion:NO", update)
+        self.assertIn("compare_final_result_parity(", update)
+        self.assertIn("_copy_result_session_id == _state.session_id()", update)
+        self.assertIn("[self updateFinalDisplayParity]", final_event)
+        self.assertIn("Final display / copy-source parity: MATCH", update)
+        self.assertIn("Final display / copy-source parity: MISMATCH", update)
+        self.assertIn("Final display / copy-source parity: UNAVAILABLE", update)
+        self.assertIn("require_final_result_parity", policy)
+        self.assertIn("RejectedByFinalResultParity", policy)
+
+        for forbidden in (
+            "NSPasteboard",
+            "write_plain_text_to_pasteboard",
+            "std::cout",
+            "std::cerr",
+            "NSLog(",
+            "shasum",
+            "hash(",
+            "ofstream",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, parity)
+                self.assertNotIn(forbidden, update)
+
+    def test_cancel_and_dismiss_clear_parity_result_and_disable_copy(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        cancel = self.app_method(
+            app, "- (void)cancelPressed:(id)sender {", "- (void)dismissPressed:(id)sender {"
+        )
+        dismiss = self.app_method(
+            app, "- (void)dismissPressed:(id)sender {", "- (void)copyResultPressed:(id)sender {"
+        )
+        clear = self.app_method(
+            app, "- (void)clearFinalResult {", "- (void)cancelActiveSessionForDismissal {"
+        )
+
+        self.assertIn("[self clearFinalResult]", cancel)
+        self.assertIn("[self refreshControls]", cancel)
+        self.assertIn("[self clearFinalResult]", dismiss)
+        self.assertIn("[self refreshControls]", dismiss)
+        self.assertIn("_final_text.string = @\"\"", clear)
+        self.assertIn("_copy_result_session_id = 0", clear)
+        self.assertIn("_final_result_parity = FinalResultParity::Unavailable", clear)
+        self.assertIn("_final_display_parity_label.stringValue = @\"\"", clear)
+        self.assertIn("_final_result_parity", app.split("- (void)refreshControls {", 1)[1])
+
     def test_fixed_sample_is_single_source_and_isolated_pasteboard_tests_stay_separate(self) -> None:
         diagnostic = (PROBE_ROOT / "synthetic_copy_diagnostic.hpp").read_text(encoding="utf-8")
         app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
@@ -262,7 +329,10 @@ class MacMicProbePrivacyTests(unittest.TestCase):
         self.assertIn('make_button(@"Copy Result", self,', app)
         self.assertIn("@selector(copyResultPressed:)", app)
         self.assertEqual(action.count("request_copy_result("), 1)
-        self.assertIn("_copy_result_text, [&](std::string_view text)", action)
+        self.assertIn(
+            "_copy_result_text, [self requiresFinalResultParityVerification],\n      _final_result_parity, [&](std::string_view text)",
+            action,
+        )
         self.assertIn("string_from_utf8(text)", action)
         self.assertIn("write_plain_text_to_pasteboard(", action)
         self.assertIn("[NSPasteboard generalPasteboard]", action)

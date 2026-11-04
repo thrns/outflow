@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 
 #include "copy_result_policy.hpp"
+#include "final_result_parity.hpp"
 #include "fixture_producer.hpp"
 #include "launch_policy.hpp"
 #include "macos_capture.hpp"
@@ -324,6 +325,7 @@ PreviewViews make_preview() {
   NSTextField* __strong _metrics_label;
   NSTextField* __strong _copy_warning_label;
   NSTextField* __strong _copy_status_label;
+  NSTextField* __strong _final_display_parity_label;
   NSTextView* __strong _partial_text;
   NSTextView* __strong _final_text;
   NSButton* __strong _start_button;
@@ -333,6 +335,7 @@ PreviewViews make_preview() {
   NSButton* __strong _copy_result_button;
   NSButton* __strong _settings_button;
   std::string _copy_result_text;
+  FinalResultParity _final_result_parity;
   PasteboardWriteResult _clipboard_write_result;
   std::uint64_t _copy_result_session_id;
   SessionStateMachine _state;
@@ -354,6 +357,8 @@ PreviewViews make_preview() {
 - (void)cancelPressed:(id)sender;
 - (void)dismissPressed:(id)sender;
 - (void)copyResultPressed:(id)sender;
+- (BOOL)requiresFinalResultParityVerification;
+- (void)updateFinalDisplayParity;
 - (void)settingsPressed:(id)sender;
 - (void)clearFinalResult;
 - (std::uint64_t)prepareSession;
@@ -378,6 +383,7 @@ PreviewViews make_preview() {
     _microphone_release_ns = 0;
     _clipboard_write_result = PasteboardWriteResult::PasteboardUnavailable;
     _copy_result_session_id = 0;
+    _final_result_parity = FinalResultParity::Unavailable;
     _pasteboard_test_exit_status = 0;
   }
   return self;
@@ -455,6 +461,16 @@ PreviewViews make_preview() {
   _copy_warning_label.accessibilityLabel = @"Clipboard privacy warning";
   _copy_status_label = make_label(@"", 12.0, NO);
   _copy_status_label.accessibilityLabel = @"Copy Result status";
+  if (final_result_parity_enabled(
+          _launch.fixture_mode, _launch.synthetic_copy_diagnostic,
+          _launch.verification_id.has_value()
+              ? std::optional<std::string_view>(*_launch.verification_id)
+              : std::nullopt)) {
+    _final_display_parity_label = make_label(@"", 12.0, NO);
+    _final_display_parity_label.accessibilityLabel =
+        @"Final display and copy-source parity";
+    _final_display_parity_label.textColor = NSColor.secondaryLabelColor;
+  }
   const auto partial_preview = make_preview();
   const auto final_preview = make_preview();
   NSScrollView* partial_scroll = partial_preview.scroll;
@@ -515,6 +531,10 @@ PreviewViews make_preview() {
   NSMutableArray<NSView*>* window_views = [NSMutableArray arrayWithArray:
       @[title, subtitle, _permission_label, _state_label, _final_label,
         final_scroll, copy_row, _copy_warning_label, _metrics_label, button_row]];
+  if (_final_display_parity_label != nil) {
+    [window_views insertObject:_final_display_parity_label atIndex:
+        [window_views indexOfObject:copy_row] + 1];
+  }
   if (!_launch.synthetic_copy_diagnostic) {
     [window_views insertObject:_partial_label atIndex:4];
     [window_views insertObject:partial_scroll atIndex:5];
@@ -552,7 +572,6 @@ PreviewViews make_preview() {
     [copy_row.topAnchor constraintEqualToAnchor:final_scroll.bottomAnchor constant:8],
     [_copy_warning_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [_copy_warning_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
-    [_copy_warning_label.topAnchor constraintEqualToAnchor:copy_row.bottomAnchor constant:4],
     [_metrics_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [_metrics_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
     [_metrics_label.topAnchor constraintEqualToAnchor:_copy_warning_label.bottomAnchor constant:8],
@@ -562,6 +581,18 @@ PreviewViews make_preview() {
     [button_row.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-18],
     [final_scroll.bottomAnchor constraintLessThanOrEqualToAnchor:_metrics_label.topAnchor constant:-8],
   ]];
+  if (_final_display_parity_label != nil) {
+    [NSLayoutConstraint activateConstraints:@[
+      [_final_display_parity_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+      [_final_display_parity_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+      [_final_display_parity_label.topAnchor constraintEqualToAnchor:copy_row.bottomAnchor constant:4],
+      [_copy_warning_label.topAnchor constraintEqualToAnchor:_final_display_parity_label.bottomAnchor constant:4],
+    ]];
+  } else {
+    [NSLayoutConstraint activateConstraints:@[
+      [_copy_warning_label.topAnchor constraintEqualToAnchor:copy_row.bottomAnchor constant:4],
+    ]];
+  }
   if (!_launch.synthetic_copy_diagnostic) {
     [NSLayoutConstraint activateConstraints:@[
       [_partial_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
@@ -806,7 +837,8 @@ PreviewViews make_preview() {
   (void)sender;
   const auto outcome = request_copy_result(
       _state.state(), _state.session_id(), _copy_result_session_id,
-      _copy_result_text, [&](std::string_view text) {
+      _copy_result_text, [self requiresFinalResultParityVerification],
+      _final_result_parity, [&](std::string_view text) {
         NSString* value = string_from_utf8(text);
         if (value == nil) {
           _clipboard_write_result = PasteboardWriteResult::InvalidUtf8;
@@ -821,6 +853,12 @@ PreviewViews make_preview() {
     case CopyResultAttempt::RejectedBySessionPolicy:
       _copy_status_label.stringValue = @"Copy is unavailable for this session.";
       return;
+    case CopyResultAttempt::RejectedByFinalResultParity:
+      _copy_status_label.stringValue =
+          _final_result_parity == FinalResultParity::Mismatch
+              ? @"Copy blocked: the displayed result differs from the finalized source. The result remains selectable."
+              : @"Copy blocked: display/source parity is unavailable. The result remains selectable.";
+      return;
     case CopyResultAttempt::Succeeded:
       _copy_status_label.stringValue = clipboard_write_status_message(
           PasteboardWriteResult::Succeeded);
@@ -828,6 +866,62 @@ PreviewViews make_preview() {
     case CopyResultAttempt::Failed:
       _copy_status_label.stringValue =
           clipboard_write_status_message(_clipboard_write_result);
+      break;
+  }
+}
+
+- (BOOL)requiresFinalResultParityVerification {
+  if (!_launch.verification_id.has_value()) return NO;
+  return final_result_parity_enabled(
+             _launch.fixture_mode, _launch.synthetic_copy_diagnostic,
+             std::string_view(*_launch.verification_id))
+             ? YES
+             : NO;
+}
+
+- (void)updateFinalDisplayParity {
+  if (![self requiresFinalResultParityVerification] ||
+      _final_display_parity_label == nil) return;
+
+  auto parity = FinalResultParity::Unavailable;
+  const bool current_nonempty_result =
+      _state.state() == SessionState::ResultReady &&
+      _state.session_id() != 0 &&
+      _copy_result_session_id == _state.session_id() &&
+      !_copy_result_text.empty();
+  NSString* displayed_text = _final_text.string;
+  if (current_nonempty_result && displayed_text != nil) {
+    // Read the text view's actual NSString property. This conversion is
+    // temporary and lossless; it does not normalize or inspect the clipboard.
+    NSData* display_bytes = [displayed_text
+        dataUsingEncoding:NSUTF8StringEncoding
+        allowLossyConversion:NO];
+    if (display_bytes != nil) {
+      const auto* bytes = static_cast<const char*>(display_bytes.bytes);
+      parity = compare_final_result_parity(
+          _copy_result_text,
+          std::string_view(bytes == nullptr ? "" : bytes,
+                           static_cast<std::size_t>(display_bytes.length)));
+    }
+  }
+
+  _final_result_parity = parity;
+  switch (parity) {
+    case FinalResultParity::Match:
+      _final_display_parity_label.stringValue =
+          @"Final display / copy-source parity: MATCH";
+      break;
+    case FinalResultParity::Mismatch:
+      _final_display_parity_label.stringValue =
+          @"Final display / copy-source parity: MISMATCH";
+      _copy_status_label.stringValue =
+          @"Copy blocked: the displayed result differs from the finalized source. The result remains selectable.";
+      break;
+    case FinalResultParity::Unavailable:
+      _final_display_parity_label.stringValue =
+          @"Final display / copy-source parity: UNAVAILABLE";
+      _copy_status_label.stringValue =
+          @"Copy blocked: display/source parity is unavailable. The result remains selectable.";
       break;
   }
 }
@@ -1018,6 +1112,7 @@ PreviewViews make_preview() {
       _copy_status_label.stringValue = _copy_result_text.empty()
           ? @"No final text is available to copy."
           : @"";
+      [self updateFinalDisplayParity];
       const bool metrics_saved = write_metrics_exclusive(_launch.metrics_path,
                                                          event.metrics);
       _metrics_label.stringValue = [NSString stringWithFormat:
@@ -1108,7 +1203,8 @@ PreviewViews make_preview() {
   _cancel_button.enabled = active;
   _dismiss_button.enabled = terminal;
   _copy_result_button.enabled = copy_result_eligible(
-      state, _state.session_id(), _copy_result_session_id, _copy_result_text);
+      state, _state.session_id(), _copy_result_session_id, _copy_result_text,
+      [self requiresFinalResultParityVerification], _final_result_parity);
   _settings_button.enabled = !_launch.fixture_mode &&
                              !_launch.synthetic_copy_diagnostic;
   if (_launch.synthetic_copy_diagnostic) {
@@ -1133,8 +1229,10 @@ PreviewViews make_preview() {
 - (void)clearFinalResult {
   clear_sensitive_text(_copy_result_text);
   _copy_result_session_id = 0;
+  _final_result_parity = FinalResultParity::Unavailable;
   _final_text.string = @"";
   _copy_status_label.stringValue = @"";
+  _final_display_parity_label.stringValue = @"";
 }
 
 - (void)cancelActiveSessionForDismissal {

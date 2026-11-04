@@ -1,5 +1,6 @@
 #include "audio_pipeline.hpp"
 #include "copy_result_policy.hpp"
+#include "final_result_parity.hpp"
 #include "fixture_producer.hpp"
 #include "launch_policy.hpp"
 #include "permission_policy.hpp"
@@ -521,6 +522,90 @@ void test_synthetic_copy_diagnostic_uses_a_fixed_session_and_shared_policy() {
   assert(injected_writer_calls == 1);
 }
 
+void test_final_result_parity_is_exact_and_copy_fails_closed() {
+  assert(final_result_parity_enabled(true, false, "79K-REAL-COPY-01"));
+  assert(!final_result_parity_enabled(false, false, "79K-REAL-COPY-01"));
+  assert(!final_result_parity_enabled(true, true, "79K-REAL-COPY-01"));
+  assert(!final_result_parity_enabled(true, false, std::nullopt));
+  assert(!final_result_parity_enabled(true, false, "invalid id"));
+
+  assert(compare_final_result_parity("plain ASCII", "plain ASCII") ==
+         FinalResultParity::Match);
+  const std::string unicode = "Café — Moonshine 😀 🧪";
+  assert(compare_final_result_parity(unicode, unicode) ==
+         FinalResultParity::Match);
+  const std::string multiline = "First line\nSecond line\n";
+  assert(compare_final_result_parity(multiline, multiline) ==
+         FinalResultParity::Match);
+  assert(compare_final_result_parity("a character", "a caractere") ==
+         FinalResultParity::Mismatch);
+  assert(compare_final_result_parity("two words", "two  words") ==
+         FinalResultParity::Mismatch);
+  assert(compare_final_result_parity("first\nsecond", "first\r\nsecond") ==
+         FinalResultParity::Mismatch);
+
+  // Composed U+00E9 and decomposed U+0065 U+0301 stay byte-distinct.
+  const std::string composed = "\xC3\xA9";
+  const std::string decomposed = "e\xCC\x81";
+  assert(compare_final_result_parity(composed, decomposed) ==
+         FinalResultParity::Mismatch);
+
+  const std::string invalid_utf8("\xC0\xAF", 2);
+  assert(compare_final_result_parity(invalid_utf8, invalid_utf8) ==
+         FinalResultParity::Unavailable);
+  assert(compare_final_result_parity("valid", invalid_utf8) ==
+         FinalResultParity::Unavailable);
+  assert(compare_final_result_parity("valid", std::nullopt) ==
+         FinalResultParity::Unavailable);
+
+  std::size_t writer_calls = 0;
+  const auto counting_writer = [&](std::string_view) {
+    ++writer_calls;
+    return true;
+  };
+  const std::string accepted_text = "fixture final";
+  assert(request_copy_result(SessionState::ResultReady, 81, 80, accepted_text,
+                             true, FinalResultParity::Match,
+                             counting_writer) ==
+         CopyResultAttempt::RejectedBySessionPolicy);
+  assert(writer_calls == 0);
+  assert(request_copy_result(SessionState::ResultReady, 81, 81, accepted_text,
+                             true, FinalResultParity::Mismatch,
+                             counting_writer) ==
+         CopyResultAttempt::RejectedByFinalResultParity);
+  assert(request_copy_result(SessionState::ResultReady, 81, 81, accepted_text,
+                             true, FinalResultParity::Unavailable,
+                             counting_writer) ==
+         CopyResultAttempt::RejectedByFinalResultParity);
+  assert(writer_calls == 0);
+  assert(copy_result_eligible(SessionState::ResultReady, 81, 81, accepted_text,
+                              true, FinalResultParity::Match));
+  assert(!copy_result_eligible(SessionState::ResultReady, 81, 81, accepted_text,
+                               true, FinalResultParity::Mismatch));
+  assert(request_copy_result(SessionState::ResultReady, 81, 81, accepted_text,
+                             true, FinalResultParity::Match,
+                             counting_writer) == CopyResultAttempt::Succeeded);
+  assert(writer_calls == 1);
+
+  // Cancel rejects the session before parity can authorize a writer. Dismiss
+  // returns to Idle, where a retained-looking stale result is also ineligible.
+  SessionStateMachine session;
+  assert(session.begin(82));
+  assert(session.listening(82));
+  assert(session.cancel(82));
+  assert(request_copy_result(session.state(), session.session_id(), 82,
+                             accepted_text, true, FinalResultParity::Match,
+                             counting_writer) ==
+         CopyResultAttempt::RejectedBySessionPolicy);
+  assert(writer_calls == 1);
+  assert(session.dismiss());
+  assert(request_copy_result(session.state(), session.session_id(), 82,
+                             accepted_text, true, FinalResultParity::Match,
+                             counting_writer) ==
+         CopyResultAttempt::RejectedBySessionPolicy);
+  assert(writer_calls == 1);
+}
+
 void test_bounded_pcm16_wav_fixture_reader() {
   std::vector<std::uint8_t> bytes{
       'R','I','F','F', 40,0,0,0, 'W','A','V','E',
@@ -571,7 +656,8 @@ int main() {
   test_explicit_copy_result_policy_and_exact_text();
   test_development_verification_identity_is_bounded_and_title_safe();
   test_synthetic_copy_diagnostic_uses_a_fixed_session_and_shared_policy();
+  test_final_result_parity_is_exact_and_copy_fails_closed();
   test_bounded_pcm16_wav_fixture_reader();
-  std::cout << "mic probe core tests passed: 15 groups; 100 state cycles; "
+  std::cout << "mic probe core tests passed: 16 groups; 100 state cycles; "
                "permission generation and restart guards; 2 fixture starts\n";
 }

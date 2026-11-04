@@ -1400,7 +1400,7 @@ Press **Start timed fixture**, wait for temporary partial text, then press **Sto
 
 **Copy Result** is disabled before a result, during Preparing/Listening/Finalizing, after an empty or silent result, and after Cancel, Dismiss, or Error. It becomes enabled only when a nonempty actual final transcript belongs to the current accepted ResultReady session. A display-only “No speech was recognized in this session.” message is never eligible. Click **Copy Result** or activate it with **Return**; then paste manually into the destination field. The final preview stays visible until **Dismiss result**.
 
-The warning shown before copying is: **“Copied text may be retained by clipboard managers or synced to other devices.”** Clipboard managers or OS synchronization may retain copied content. If the operating system reports a write failure, the app keeps the final text visible and selectable and suggests selecting it and pressing **⌘C**. It does not automatically retry, read the prior clipboard, or intentionally clear the clipboard first. NSPasteboard does not promise rollback/atomicity after a failed write, so the app does not claim the previous clipboard is always preserved. Cancel stops capture and clears in-app text; Dismiss clears the final preview and returns to Idle. Neither action writes clipboard content.
+The 79G warning and writer description above are historical and superseded by Prompt 79H. The current writer converts UTF-8 before pasteboard access, then calls `clearContents` once and `writeObjects:` once after an explicit Copy Result action. Clipboard managers or OS synchronization may retain copied content. If the operating system reports a write failure, the app keeps the final text visible and selectable and suggests selecting it and pressing **⌘C**. It does not automatically retry, read the prior clipboard, restore prior contents, or claim rollback/atomicity; failure after clearing may lose the previous contents. Cancel stops capture and clears in-app text; Dismiss clears the final preview and returns to Idle. Neither action writes clipboard content.
 
 #### Tests and observed results
 
@@ -2836,6 +2836,111 @@ git diff --check
 - **A WER corpus test is unconfigured:** record it as not run, not passed. The licensed reference corpus remains a separate gate.
 
 Prompt 79J is development-prototype evidence only. It does not complete T-046, T-047, T-010, T-011, AC-10, or the MVP. See [`evidence/mvp/prompt-79j-detailed-implementation-handoff.md`](evidence/mvp/prompt-79j-detailed-implementation-handoff.md) for exact outcomes and unresolved causes.
+
+## Prompt 79K — real Moonshine final-result display and copy parity
+
+Prompt 79K adds a development-only parity check for a timed-fixture session launched with a valid `--verification-id`. It compares the complete session-owned finalized UTF-8 bytes with a lossless UTF-8 encoding of the actual AppKit final-result view's `NSTextView.string` property. The check does not trim, normalize, case-fold, rewrite, hash, log, persist, or export transcript content, and does not touch the pasteboard. Ordinary microphone and synthetic diagnostic modes do not show the check.
+
+The status appears beside Copy Result after an accepted nonempty final result:
+
+- **MATCH** means the owned result bytes and displayed text bytes are exactly equal.
+- **MISMATCH** means at least one byte differs; Copy Result is disabled and the result stays selectable.
+- **UNAVAILABLE** means the displayed value cannot be converted losslessly to UTF-8, either side is invalid UTF-8, or there is no current nonempty accepted result. Copy Result is disabled for the verification session.
+
+Copy eligibility still requires ResultReady, the accepted nonzero session ID, and nonempty finalized text. The verification session also requires MATCH. A stale, cancelled, empty, incomplete, mismatched, or unavailable result cannot reach the writer. The existing explicit Copy Result action remains the only ordinary general-pasteboard write; it converts UTF-8 before pasteboard access, calls `clearContents` once, then makes one `writeObjects:` attempt and reports AppKit's result. No automatic copy, retry, pasteboard read, or restoration is added. Cancel and Dismiss clear the volatile result and parity status.
+
+### Build and launch the real-result verification
+
+Use the already-authorized pinned local source, libraries, model, and WAV fixture from the Prompt 79J build environment. Export those variables first if they are not present in the shell, then build to a fresh directory and launch with the full 120-second fixture window:
+
+```sh
+export MOONSHINE_SOURCE_DIR=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
+export MOONSHINE_SOURCE_REVISION=234f60faa0eb388b01cdf7e60aca232af37aefda
+export MOONSHINE_LIBRARY=/private/tmp/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
+export MOONSHINE_ORT_LIBRARY="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib"
+export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
+export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d /private/tmp/outflow-prompt79k.XXXXXX)"
+
+scripts/build_macos_mic_probe.sh
+export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
+
+scripts/run_macos_mic_probe.sh \
+  --verification-id "79K-REAL-COPY-01" \
+  --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
+  --fixture-seconds 120
+```
+
+Before interacting, confirm the visible title includes the exact verification ID and PID, and confirm that PID's executable is the one in the fresh bundle. For example:
+
+```sh
+PID_FROM_WINDOW=12345 # replace with the PID shown in the identified window
+ps -p "$PID_FROM_WINDOW" -o pid=,args=
+lsof -a -p "$PID_FROM_WINDOW" -d txt
+```
+
+Press **Start timed fixture**, wait until Listening shows a nonempty partial, and click **Stop** before the 120-second auto-finalization limit. Wait for ResultReady, confirm a nonempty final and parity **MATCH**, then confirm Copy Result is enabled. The startup command does not copy anything.
+
+### Controlled Copy Result and TextEdit comparison
+
+Copy Result replaces the system clipboard. The warning says the prior contents may be lost if the writer fails after `clearContents`; clipboard managers or sync may retain copied text. Only proceed after the operator explicitly approves that one replacement. Then click Copy Result once and record only whether AppKit reports success or failure. Do not inspect, read, clear, retry, or restore the general pasteboard.
+
+Open a genuinely new, empty, unsaved TextEdit document, switch it to plain-text mode, and confirm its text view has focus. Perform one normal **⌘V**. Compare the complete in-memory TextEdit value with the complete Outflow final result using exact Unicode string equality, with no normalization or rewriting. Where possible, compare the visible Outflow and TextEdit results while avoiding any screenshot or saved artifact containing recognized words. Discard the TextEdit document without saving. Dismiss the Outflow result and confirm it is cleared and Copy Result is disabled.
+
+Record only sanitized metadata: correct app/window identity, Stop action, nonempty final, parity status, Copy action, AppKit status, whether paste was observed, exact equality status, visual comparison status, Cancel/Dismiss behavior, and whether any comparison interface was inaccessible. Never include recognized words, clipboard contents, transcript-bearing screenshots, recordings, or hashes in logs, evidence, or commits.
+
+### Separate Cancel regression
+
+Launch a fresh identified fixture process, then press Start, wait for a nonempty partial while Listening, and press **Cancel**. Confirm fixture production stops, no final is committed, parity is unavailable or cleared, Copy Result stays disabled, and no clipboard write occurs. Press **Dismiss result** and confirm Idle. Do not click Copy in this run.
+
+### Regression checks and troubleshooting
+
+Run the native focused suite, real-fixture harness, and repository regressions from the repository root:
+
+```sh
+scripts/test_macos_mic_probe.sh
+scripts/test_macos_mic_probe.sh --real-fixture
+python3 -m unittest discover -s scripts/tests -v
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+bash -n scripts/build_macos_mic_probe.sh \
+  scripts/run_macos_mic_probe.sh \
+  scripts/test_macos_mic_probe.sh
+git diff --check
+```
+
+The existing synthetic diagnostic remains model- and microphone-free at runtime and continues to use the same Copy Result action. To rerun it, use a fresh build and:
+
+```sh
+scripts/run_macos_mic_probe.sh \
+  --verification-id "79K-SYNTH-01" \
+  --synthetic-copy-diagnostic
+```
+
+Verify its fixed sample, enabled button, and warning, but do not click Copy unless a separate clipboard replacement is explicitly approved. The isolated AppKit test uses its own unique pasteboard and synthetic values; it never reads or modifies the general clipboard.
+
+- **Parity status is absent:** parity is shown only for a valid identified timed-fixture launch; check that both `--verification-id` and `--timed-fixture` reached the intended fresh app.
+- **MISMATCH or UNAVAILABLE:** do not copy. Keep the result selectable and report the sanitized status. Do not retry or alter the writer speculatively.
+- **Copy Result is disabled despite MATCH:** confirm the state is ResultReady, the displayed final is nonempty, and its session ID is still current; Dismiss/cancelled results are intentionally ineligible.
+- **The desktop connector shows another process:** stop before interaction. Match the exact window ID/PID and executable path to the fresh bundle. If the correct window cannot be reached, report desktop verification blocked.
+- **AppKit reports failure:** retain the visible result and do not retry; the previous clipboard may already have been cleared.
+- **TextEdit receives no or different text:** verify the new blank document, plain-text mode, focus, complete document value, and exact comparison interface before assigning a failing boundary. Do not inspect the clipboard directly.
+- **Licensed human-reference WER is not configured:** keep that separate quality test classified as skipped/not run, never passed.
+
+### Prompt 79K sanitized outcome
+
+The identified 120-second fixture run reached Listening with a nonempty partial; **Stop was clicked**, ResultReady contained a nonempty final, the source/display parity status was **MATCH**, and Copy Result was enabled. After the operator-approved single Copy Result click, AppKit reported **SUCCESS**. A new plain-text TextEdit document received one ⌘V, but exact final/document equality was **MISMATCH**. The visual comparison is **UNVERIFIED**. The first observed failing comparison is therefore at the TextEdit document-value boundary after the successful write; without reading the clipboard or an independent visual check, the cause remains unknown. The earlier Prompt 79I mismatch reproduced at this same observable boundary; it was not explained.
+
+The separate identified Cancel run reached a nonempty partial, then Cancel stopped fixture production, discarded the result, cleared parity, and kept Copy disabled; Dismiss returned the app to Idle. A fresh synthetic diagnostic launch showed its fixed sample, existing enabled Copy Result button, and warning; it was dismissed without another clipboard write. No recognized words or clipboard contents are included in the evidence.
+
+Prompt 79K is development-prototype evidence only. It does not complete T-046, T-047, T-010, T-011, AC-10, or release acceptance. Physical 4 GB hardware, release memory/size, licensed-corpus WER, supported-platform coverage, installer/signing, and accessibility/legal gates remain separate and unchanged. See [`evidence/mvp/prompt-79k-detailed-implementation-handoff.md`](evidence/mvp/prompt-79k-detailed-implementation-handoff.md) for the sanitized run outcome.
 
 ## Hypothetical vocabulary resolution proposals (Task 53)
 
