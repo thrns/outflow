@@ -1371,9 +1371,9 @@ Permission grant is accepted only for the still-current request generation and s
 
 This evidence applies only to the development-only AppKit/AVFoundation probe on the tested macOS machine. It does not complete T-011, T-025–T-034, AC-06, T-010, or any production/release gate. The 4 GB hardware, model quality, full app resource limits, and cross-platform behavior remain unverified.
 
-### Prompt 79G — explicit Copy Result in the development probe
+### Prompt 79G baseline — superseded by Prompt 79H
 
-Prompt 79G adds a development-only **Copy Result** action to the existing AppKit probe. It does not implement the production Tauri result panel, target identity checks, or insertion. **T-046, T-047, T-010, T-011, AC-10, and the MVP remain incomplete.** The final preview stays selectable and is retained in volatile memory only while its accepted session is ResultReady.
+Prompt 79G introduced a development-only **Copy Result** action to the existing AppKit probe. Its `writeObjects:`-without-clear behavior and warning below describe the pre-79H baseline only. For the current replacement sequence, warning, failure behavior, test results, and desktop verification status, use the Prompt 79H section immediately after this baseline. This prototype does not implement the production Tauri result panel, target identity checks, or insertion. **T-046, T-047, T-010, T-011, AC-10, and the MVP remain incomplete.** The final preview stays selectable and is retained in volatile memory only while its accepted session is ResultReady.
 
 #### Build and launch
 
@@ -1422,7 +1422,53 @@ npm run build
 git diff --check
 ```
 
-The focused native suite reports 13 core groups and 9 worker lifecycle groups, including 100 repeated start/stop/cancel/dismiss cycles. The real-fixture suite uses the authorized 12-second local WAV and must report nonempty partial and final recognition. The source-level privacy suite checks that writes are limited to the explicit guarded action and that no normal clipboard-content read is added. Full regression results and any unavailable repository-wide commands are recorded in `evidence/mvp/prompt-79g-detailed-implementation-handoff.md`; this local AppKit work is not evidence for production AC-10 or release gates.
+The focused native suite reports 13 core groups and 9 worker lifecycle groups, including 100 repeated start/stop/cancel/dismiss cycles. The real-fixture suite uses the authorized 12-second local WAV and reports nonempty partial and final recognition. The source-level privacy suite checks that writes are limited to the explicit guarded action and that no normal clipboard-content read is added. Prompt 79H test counts and the separate isolated/desktop verification layers are recorded in `evidence/mvp/prompt-79h-detailed-implementation-handoff.md`; this local AppKit work is not evidence for production AC-10 or release gates.
+
+### Prompt 79H — macOS Copy Result replacement and manual paste
+
+Prompt 79H corrects the development-only AppKit probe's **Copy Result** operation. The app checks current-session eligibility and converts the exact UTF-8 result before it touches the pasteboard. After an explicit click or Return activation, it calls `clearContents` once and then makes one `writeObjects:` plain-text write. Start, partial/final recognition, Stop, Cancel, Dismiss, errors, and shutdown do not write to the system clipboard. The final preview stays selectable in volatile app memory until Dismiss or shutdown. This does not implement production Tauri UI, target checks, or insertion; **T-046, T-047, T-010, T-011, AC-10, and the MVP remain incomplete.**
+
+The warning displayed before copying is: **“Copy replaces the clipboard. If writing fails after clearing it, prior contents may be lost. Clipboard managers or sync may retain copies.”** Clear and write are separate operations, so a failed write may leave prior contents lost. The app never reads or restores previous clipboard content, retries, or claims rollback. A failed copy keeps the final result visible and selectable and suggests selecting it and pressing **⌘C**. `NSPasteboard.accessBehavior` is an access-policy value and is not treated as a diagnosis for an individual write failure. See Apple's [`clearContents`](https://developer.apple.com/documentation/appkit/nspasteboard/clearcontents%28%29) and [`writeObjects:`](https://developer.apple.com/documentation/appkit/nspasteboard/writeobjects%28_%3A%29?language=objc) documentation.
+
+#### Build and run the development app
+
+Export the pinned local Moonshine paths from the preceding Prompt 79G **Build and launch** block, then use a fresh Prompt 79H build directory:
+
+```sh
+export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-prompt79h-build
+scripts/build_macos_mic_probe.sh
+export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
+scripts/run_macos_mic_probe.sh \
+  --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
+  --fixture-seconds 12
+```
+
+The runner launches a fresh bundle through LaunchServices (`open -n -a`). Start the timed fixture, wait for actual partial text, press Stop, and wait for a nonempty final result. No clipboard operation occurs before explicit Copy Result.
+
+#### Isolated AppKit pasteboard test
+
+`scripts/test_macos_mic_probe.sh` now compiles and runs `dev/macos-mic-probe/tests/pasteboard_integration_test.mm`. The test uses `+[NSPasteboard pasteboardWithUniqueName]`, not the general pasteboard. It checks the initially empty test pasteboard, four fixed synthetic ASCII/Unicode/emoji/multiline values, exact plain-text readback, replacement without stale items, and `releaseGlobally` cleanup. The existing pure policy and worker lifecycle tests still run in the same script. This test requires a macOS SDK and an available pasteboard service in the test user's session; it does not prove system general-pasteboard access.
+
+#### Controlled manual Copy Result → TextEdit verification
+
+Only Copy Result intentionally replaces the system clipboard. Do not inspect or preserve unrelated prior clipboard data.
+
+1. With the timed fixture active, wait for nonempty partial text, press Stop, and wait for a nonempty final result.
+2. Click **Copy Result** and confirm the app reports **“Copied. Paste manually where you want the text.”**
+3. Switch to an unsaved blank TextEdit document and press **⌘V**. Compare the pasted text visually with the final preview, including punctuation, spaces, and newlines; discard the unsaved document without saving.
+4. Return to the probe, dismiss the result, and confirm Copy Result is disabled. Repeat with a new fixture and activate Copy Result using **Return**.
+5. Run a separate fixture Cancel flow and confirm it clears the result and leaves Copy Result disabled without copying.
+
+Repository evidence must not contain recognized words, clipboard contents, or the TextEdit document. Record only pass/fail for visual equality and the sanitized application status. If graphical automation is unavailable or blocks the desktop layer, report **PARTIALLY VERIFIED** even when the isolated test passes.
+
+#### Failed-write recovery and troubleshooting
+
+- A failed `writeObjects:` result does not itself identify the cause. Check that the probe runs in an interactive graphical login session and that the current `.app` bundle was launched through the supplied LaunchServices script. The app does not infer a permission denial from `accessBehavior`.
+- If LaunchServices returns `kLSNoExecutableErr` before the app window opens, record it as a launch failure; it says nothing about the pasteboard write. Do not relabel it as a clipboard permission denial or claim desktop verification.
+- Run the isolated AppKit test separately. If it passes while Copy Result on the general pasteboard fails, record the precise app status and investigate the host launch/session or OS behavior. Do not reset TCC, broaden permissions, or disable system security.
+- If failure follows clear, previous clipboard contents may have been lost. Keep the in-app final result visible, select it, and press **⌘C** for an explicit manual recovery attempt. There is no automatic retry or rollback.
+
+Full validation commands are listed in the preceding Prompt 79G test block. Exact Prompt 79H results and the separate isolated/desktop verification layers are in [`evidence/mvp/prompt-79h-detailed-implementation-handoff.md`](evidence/mvp/prompt-79h-detailed-implementation-handoff.md). This work does not complete T-046, T-047, AC-10, or a production release gate.
 
 ### Authorized local development model preparation
 

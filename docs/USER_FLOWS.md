@@ -203,7 +203,7 @@ stateDiagram-v2
 2. Clipboard is unchanged on panel open. User explicitly clicks Copy/keyboard shortcut; app writes text to clipboard once.
 3. Display reminder: other OS apps/clipboard managers may retain copied text. User pastes manually.
 4. Dismiss clears in-app result buffer; no history or crash log persistence.
-5. If copying fails, user can still select text in panel; leave prior clipboard alone.
+5. If copying fails, the final text stays selectable in the panel. Because replacement clears the pasteboard before writing, a failed write may already have removed prior clipboard contents; do not read or restore them to simulate rollback.
 
 **Secure field nuance:** protected input never receives auto injection; exposing text in clipboard still requires user acknowledgement. **AC:** AC-10.
 

@@ -9,7 +9,7 @@
 namespace outflow::mic_probe {
 
 enum class CopyResultAttempt : std::uint8_t {
-  Rejected,
+  RejectedBySessionPolicy,
   Succeeded,
   Failed,
 };
@@ -41,7 +41,7 @@ CopyResultAttempt request_copy_result(SessionState state,
                                       ClipboardWriter&& clipboard_writer) {
   if (!copy_result_eligible(state, accepted_session_id, result_session_id,
                             final_text)) {
-    return CopyResultAttempt::Rejected;
+    return CopyResultAttempt::RejectedBySessionPolicy;
   }
   return std::forward<ClipboardWriter>(clipboard_writer)(final_text)
              ? CopyResultAttempt::Succeeded

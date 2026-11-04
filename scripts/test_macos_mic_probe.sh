@@ -111,3 +111,24 @@ PY
     fi
   done
 fi
+
+PASTEBOARD_APP_BUILD_DIR="$TEST_DIR/pasteboard-probe-build"
+OUTFLOW_MIC_PROBE_BUILD_DIR="$PASTEBOARD_APP_BUILD_DIR" \
+  "$REPOSITORY_ROOT/scripts/build_macos_mic_probe.sh" >/dev/null || \
+  fail "development probe build for the AppKit test failed"
+PASTEBOARD_APP="$PASTEBOARD_APP_BUILD_DIR/OutflowMicProbe.app"
+PASTEBOARD_RESULT="$TEST_DIR/pasteboard-integration-result.txt"
+PASTEBOARD_OPEN_STATUS=0
+if /usr/bin/open -n -W -a "$PASTEBOARD_APP" --args \
+  --isolated-pasteboard-test "$PASTEBOARD_RESULT"; then
+  PASTEBOARD_OPEN_STATUS=0
+else
+  PASTEBOARD_OPEN_STATUS=$?
+fi
+[[ -f "$PASTEBOARD_RESULT" ]] || \
+  fail "isolated AppKit test did not report a result (LaunchServices status $PASTEBOARD_OPEN_STATUS)"
+cat "$PASTEBOARD_RESULT"
+rg -q '^PASS isolated AppKit pasteboard integration tests:' "$PASTEBOARD_RESULT" || \
+  fail "isolated AppKit pasteboard integration test failed"
+[[ "$PASTEBOARD_OPEN_STATUS" == 0 ]] || \
+  fail "LaunchServices reported status $PASTEBOARD_OPEN_STATUS after the AppKit test"

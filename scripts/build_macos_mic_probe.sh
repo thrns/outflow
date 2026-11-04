@@ -66,6 +66,7 @@ clang++ \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/fixture_producer.cpp" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/model_verifier.cpp" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/session_worker.cpp" \
+  "$REPOSITORY_ROOT/dev/macos-mic-probe/tests/pasteboard_integration_test.mm" \
   "$MOONSHINE_LIBRARY" \
   -Wl,-rpath,"$(dirname "$MOONSHINE_LIBRARY")" \
   -Wl,-rpath,"$(dirname "$MOONSHINE_ORT_LIBRARY")" \

@@ -318,11 +318,11 @@ void test_explicit_copy_result_policy_and_exact_text() {
                            SessionState::Cancelled, SessionState::Error}) {
     assert(!copy_result_eligible(state, 71, 71, final_text));
     assert(request_copy_result(state, 71, 71, final_text, fake_writer) ==
-           CopyResultAttempt::Rejected);
+           CopyResultAttempt::RejectedBySessionPolicy);
   }
   assert(!copy_result_eligible(SessionState::ResultReady, 71, 71, {}));
   assert(request_copy_result(SessionState::ResultReady, 71, 71, {}, fake_writer) ==
-         CopyResultAttempt::Rejected);
+         CopyResultAttempt::RejectedBySessionPolicy);
 
   // A visible no-speech message is display-only: empty transcript data is
   // passed to the policy, so the placeholder can never reach the writer.
@@ -332,12 +332,12 @@ void test_explicit_copy_result_policy_and_exact_text() {
                                empty_final_text));
   assert(request_copy_result(SessionState::ResultReady, 71, 71,
                              empty_final_text, fake_writer) ==
-         CopyResultAttempt::Rejected);
+         CopyResultAttempt::RejectedBySessionPolicy);
   assert(written_text != placeholder);
 
   assert(!copy_result_eligible(SessionState::ResultReady, 72, 71, final_text));
   assert(request_copy_result(SessionState::ResultReady, 72, 71, final_text,
-                             fake_writer) == CopyResultAttempt::Rejected);
+                             fake_writer) == CopyResultAttempt::RejectedBySessionPolicy);
   assert(write_requests == 0);
 
   // The explicit action makes one request and preserves all UTF-8 bytes,
@@ -357,6 +357,7 @@ void test_explicit_copy_result_policy_and_exact_text() {
                              failed_writer) == CopyResultAttempt::Failed);
   assert(write_requests == 2);
   assert(written_text == final_text);
+  assert(final_text == "Café — line one!\nSecond line 😀…");
   assert(copy_result_eligible(SessionState::ResultReady, 71, 71, final_text));
 
   // Cancel, Dismiss/new-session identity, and errors all disable the action.

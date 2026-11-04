@@ -66,28 +66,40 @@ class MacMicProbePrivacyTests(unittest.TestCase):
 
     def test_clipboard_write_is_bound_to_one_explicit_button_action(self) -> None:
         app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        writer = (PROBE_ROOT / "pasteboard_writer.hpp").read_text(encoding="utf-8")
         action = self.app_method(
             app, "- (void)copyResultPressed:(id)sender {", "- (void)settingsPressed:(id)sender {"
         )
-        writer_start = app.index("bool write_clipboard_text(std::string_view text) {")
-        writer_end = app.index("bool print_runtime_identity(", writer_start)
-        writer = app[writer_start:writer_end]
 
         self.assertIn('make_button(@"Copy Result", self,', app)
         self.assertIn("@selector(copyResultPressed:)", app)
         self.assertEqual(action.count("request_copy_result("), 1)
-        self.assertIn("_copy_result_text, write_clipboard_text", action)
-        self.assertEqual(app.count("writeObjects:@[value]"), 1)
-        self.assertIn("clipboard_write_failure_message()", action)
-        self.assertIn("accessBehavior", app)
-        self.assertNotIn("NSPasteboard generalPasteboard].stringForType", app)
+        self.assertIn("_copy_result_text, [&](std::string_view text)", action)
+        self.assertIn("string_from_utf8(text)", action)
+        self.assertIn("write_plain_text_to_pasteboard(", action)
+        self.assertIn("[NSPasteboard generalPasteboard]", action)
+        self.assertLess(action.index("string_from_utf8(text)"),
+                        action.index("[NSPasteboard generalPasteboard]"))
+        self.assertLess(action.index("[NSPasteboard generalPasteboard]"),
+                        action.index("write_plain_text_to_pasteboard("))
+        self.assertEqual(app.count("write_plain_text_to_pasteboard("), 1)
+        self.assertEqual(app.count("[NSPasteboard generalPasteboard]"), 1)
+        self.assertNotIn("accessBehavior", app + writer)
         self.assertEqual(writer.count("writeObjects:@[value]"), 1)
-        self.assertNotIn("clearContents", writer)
+        self.assertLess(writer.index("initWithBytes:"),
+                        writer.index("[pasteboard clearContents]"))
+        self.assertLess(writer.index("[pasteboard clearContents]"),
+                        writer.index("writeObjects:@[value]"))
         self.assertNotIn("declareTypes", writer)
+        self.assertIn("PasteboardWriteResult::InvalidUtf8", writer)
+        self.assertIn("PasteboardWriteResult::PasteboardUnavailable", writer)
+        self.assertIn("PasteboardWriteResult::PreparationFailed", writer)
+        self.assertIn("PasteboardWriteResult::WriteFailed", writer)
+        self.assertIn("RejectedBySessionPolicy", app)
         for clipboard_read in ("stringForType:", "dataForType:", "readObjectsForClasses:",
                                "URLFromPasteboard"):
             with self.subTest(clipboard_read=clipboard_read):
-                self.assertNotIn(clipboard_read, app)
+                self.assertNotIn(clipboard_read, app + writer)
 
         lifecycle_handlers = (
             ("- (void)startPressed:(id)sender {", "- (void)stopPressed:(id)sender {"),
@@ -102,8 +114,25 @@ class MacMicProbePrivacyTests(unittest.TestCase):
         for start, end in lifecycle_handlers:
             body = self.app_method(app, start, end)
             with self.subTest(handler=start):
-                self.assertNotIn("write_clipboard_text", body)
+                self.assertNotIn("write_plain_text_to_pasteboard", body)
                 self.assertNotIn("request_copy_result", body)
+
+        worker_events = self.app_method(
+            app, "- (void)handleWorkerEvent:(WorkerEvent)event {", "- (void)refreshControls {"
+        )
+        self.assertNotIn("write_plain_text_to_pasteboard", worker_events)
+        self.assertNotIn("request_copy_result", worker_events)
+
+    def test_clipboard_warning_and_failure_copy_recovery_are_accurate(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        self.assertIn(
+            "Copy replaces the clipboard. If writing fails after clearing it, prior "
+            "contents may be lost. Clipboard managers or sync may retain copies.",
+            app,
+        )
+        self.assertIn("Its previous contents may have been cleared; the result remains "
+                      "selectable", app)
+        self.assertIn("select it and press ⌘C", app)
 
     def test_copy_policy_requires_ready_nonempty_current_session_text(self) -> None:
         policy = (PROBE_ROOT / "copy_result_policy.hpp").read_text(encoding="utf-8")
@@ -161,11 +190,9 @@ class MacMicProbePrivacyTests(unittest.TestCase):
         self.assertIn("view.selectable = YES", app)
         self.assertIn('_copy_warning_label.accessibilityLabel = @"Clipboard privacy warning"', app)
         self.assertIn('_copy_status_label.accessibilityLabel = @"Copy Result status"', app)
-        self.assertIn(
-            "Copied text may be retained by clipboard managers or synced to other devices.",
-            app,
-        )
-        self.assertIn("Copy failed. Select the text above, then press ⌘C", app)
+        self.assertIn("Copy replaces the clipboard.", app)
+        self.assertIn("previous contents may have been cleared", app)
+        self.assertIn("result remains selectable", app)
 
     def test_only_idle_start_and_preparing_worker_ready_can_open_capture(self) -> None:
         app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")

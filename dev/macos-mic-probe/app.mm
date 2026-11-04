@@ -6,9 +6,11 @@
 #include "fixture_producer.hpp"
 #include "macos_capture.hpp"
 #include "model_verifier.hpp"
+#include "pasteboard_writer.hpp"
 #include "permission_policy.hpp"
 #include "session_state.hpp"
 #include "session_worker.hpp"
+#include "tests/pasteboard_integration_test.hpp"
 #include "wav_fixture.hpp"
 
 #include <fcntl.h>
@@ -37,6 +39,7 @@ struct LaunchOptions {
   std::filesystem::path model_directory;
   std::filesystem::path fixture_path;
   std::filesystem::path metrics_path;
+  std::filesystem::path pasteboard_test_result_path;
   std::uint32_t fixture_seconds = 12;
   std::uint32_t auto_cancel_after_ms = 0;
   bool fixture_mode = false;
@@ -65,6 +68,11 @@ LaunchOptions read_launch_options() {
     if ([argument isEqualToString:@"--model-dir"]) {
       NSString* value = next_value();
       if (value != nil) result.model_directory = value.fileSystemRepresentation;
+    } else if ([argument isEqualToString:@"--isolated-pasteboard-test"]) {
+      NSString* value = next_value();
+      if (value != nil) {
+        result.pasteboard_test_result_path = value.fileSystemRepresentation;
+      }
     } else if ([argument isEqualToString:@"--timed-fixture"]) {
       NSString* value = next_value();
       if (value != nil) {
@@ -187,29 +195,20 @@ bool write_metrics_exclusive(const std::filesystem::path& path,
   return ::close(descriptor) == 0;
 }
 
-bool write_clipboard_text(std::string_view text) {
-  // Convert before touching the system pasteboard. A single writeObjects:
-  // call reports the OS result; no clear/declare pre-write is performed, and
-  // NSPasteboard does not promise transactional rollback.
-  NSString* value = [[NSString alloc] initWithBytes:text.data()
-                                             length:text.size()
-                                           encoding:NSUTF8StringEncoding];
-  if (value == nil) return false;
-  return [[NSPasteboard generalPasteboard] writeObjects:@[value]];
-}
-
-NSString* clipboard_write_failure_message() {
-  // This reads only macOS's per-app access policy, never pasteboard contents.
-  switch ([NSPasteboard generalPasteboard].accessBehavior) {
-    case NSPasteboardAccessBehaviorAlwaysDeny:
-      return @"macOS blocks clipboard access for this app. Check System Settings, or select the text above and press ⌘C.";
-    case NSPasteboardAccessBehaviorAsk:
-      return @"macOS did not allow the clipboard write. Check System Settings, or select the text above and press ⌘C.";
-    case NSPasteboardAccessBehaviorDefault:
-    case NSPasteboardAccessBehaviorAlwaysAllow:
-      return @"Copy failed. Select the text above, then press ⌘C to copy it manually.";
+NSString* clipboard_write_status_message(PasteboardWriteResult result) {
+  switch (result) {
+    case PasteboardWriteResult::Succeeded:
+      return @"Copied. Paste manually where you want the text.";
+    case PasteboardWriteResult::InvalidUtf8:
+      return @"Copy failed: final text is not valid UTF-8. It remains selectable; select it and press ⌘C.";
+    case PasteboardWriteResult::PasteboardUnavailable:
+      return @"Copy failed: macOS did not provide a pasteboard. The result remains selectable; select it and press ⌘C.";
+    case PasteboardWriteResult::PreparationFailed:
+      return @"Copy failed while preparing the clipboard. Its previous contents may already be lost; the result remains selectable. Select it and press ⌘C.";
+    case PasteboardWriteResult::WriteFailed:
+      return @"Copy failed after preparing the clipboard. Its previous contents may have been cleared; the result remains selectable. Select it and press ⌘C.";
   }
-  return @"Copy failed. Select the text above, then press ⌘C to copy it manually.";
+  return @"Copy failed. The result remains selectable; select it and press ⌘C.";
 }
 
 bool print_runtime_identity(const char* executable_path) {
@@ -311,6 +310,7 @@ PreviewViews make_preview() {
   NSButton* __strong _copy_result_button;
   NSButton* __strong _settings_button;
   std::string _copy_result_text;
+  PasteboardWriteResult _clipboard_write_result;
   std::uint64_t _copy_result_session_id;
   SessionStateMachine _state;
   std::uint64_t _next_session_id;
@@ -324,6 +324,7 @@ PreviewViews make_preview() {
   std::uint64_t _permission_request_generation;
   std::uint64_t _stop_request_ns;
   std::uint64_t _microphone_release_ns;
+  int _pasteboard_test_exit_status;
 }
 - (void)startPressed:(id)sender;
 - (void)stopPressed:(id)sender;
@@ -336,6 +337,7 @@ PreviewViews make_preview() {
 - (void)startWorkerForSession:(std::uint64_t)session_id;
 - (void)invalidatePermissionRequest;
 - (void)handleWorkerEvent:(WorkerEvent)event;
+- (int)pasteboardTestExitStatus;
 @end
 
 @implementation MicProbeAppDelegate
@@ -351,13 +353,21 @@ PreviewViews make_preview() {
     _permission_request_generation = 0;
     _stop_request_ns = 0;
     _microphone_release_ns = 0;
+    _clipboard_write_result = PasteboardWriteResult::PasteboardUnavailable;
     _copy_result_session_id = 0;
+    _pasteboard_test_exit_status = 0;
   }
   return self;
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification*)notification {
   (void)notification;
+  if (!_launch.pasteboard_test_result_path.empty()) {
+    _pasteboard_test_exit_status = run_pasteboard_integration_test(
+        _launch.pasteboard_test_result_path.c_str());
+    [NSApp terminate:self];
+    return;
+  }
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
   NSRect frame = NSMakeRect(0, 0, 650, 570);
   _window = [[NSWindow alloc] initWithContentRect:frame
@@ -383,7 +393,7 @@ PreviewViews make_preview() {
   _metrics_label = make_label(@"No session measurements yet.", 11.0, NO);
   _metrics_label.textColor = NSColor.secondaryLabelColor;
   _copy_warning_label = make_label(
-      @"Copied text may be retained by clipboard managers or synced to other devices.",
+      @"Copy replaces the clipboard. If writing fails after clearing it, prior contents may be lost. Clipboard managers or sync may retain copies.",
       12.0, NO);
   _copy_warning_label.accessibilityLabel = @"Clipboard privacy warning";
   _copy_status_label = make_label(@"", 12.0, NO);
@@ -695,16 +705,28 @@ PreviewViews make_preview() {
   (void)sender;
   const auto outcome = request_copy_result(
       _state.state(), _state.session_id(), _copy_result_session_id,
-      _copy_result_text, write_clipboard_text);
+      _copy_result_text, [&](std::string_view text) {
+        NSString* value = string_from_utf8(text);
+        if (value == nil) {
+          _clipboard_write_result = PasteboardWriteResult::InvalidUtf8;
+          return false;
+        }
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        _clipboard_write_result = write_plain_text_to_pasteboard(
+            pasteboard, value);
+        return _clipboard_write_result == PasteboardWriteResult::Succeeded;
+      });
   switch (outcome) {
-    case CopyResultAttempt::Rejected:
+    case CopyResultAttempt::RejectedBySessionPolicy:
+      _copy_status_label.stringValue = @"Copy is unavailable for this session.";
       return;
     case CopyResultAttempt::Succeeded:
-      _copy_status_label.stringValue =
-          @"Copied. Paste manually where you want the text.";
+      _copy_status_label.stringValue = clipboard_write_status_message(
+          PasteboardWriteResult::Succeeded);
       break;
     case CopyResultAttempt::Failed:
-      _copy_status_label.stringValue = clipboard_write_failure_message();
+      _copy_status_label.stringValue =
+          clipboard_write_status_message(_clipboard_write_result);
       break;
   }
 }
@@ -1018,6 +1040,8 @@ PreviewViews make_preview() {
   [self clearFinalResult];
 }
 
+- (int)pasteboardTestExitStatus { return _pasteboard_test_exit_status; }
+
 @end
 
 int main(int argc, const char* argv[]) {
@@ -1031,6 +1055,6 @@ int main(int argc, const char* argv[]) {
     MicProbeAppDelegate* delegate = [[MicProbeAppDelegate alloc] init];
     application.delegate = delegate;
     [application run];
+    return [delegate pasteboardTestExitStatus];
   }
-  return 0;
 }
