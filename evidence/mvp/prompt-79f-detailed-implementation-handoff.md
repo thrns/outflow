@@ -116,7 +116,7 @@ The requested repository regression commands also passed: stable `cargo fmt --al
 - Repository: `thrns/outflow`
 - Development branch: `codex/prompt79f-mic-cancellation`
 - Starting verified commit: `be88ca6ae78bc5da4e68764e905093081e1645e0` (`codex/prompt79e-mic-prototype`)
-- Result implementation commit: recorded after commit verification; this handoff will be updated with the exact SHA before delivery.
+- Result implementation commit: `a94401a639799c23038f004a9c0bb7d396a2d101` (`fix(native): harden macOS microphone cancellation lifecycle`). This handoff SHA update is a documentation-only follow-up commit on the same branch.
 - Remote: `origin` (`https://github.com/thrns/outflow.git`)
 - Changed paths are listed in §2. No binaries, audio, transcripts, model files, screenshots, or personal speech samples are included.
 
