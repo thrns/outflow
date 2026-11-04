@@ -135,6 +135,9 @@ This work changes only the development AppKit probe, pure native comparison/poli
 
 - Branch: `codex/prompt79k-real-asr-copy-integrity`.
 - Starting SHA: `76edf646ce8c8f5b8ab552dec093be27caa2d8d3`.
+- Implementation commit: `c97cd1e6ff7ad21e6642fd1939f15c749b1a0f7f` (`test(native): verify finalized ASR display and copy parity`).
+- GitHub repository/branch: `thrns/outflow`, `origin/codex/prompt79k-real-asr-copy-integrity`.
+- The first push was verified with `git ls-remote`; the remote head matched implementation commit `c97cd1e6ff7ad21e6642fd1939f15c749b1a0f7f`. A documentation-only update to record this verification is being delivered as a follow-up commit. Since a commit cannot contain its own object ID, the final evidence-update SHA and final remote-head verification are reported in the delivery message.
 - Changed files: `README.md`; `docs/TASKS.md`; `dev/macos-mic-probe/app.mm`; `dev/macos-mic-probe/copy_result_policy.hpp`; `dev/macos-mic-probe/final_result_parity.hpp`; `dev/macos-mic-probe/tests/core_test.cpp`; `scripts/tests/test_macos_mic_probe_privacy.py`; this handoff.
 - No dependency manifest or lockfile changed. No speech, clipboard data, screenshot, recording, model asset, or binary is tracked.
-- Implementation commit SHA and verified `origin` branch head are recorded in the final delivery metadata after commit and push. The final worktree is expected to be clean with the task branch tracking its pushed remote.
+- The delivered worktree is clean and the task branch tracks its pushed remote.
