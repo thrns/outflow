@@ -135,11 +135,11 @@ For the isolated-only test, run `scripts/test_macos_mic_probe.sh` in a session t
 
 - Branch: `codex/prompt79h-copy-result`.
 - Base/source commit: `b17c01ab9ee1f91db3696a9ff05e2349ee95c4ab`.
-- Implementation commit: **pending at handoff draft**.
+- Implementation commit: `9df7495` (`fix(native): correct macOS pasteboard replacement and verify copy`), based on the supplied Prompt 79G commit.
 - Changed repository files: `README.md`; `dev/macos-mic-probe/app.mm`; `dev/macos-mic-probe/copy_result_policy.hpp`; `dev/macos-mic-probe/pasteboard_writer.hpp`; `dev/macos-mic-probe/tests/core_test.cpp`; `dev/macos-mic-probe/tests/pasteboard_integration_test.hpp`; `dev/macos-mic-probe/tests/pasteboard_integration_test.mm`; `docs/TASKS.md`; `docs/USER_FLOWS.md`; `scripts/build_macos_mic_probe.sh`; `scripts/test_macos_mic_probe.sh`; `scripts/tests/test_macos_mic_probe_privacy.py`.
 - Evidence file: `evidence/mvp/prompt-79h-detailed-implementation-handoff.md`.
 - Model assets, audio, transcript text, clipboard values, TextEdit documents, app binaries, and secrets are excluded from the repository change.
-- Final commit, push result, remote SHA verification, and clean-worktree status will be recorded after commit/push. No production task checkbox is changed.
+- A follow-up evidence-only commit records this handoff. The final task-branch head, push result, remote SHA comparison, and clean-worktree status are reported in the completion message; this file does not duplicate the SHA of its own containing commit. No production task checkbox is changed.
 
 ## K. Next recommendation
 
