@@ -66,7 +66,8 @@ class SessionWorker final {
  public:
   SessionWorker(std::uint64_t session_id, std::filesystem::path model_directory,
                 AudioSourceKind source, WorkerEventHandler event_handler,
-                MoonshineApi api = {}, ModelVerifier verifier = {});
+                MoonshineApi api = {}, ModelVerifier verifier = {},
+                std::uint64_t partial_poll_interval_ns = 250'000'000ULL);
   ~SessionWorker();
   SessionWorker(const SessionWorker&) = delete;
   SessionWorker& operator=(const SessionWorker&) = delete;
@@ -91,6 +92,7 @@ class SessionWorker final {
   WorkerEventHandler event_handler_;
   MoonshineApi api_;
   ModelVerifier verifier_;
+  const std::uint64_t partial_poll_interval_ns_;
   BoundedAudioQueue audio_queue_;
   std::thread thread_;
   std::atomic<bool> started_{false};

@@ -20,6 +20,31 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
+void secure_zero(void* data, std::size_t byte_count) noexcept {
+  auto* bytes = static_cast<volatile unsigned char*>(data);
+  for (std::size_t index = 0; index < byte_count; ++index) bytes[index] = 0;
+}
+
+void clear_sensitive_text(std::string& text) noexcept {
+  if (!text.empty()) secure_zero(text.data(), text.size());
+  text.clear();
+}
+
+void clear_audio_samples(std::vector<float>& samples) noexcept {
+  if (!samples.empty()) secure_zero(samples.data(), samples.size() * sizeof(float));
+  samples.clear();
+}
+
+struct TextScrubber final {
+  std::string& text;
+  ~TextScrubber() { clear_sensitive_text(text); }
+};
+
+struct AudioScrubber final {
+  std::vector<float>& samples;
+  ~AudioScrubber() { clear_audio_samples(samples); }
+};
+
 double elapsed_ms(std::uint64_t start_ns, std::uint64_t end_ns) noexcept {
   if (start_ns == 0 || end_ns < start_ns) return 0.0;
   return static_cast<double>(end_ns - start_ns) / 1'000'000.0;
@@ -114,13 +139,15 @@ SessionWorker::SessionWorker(std::uint64_t session_id,
                              std::filesystem::path model_directory,
                              AudioSourceKind source,
                              WorkerEventHandler event_handler, MoonshineApi api,
-                             ModelVerifier verifier)
+                             ModelVerifier verifier,
+                             std::uint64_t partial_poll_interval_ns)
     : session_id_(session_id),
       model_directory_(std::move(model_directory)),
       source_(source),
       event_handler_(std::move(event_handler)),
       api_(api),
-      verifier_(std::move(verifier)) {
+      verifier_(std::move(verifier)),
+      partial_poll_interval_ns_(partial_poll_interval_ns) {
   if (!verifier_) verifier_ = verify_model_directory;
 }
 
@@ -204,10 +231,17 @@ void SessionWorker::run() noexcept {
 
   try {
     const auto model_started_ns = monotonic_time_ns();
+    if (cancel_requested_.load(std::memory_order_acquire)) {
+      WorkerEvent cancelled;
+      cancelled.kind = WorkerEventKind::Cancelled;
+      cancelled.session_id = session_id_;
+      emit(std::move(cancelled));
+      return;
+    }
     if (!verifier_(model_directory_, error_message)) {
       error_code = -100;
       if (error_message.empty()) error_message = "model asset verification failed";
-    } else {
+    } else if (!cancel_requested_.load(std::memory_order_acquire)) {
       const moonshine_option_t options[] = {
           {"identify_speakers", "false"},
           {"ort_providers", "CPU"},
@@ -222,12 +256,21 @@ void SessionWorker::run() noexcept {
                         std::to_string(error_code) + ")";
       }
     }
-    if (error_code == 0 && cancel_requested_.load(std::memory_order_acquire)) {
+    // A cancellation that arrives while the verifier or model loader is
+    // running wins over a load error. Loading is not interruptible, but a
+    // completed transcriber is immediately released and never opens capture.
+    if (cancel_requested_.load(std::memory_order_acquire)) {
       native.release();
       WorkerEvent cancelled;
       cancelled.kind = WorkerEventKind::Cancelled;
       cancelled.session_id = session_id_;
       emit(std::move(cancelled));
+      return;
+    }
+    if (error_code != 0) {
+      native.release();
+      emit(WorkerEvent{WorkerEventKind::Error, session_id_, {}, error_message,
+                       error_code, metrics});
       return;
     }
     if (error_code == 0) {
@@ -238,6 +281,14 @@ void SessionWorker::run() noexcept {
                         std::to_string(error_code) + ")";
       }
     }
+    if (cancel_requested_.load(std::memory_order_acquire)) {
+      native.release();
+      WorkerEvent cancelled;
+      cancelled.kind = WorkerEventKind::Cancelled;
+      cancelled.session_id = session_id_;
+      emit(std::move(cancelled));
+      return;
+    }
     if (error_code == 0) {
       error_code = api_.start_stream(native.transcriber, native.stream);
       if (error_code != MOONSHINE_ERROR_NONE) {
@@ -246,6 +297,14 @@ void SessionWorker::run() noexcept {
       } else {
         native.stream_started = true;
       }
+    }
+    if (cancel_requested_.load(std::memory_order_acquire)) {
+      native.release();
+      WorkerEvent cancelled;
+      cancelled.kind = WorkerEventKind::Cancelled;
+      cancelled.session_id = session_id_;
+      emit(std::move(cancelled));
+      return;
     }
     if (error_code != 0) {
       native.release();
@@ -259,9 +318,11 @@ void SessionWorker::run() noexcept {
     ready.session_id = session_id_;
     emit(std::move(ready));
     MonoResampler resampler;
-    std::vector<float> converted;
-    converted.reserve(kMaxCaptureFrames * 2 + 2);
     std::string latest_text;
+    TextScrubber latest_text_scrubber{latest_text};
+    std::vector<float> converted;
+    AudioScrubber converted_scrubber{converted};
+    converted.reserve(kMaxCaptureFrames * 2 + 2);
     std::uint64_t input_samples = 0;
     std::uint64_t first_frame_ns = 0;
     std::uint64_t first_partial_ns = 0;
@@ -297,7 +358,9 @@ void SessionWorker::run() noexcept {
       }
 
       bool consumed_audio = false;
-      while (const auto* block = audio_queue_.begin_read()) {
+      while (!cancel_requested_.load(std::memory_order_acquire)) {
+        const auto* block = audio_queue_.begin_read();
+        if (block == nullptr) break;
         consumed_audio = true;
         if (block->frame_count == 0 || !resampler.process(*block, converted)) {
           audio_queue_.release_read();
@@ -321,11 +384,13 @@ void SessionWorker::run() noexcept {
                           std::to_string(error_code) + ")";
           break;
         }
+        if (cancel_requested_.load(std::memory_order_acquire)) break;
         const auto now_ns = monotonic_time_ns();
-        if (now_ns - last_poll_ns >= 250'000'000ULL) {
+        if (now_ns - last_poll_ns >= partial_poll_interval_ns_) {
           transcript_t* partial = nullptr;
           const auto poll_error = api_.transcribe_stream(
               native.transcriber, native.stream, 0, &partial);
+          if (cancel_requested_.load(std::memory_order_acquire)) break;
           if (poll_error != MOONSHINE_ERROR_NONE) {
             error_code = poll_error;
             error_message = "Moonshine partial recognition failed (native error " +
@@ -333,11 +398,13 @@ void SessionWorker::run() noexcept {
             break;
           }
           std::string snapshot;
+          TextScrubber snapshot_scrubber{snapshot};
           if (!copy_transcript(partial, snapshot)) {
             error_code = -103;
             error_message = "Moonshine returned an invalid or oversized transcript";
             break;
           }
+          if (cancel_requested_.load(std::memory_order_acquire)) break;
           if (!snapshot.empty() && snapshot != latest_text) {
             const auto partial_ns = monotonic_time_ns();
             if (first_partial_ns == 0) {
@@ -378,7 +445,7 @@ void SessionWorker::run() noexcept {
     }
     if (cancel_requested_.load(std::memory_order_acquire) && error_code == 0) {
       native.release();
-      latest_text.clear();
+      clear_sensitive_text(latest_text);
       WorkerEvent cancelled;
       cancelled.kind = WorkerEventKind::Cancelled;
       cancelled.session_id = session_id_;
@@ -387,6 +454,7 @@ void SessionWorker::run() noexcept {
     }
     if (error_code != 0) {
       native.release();
+      clear_sensitive_text(latest_text);
       WorkerEvent failed;
       failed.kind = WorkerEventKind::Error;
       failed.session_id = session_id_;
@@ -413,13 +481,15 @@ void SessionWorker::run() noexcept {
       }
     }
     std::string final_text;
+    TextScrubber final_text_scrubber{final_text};
     if (error_code == 0 && !copy_transcript(final_transcript, final_text)) {
       error_code = -103;
       error_message = "Moonshine returned an invalid or oversized final transcript";
     }
     const auto final_ready_ns = monotonic_time_ns();
     if (cancel_requested_.load(std::memory_order_acquire)) {
-      final_text.clear();
+      clear_sensitive_text(final_text);
+      clear_sensitive_text(latest_text);
       native.release();
       WorkerEvent cancelled;
       cancelled.kind = WorkerEventKind::Cancelled;
@@ -461,7 +531,7 @@ void SessionWorker::run() noexcept {
       metrics.process_cpu_ms = usage_cpu_ms(cpu_end) - usage_cpu_ms(cpu_start);
     }
     native.release();
-    latest_text.clear();
+    clear_sensitive_text(latest_text);
     WorkerEvent result;
     result.kind = WorkerEventKind::Final;
     result.session_id = session_id_;

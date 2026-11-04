@@ -99,6 +99,18 @@ NSString* ns_string(const std::string& value) {
   return result != nil ? result : @"Transcript text was not valid UTF-8.";
 }
 
+double elapsed_milliseconds(std::uint64_t start_ns,
+                            std::uint64_t end_ns) noexcept {
+  if (start_ns == 0 || end_ns < start_ns) return 0.0;
+  return static_cast<double>(end_ns - start_ns) / 1'000'000.0;
+}
+
+void clear_sensitive_text(std::string& text) noexcept {
+  auto* bytes = reinterpret_cast<volatile unsigned char*>(text.data());
+  for (std::size_t index = 0; index < text.size(); ++index) bytes[index] = 0;
+  text.clear();
+}
+
 MicrophonePermission microphone_permission() {
   switch ([AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio]) {
     case AVAuthorizationStatusAuthorized:
@@ -277,6 +289,8 @@ PreviewViews make_preview() {
   WavFixture _fixture;
   bool _fixture_loaded;
   bool _closing;
+  bool _permission_request_pending;
+  std::uint64_t _permission_request_generation;
   std::uint64_t _stop_request_ns;
   std::uint64_t _microphone_release_ns;
 }
@@ -285,6 +299,9 @@ PreviewViews make_preview() {
 - (void)cancelPressed:(id)sender;
 - (void)dismissPressed:(id)sender;
 - (void)settingsPressed:(id)sender;
+- (std::uint64_t)prepareSession;
+- (void)startWorkerForSession:(std::uint64_t)session_id;
+- (void)invalidatePermissionRequest;
 - (void)handleWorkerEvent:(WorkerEvent)event;
 @end
 
@@ -297,6 +314,8 @@ PreviewViews make_preview() {
     _next_session_id = 1;
     _fixture_loaded = false;
     _closing = false;
+    _permission_request_pending = false;
+    _permission_request_generation = 0;
     _stop_request_ns = 0;
     _microphone_release_ns = 0;
   }
@@ -419,6 +438,7 @@ PreviewViews make_preview() {
 - (void)applicationWillTerminate:(NSNotification*)notification {
   (void)notification;
   _closing = true;
+  [self invalidatePermissionRequest];
   [self stopSourcesForShutdown];
   if (_worker) {
     _worker->request_cancel();
@@ -432,6 +452,7 @@ PreviewViews make_preview() {
 - (BOOL)windowShouldClose:(NSWindow*)sender {
   (void)sender;
   _closing = true;
+  [self invalidatePermissionRequest];
   [self cancelActiveSessionForDismissal];
   return YES;
 }
@@ -439,6 +460,7 @@ PreviewViews make_preview() {
 - (void)windowWillClose:(NSNotification*)notification {
   (void)notification;
   _closing = true;
+  [self invalidatePermissionRequest];
   [self cancelActiveSessionForDismissal];
   _partial_text.string = @"";
   _final_text.string = @"";
@@ -446,7 +468,8 @@ PreviewViews make_preview() {
 
 - (void)startPressed:(id)sender {
   (void)sender;
-  if (_state.state() != SessionState::Idle || _launch.model_directory.empty()) return;
+  if (_closing || _state.state() != SessionState::Idle ||
+      _launch.model_directory.empty()) return;
   if (_launch.fixture_mode) {
     if (!_fixture_loaded) {
       _state_label.stringValue = @"State: Error — timed fixture could not be loaded.";
@@ -462,21 +485,41 @@ PreviewViews make_preview() {
     return;
   }
   if (action == PermissionAction::RequestPermission) {
+    const auto session_id = [self prepareSession];
+    if (session_id == 0) return;
+    _permission_request_pending = true;
+    ++_permission_request_generation;
+    if (_permission_request_generation == 0) ++_permission_request_generation;
+    const auto request_generation = _permission_request_generation;
+    _state_label.stringValue =
+        @"State: Preparing — waiting for microphone permission. Cancel to discard this request.";
+    [self refreshControls];
+    __weak MicProbeAppDelegate* weak_self = self;
     [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio
                              completionHandler:^(BOOL granted) {
       dispatch_async(dispatch_get_main_queue(), ^{
-        self->_permission_label.stringValue = permission_status_text();
-        [self refreshControls];
-        if (granted && self->_state.state() == SessionState::Idle) {
-          [self beginSession];
-        } else if (!granted) {
-          self->_state_label.stringValue =
-              @"State: Idle — microphone permission was denied. Use System Settings, then retry.";
+        MicProbeAppDelegate* strong_self = weak_self;
+        if (strong_self == nil ||
+            !is_current_permission_request(
+                request_generation, strong_self->_permission_request_generation,
+                strong_self->_permission_request_pending, strong_self->_closing,
+                session_id, strong_self->_state)) return;
+
+        strong_self->_permission_request_pending = false;
+        ++strong_self->_permission_request_generation;
+        strong_self->_permission_label.stringValue = permission_status_text();
+        if (permission_grant_is_authorized(granted, microphone_permission())) {
+          [strong_self startWorkerForSession:session_id];
+        } else {
+          (void)strong_self->_state.fail(session_id);
+          strong_self->_metrics_label.stringValue = @"No audio was captured.";
+          strong_self->_state_label.stringValue = granted
+              ? @"State: Error — microphone authorization changed before capture could start. Verify access in System Settings, then dismiss and retry."
+              : @"State: Error — microphone permission was denied. Use System Settings, then dismiss and retry.";
+          [strong_self refreshControls];
         }
       });
     }];
-    _state_label.stringValue = @"State: Preparing — waiting for microphone permission.";
-    _start_button.enabled = NO;
     return;
   }
   _permission_label.stringValue = permission_status_text();
@@ -508,23 +551,69 @@ PreviewViews make_preview() {
   (void)sender;
   const auto id = _state.session_id();
   if (!_state.cancel(id)) return;
+  const auto cancel_requested_ns = monotonic_time_ns();
+  const bool microphone_was_active = _capture != nullptr && _capture->active();
+  std::size_t queue_depth_at_cancel = 0;
+  std::size_t queue_maximum_depth = 0;
+  std::uint64_t queue_overflow_count = 0;
+  [self invalidatePermissionRequest];
   [self stopSourcesForShutdown];
-  if (_worker) _worker->request_cancel();
+  if (_worker) {
+    auto& queue = _worker->audio_queue();
+    queue_depth_at_cancel = queue.depth();
+    queue_maximum_depth = queue.maximum_depth();
+    queue_overflow_count = queue.overflow_count();
+    _worker->request_cancel();
+    // The microphone tap is stopped above before join scrubs the worker-owned
+    // queue and releases Moonshine handles. Dismiss remains disabled until this
+    // synchronous cleanup completes.
+    _worker->join();
+    _worker.reset();
+  }
+  const auto cleanup_complete_ns = monotonic_time_ns();
   _partial_text.string = @"";
   _final_text.string = @"";
-  _metrics_label.stringValue = @"Cancelled. Temporary preview cleared.";
+  if (_launch.fixture_mode) {
+    _metrics_label.stringValue = [NSString stringWithFormat:
+        @"Cancelled. Temporary preview cleared. Fixture stopped; worker cleanup complete. Queue at cancel %llu/16, max %llu/16, overflow %llu. No cancellation metrics file was written.",
+        static_cast<unsigned long long>(queue_depth_at_cancel),
+        static_cast<unsigned long long>(queue_maximum_depth),
+        static_cast<unsigned long long>(queue_overflow_count)];
+  } else if (microphone_was_active && _microphone_release_ns >= cancel_requested_ns) {
+    _metrics_label.stringValue = [NSString stringWithFormat:
+        @"Cancelled. Temporary preview cleared. Mic release %.1f ms; worker cleanup %.1f ms; queue at cancel %llu/16, max %llu/16, overflow %llu. No cancellation metrics file was written.",
+        elapsed_milliseconds(cancel_requested_ns, _microphone_release_ns),
+        elapsed_milliseconds(cancel_requested_ns, cleanup_complete_ns),
+        static_cast<unsigned long long>(queue_depth_at_cancel),
+        static_cast<unsigned long long>(queue_maximum_depth),
+        static_cast<unsigned long long>(queue_overflow_count)];
+  } else {
+    _metrics_label.stringValue = [NSString stringWithFormat:
+        @"Cancelled. Temporary preview cleared. Microphone was not open; worker cleanup complete. Queue at cancel %llu/16, max %llu/16, overflow %llu. No cancellation metrics file was written.",
+        static_cast<unsigned long long>(queue_depth_at_cancel),
+        static_cast<unsigned long long>(queue_maximum_depth),
+        static_cast<unsigned long long>(queue_overflow_count)];
+  }
   _state_label.stringValue = @"State: Cancelled — microphone released; result discarded.";
   [self refreshControls];
 }
 
 - (void)dismissPressed:(id)sender {
   (void)sender;
+  const auto current_state = _state.state();
+  if (current_state != SessionState::ResultReady &&
+      current_state != SessionState::Cancelled &&
+      current_state != SessionState::Error) return;
+  [self stopSourcesForShutdown];
+  if (_worker) {
+    _worker->join();
+    _worker.reset();
+  }
   _partial_text.string = @"";
   _final_text.string = @"";
   _metrics_label.stringValue = @"No session measurements yet.";
   if (_state.dismiss()) {
     _state_label.stringValue = @"State: Idle";
-    if (_worker && !_worker->is_joinable()) _worker.reset();
   }
   [self refreshControls];
 }
@@ -537,9 +626,16 @@ PreviewViews make_preview() {
 }
 
 - (void)beginSession {
-  if (_state.state() != SessionState::Idle || _launch.model_directory.empty()) return;
+  const auto session_id = [self prepareSession];
+  if (session_id == 0) return;
+  [self startWorkerForSession:session_id];
+}
+
+- (std::uint64_t)prepareSession {
+  if (_closing || _state.state() != SessionState::Idle ||
+      _launch.model_directory.empty()) return 0;
   const auto session_id = _next_session_id++;
-  if (!_state.begin(session_id)) return;
+  if (!_state.begin(session_id)) return 0;
   _partial_text.string = @"";
   _final_text.string = @"";
   _metrics_label.stringValue = @"Verifying local model files and preparing one CPU stream…";
@@ -550,6 +646,12 @@ PreviewViews make_preview() {
   _capture.reset();
   _fixture_producer.reset();
   _worker.reset();
+  return session_id;
+}
+
+- (void)startWorkerForSession:(std::uint64_t)session_id {
+  if (_closing || !_state.accepts(session_id) ||
+      _state.state() != SessionState::Preparing || _permission_request_pending) return;
   __weak MicProbeAppDelegate* weak_self = self;
   const auto source = _launch.fixture_mode ? AudioSourceKind::TimedFixture
                                           : AudioSourceKind::Microphone;
@@ -562,6 +664,10 @@ PreviewViews make_preview() {
           if (strong_self != nil) {
             [strong_self handleWorkerEvent:std::move(*shared_event)];
           }
+          // This queued block may outlive the window during shutdown. Scrub any
+          // text that was not consumed by a live delegate as well.
+          clear_sensitive_text(shared_event->text);
+          clear_sensitive_text(shared_event->error_message);
         });
       });
   if (!_worker->start()) {
@@ -570,6 +676,12 @@ PreviewViews make_preview() {
     _metrics_label.stringValue = @"No audio was captured.";
     [self refreshControls];
   }
+}
+
+- (void)invalidatePermissionRequest {
+  _permission_request_pending = false;
+  ++_permission_request_generation;
+  if (_permission_request_generation == 0) ++_permission_request_generation;
 }
 
 - (void)beginAudioSourceForSession:(std::uint64_t)session_id {
@@ -656,7 +768,11 @@ PreviewViews make_preview() {
 }
 
 - (void)handleWorkerEvent:(WorkerEvent)event {
-  if (_closing || !_state.accepts(event.session_id)) return;
+  if (_closing || !_state.accepts(event.session_id)) {
+    clear_sensitive_text(event.text);
+    event.error_message.clear();
+    return;
+  }
   switch (event.kind) {
     case WorkerEventKind::Ready:
       if (_state.state() == SessionState::Preparing) {
@@ -667,11 +783,16 @@ PreviewViews make_preview() {
       if (_state.state() == SessionState::Listening) {
         _partial_text.string = ns_string(event.text);
       }
+      clear_sensitive_text(event.text);
       break;
     case WorkerEventKind::Final: {
-      if (!_state.ready(event.session_id)) return;
+      if (!_state.ready(event.session_id)) {
+        clear_sensitive_text(event.text);
+        return;
+      }
       _final_text.string = event.text.empty() ? @"No speech was recognized in this session."
                                                : ns_string(event.text);
+      clear_sensitive_text(event.text);
       const bool metrics_saved = write_metrics_exclusive(_launch.metrics_path,
                                                          event.metrics);
       _metrics_label.stringValue = [NSString stringWithFormat:
@@ -701,6 +822,14 @@ PreviewViews make_preview() {
       break;
     }
     case WorkerEventKind::Cancelled:
+      if (_state.state() != SessionState::Preparing &&
+          _state.state() != SessionState::Listening &&
+          _state.state() != SessionState::Finalizing &&
+          _state.state() != SessionState::Cancelled) {
+        clear_sensitive_text(event.text);
+        event.error_message.clear();
+        break;
+      }
       [self stopSourcesForShutdown];
       _partial_text.string = @"";
       _final_text.string = @"";
@@ -717,6 +846,13 @@ PreviewViews make_preview() {
       }
       break;
     case WorkerEventKind::Error:
+      if (_state.state() != SessionState::Preparing &&
+          _state.state() != SessionState::Listening &&
+          _state.state() != SessionState::Finalizing) {
+        clear_sensitive_text(event.text);
+        event.error_message.clear();
+        break;
+      }
       [self stopSourcesForShutdown];
       _partial_text.string = @"";
       _final_text.string = @"";
@@ -755,7 +891,7 @@ PreviewViews make_preview() {
     _fixture_producer.reset();
   }
   if (_capture) {
-    (void)_capture->stop();
+    _microphone_release_ns = _capture->stop();
     _capture.reset();
   }
 }
@@ -772,6 +908,8 @@ PreviewViews make_preview() {
       _state.state() == SessionState::Finalizing) {
     (void)_state.cancel(_state.session_id());
   }
+  _partial_text.string = @"";
+  _final_text.string = @"";
 }
 
 @end

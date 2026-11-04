@@ -8,6 +8,11 @@
 namespace outflow::mic_probe {
 namespace {
 
+void secure_zero(void* data, std::size_t byte_count) noexcept {
+  auto* bytes = static_cast<volatile unsigned char*>(data);
+  for (std::size_t index = 0; index < byte_count; ++index) bytes[index] = 0;
+}
+
 std::size_t bytes_per_sample(PcmEncoding encoding) noexcept {
   switch (encoding) {
     case PcmEncoding::Float32:
@@ -261,7 +266,9 @@ std::int32_t BoundedAudioQueue::producer_error() const noexcept {
 
 void BoundedAudioQueue::clear_after_producer_stops() noexcept {
   for (auto& block : slots_) {
-    std::fill(block.samples.begin(), block.samples.end(), 0.0F);
+    // Use the platform's non-elidable wipe because these fixed ring slots hold
+    // raw microphone samples and may be destroyed immediately after Cancel.
+    secure_zero(block.samples.data(), block.samples.size() * sizeof(float));
     block.frame_count = 0;
     block.captured_at_monotonic_ns = 0;
   }
@@ -286,6 +293,11 @@ bool MonoResampler::process(const AudioBlock& input,
     // A device format change needs a clean stream; never reinterpret queued
     // samples with a new clock or silently stretch speech.
     return false;
+  }
+  if (!output.empty()) {
+    // `clear()` alone leaves the previous audio in vector capacity. Wipe the
+    // prior chunk before this resampler reuses that allocation.
+    secure_zero(output.data(), output.size() * sizeof(float));
   }
   output.clear();
   if (output.capacity() < kMaxCaptureFrames * 2 + 2) return false;

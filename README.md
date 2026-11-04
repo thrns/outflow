@@ -1,6 +1,6 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path loading and initialization, an explicitly confirmed reset, and an atomic JSON writer on Unix. The Tauri desktop shell, microphone and dictation flows, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path loading and initialization, an explicitly confirmed reset, and an atomic JSON writer on Unix. The production Tauri shell and dictation flow, Windows owner-only ACL writing, and release packaging have not been implemented. A separate development-only native macOS microphone probe is documented below.
 
 ## Prerequisites
 
@@ -1299,6 +1299,77 @@ Use one app instance when attaching; the PID lookup selects the newest matching 
 - `kLSNoExecutableErr`: rebuild the `.app` with `scripts/build_macos_mic_probe.sh` and launch it from the logged-in macOS desktop session so LaunchServices and TCC see the application bundle.
 
 Prompt 79E does not complete T-011, T-025–T-034, AC-06, T-010, or any MVP acceptance. It does not add a production Tauri/Rust application, model packaging, injection, clipboard behavior, a Windows/Linux implementation, or release approval. The current 18 GB M3 Pro is not the approved physical 4 GB reference machine. The meaning of “4 GB” remains pending owner clarification between decimal and binary reporting; the code permits up to exactly 4 GiB for classification screening but still requires separately verified physical hardware and an approved reference class. The 950,000,000-byte app-process RSS cap is unchanged.
+
+### Prompt 79F — cancellation verification and recovery
+
+Prompt 79F hardens the same development probe's permission and session lifecycle. The normal **Cancel** action invalidates a pending permission request, marks the session cancelled before stopping its source, closes AVAudioEngine capture, asks the worker to cancel, joins it, clears its audio queue and releases Moonshine stream/transcriber resources. The temporary partial and final text fields are cleared. The UI remains **Cancelled** until **Dismiss result** joins any remaining terminal worker work and returns the session to **Idle**. No final result or cancellation metrics file is written after Cancel, and no clipboard or text insertion path exists. Cancel is safe to repeat; Start is enabled again only after Dismiss completes cleanup.
+
+#### Rebuild and automate the cancellation checks
+
+Use the locally prepared source, native libraries and model from the prerequisites above. Choose a new build directory for each build:
+
+```sh
+export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-prompt79f-build
+scripts/build_macos_mic_probe.sh
+export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
+export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
+export OUTFLOW_MIC_PROBE_FIXTURE_SECONDS=12
+export OUTFLOW_MIC_PROBE_FIXTURE_RUNS=1
+scripts/test_macos_mic_probe.sh
+scripts/test_macos_mic_probe.sh --real-fixture
+python3 -m unittest discover -s scripts/tests -v
+```
+
+The native worker fixtures use injected condition-variable gates to cancel during model loading, immediately after Ready, while samples are queued, after a partial, and during finalization. They check stale event rejection, repeated Stop/Cancel, queue sample scrubbing, and exact stream/transcriber cleanup. The native suite runs 100 paired start/stop/cancel/dismiss state and worker cycles. The Python privacy contract tests cover permission generations, current authorization, callback order, stale results, metrics privacy and join-before-Dismiss. The real-fixture command is a local model/worker integration check; it does not use the microphone or constitute a human-reviewed WER result.
+
+#### Visible fixture cancellation
+
+Run a new app process with timed fixture replay and an unused metadata path:
+
+```sh
+scripts/run_macos_mic_probe.sh \
+  --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
+  --fixture-seconds 12 \
+  --metrics-file /private/tmp/outflow-prompt79f-cancel-metrics.json
+```
+
+Click **Start recording** and wait until **Listening** and a nonempty temporary preview are visible. Press **Cancel**. Confirm the preview and final-result area are empty, the UI says **Cancelled**, capture/fixture and worker cleanup are complete, and no late result appears. The displayed cancellation line includes sanitized queue depth, maximum depth, overflow and (for a live microphone session) microphone-release and worker-cleanup times. Confirm the explicit metrics path does not exist after cancellation. Then press **Dismiss result**, verify **Idle**, and start another fixture session; allow it to finish with **Stop** and verify a fresh final result.
+
+For an additional deterministic UI pass, use the app's timer to cancel during fixture replay:
+
+```sh
+scripts/run_macos_mic_probe.sh \
+  --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
+  --fixture-seconds 12 \
+  --auto-cancel-after-ms 3500 \
+  --metrics-file /private/tmp/outflow-prompt79f-auto-cancel-metrics.json
+```
+
+The timer only invokes Cancel while that same session remains Listening. This mode still uses the visible app and actual Moonshine partial inference, but the samples come from the fixture rather than the microphone.
+
+#### Physical microphone Cancel procedure
+
+Launch without fixture options from a logged-in macOS desktop session:
+
+```sh
+scripts/run_macos_mic_probe.sh
+```
+
+Allow microphone access through the normal macOS prompt if it appears. Do not reset TCC or change permission databases. For **Test A**, press **Start recording**, speak until temporary partial text appears, then press **Cancel**. Verify the microphone format line is replaced by **Cancelled**, both text panes are empty, microphone release and worker-cleanup durations appear, and no final result or cancellation metrics file appears later. For **Test B**, press **Dismiss result**, confirm **Idle**, start a new live session, speak, and press **Stop**; verify the new session reaches **Result ready** and releases the microphone. For **Test C**, dismiss, start again and press **Cancel** as soon as the UI permits; verify cleanup and empty text even if no partial arrived. When practical, close the window during active recording and confirm the app exits after stopping capture and joining the worker.
+
+Permission grant is accepted only for the still-current request generation and session while the window is open, state is Preparing, and AVFoundation still reports Authorized. If Cancel, Dismiss, window close or app termination invalidates that request, a delayed completion is ignored. A new session has a distinct session ID and cannot inherit old worker events.
+
+#### Expected failures and recovery
+
+- **Cancelled session stays visible:** this is expected until **Dismiss result**. Dismiss joins terminal cleanup, clears volatile UI text and returns to Idle.
+- **Start remains unavailable after Cancel:** wait for synchronous cleanup to finish, press **Dismiss result**, then retry. If the worker reports an error, dismiss the terminal session and verify the local model hashes before restarting.
+- **Permission was denied or revoked:** use **Microphone Settings** and macOS System Settings, then dismiss and retry. The app never edits TCC state. A stale grant callback cannot start capture.
+- **No microphone, device disconnect, unsupported format or queue overflow:** the probe stops the source and reports an error; reconnect/select a working default input or close competing audio apps, dismiss, then retry.
+- **A final result appears in an older build:** rebuild from the current branch, launch the fresh app bundle using `open -n` via the script, and repeat. The current cancellation handler gates finals on current session state and scrubs late callback text.
+- **A supplied metrics path exists after a completed Stop:** metrics are exclusive-create metadata for successful final results. Cancel intentionally does not write that file; choose a fresh path for a new successful-run measurement.
+
+This evidence applies only to the development-only AppKit/AVFoundation probe on the tested macOS machine. It does not complete T-011, T-025–T-034, AC-06, T-010, or any production/release gate. The 4 GB hardware, model quality, full app resource limits, and cross-platform behavior remain unverified.
 
 ### Authorized local development model preparation
 

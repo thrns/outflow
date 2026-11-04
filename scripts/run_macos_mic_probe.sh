@@ -56,4 +56,6 @@ done
 
 # Launch through LaunchServices so macOS resolves the app bundle and its
 # NSMicrophoneUsageDescription for the normal TCC permission prompt.
-exec /usr/bin/open -a "$OUTFLOW_MIC_PROBE_APP" --args "${APP_ARGUMENTS[@]}"
+# A fresh process is required because LaunchServices otherwise may reuse a
+# running probe and ignore this invocation's fixture/metrics arguments.
+exec /usr/bin/open -n -a "$OUTFLOW_MIC_PROBE_APP" --args "${APP_ARGUMENTS[@]}"

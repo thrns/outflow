@@ -59,6 +59,7 @@ clang++ "${COMMON_FLAGS[@]}" "${INCLUDES[@]}" \
 clang++ "${COMMON_FLAGS[@]}" "${INCLUDES[@]}" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/tests/worker_test.cpp" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/audio_pipeline.cpp" \
+  "$REPOSITORY_ROOT/dev/macos-mic-probe/session_state.cpp" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/session_worker.cpp" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/model_verifier.cpp" \
   "${LIBRARIES[@]}" -o "$TEST_DIR/worker_test" || fail "worker test compilation failed"

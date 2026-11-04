@@ -214,6 +214,22 @@ void test_session_transitions_and_one_hundred_cycles() {
   }
 }
 
+void test_cancelled_session_rejects_late_events_and_restarts_after_dismiss() {
+  SessionStateMachine state;
+  assert(state.begin(7));
+  assert(state.listening(7));
+  assert(state.cancel(7));
+  assert(!state.listening(7));
+  assert(!state.finalize(7));
+  assert(!state.ready(7));
+  assert(!state.fail(7));
+  assert(state.dismiss());
+  assert(!state.accepts(7));
+  assert(state.begin(8));
+  assert(state.listening(8));
+  assert(state.session_id() == 8);
+}
+
 void test_timed_fixture_clock() {
   const auto twelve_seconds = audio_time_nanoseconds(192'000, 16'000);
   assert(twelve_seconds == 12'000'000'000ULL);
@@ -263,6 +279,23 @@ void test_microphone_permission_decisions() {
          PermissionAction::OpenSystemSettings);
   assert(action_for_permission(MicrophonePermission::Unknown) ==
          PermissionAction::OpenSystemSettings);
+
+  SessionStateMachine state;
+  assert(state.begin(41));
+  assert(is_current_permission_request(3, 3, true, false, 41, state));
+  assert(permission_grant_is_authorized(true, MicrophonePermission::Authorized));
+  assert(!permission_grant_is_authorized(false, MicrophonePermission::Authorized));
+  assert(!permission_grant_is_authorized(true, MicrophonePermission::Denied));
+  assert(!permission_grant_is_authorized(true, MicrophonePermission::Restricted));
+  assert(!is_current_permission_request(2, 3, true, false, 41, state));
+  assert(!is_current_permission_request(3, 3, false, false, 41, state));
+  assert(!is_current_permission_request(3, 3, true, true, 41, state));
+  assert(!is_current_permission_request(3, 3, true, false, 42, state));
+  assert(state.cancel(41));
+  assert(!is_current_permission_request(3, 3, true, false, 41, state));
+  assert(state.dismiss());
+  assert(state.begin(43));
+  assert(!is_current_permission_request(3, 3, true, false, 41, state));
 }
 
 void test_bounded_pcm16_wav_fixture_reader() {
@@ -308,9 +341,11 @@ int main() {
   test_large_capture_callback_is_split_into_bounded_queue_blocks();
   test_resampler_preserves_chunk_boundary_and_rejects_rate_change();
   test_session_transitions_and_one_hundred_cycles();
+  test_cancelled_session_rejects_late_events_and_restarts_after_dismiss();
   test_timed_fixture_clock();
   test_timed_fixture_producer_supports_two_sessions();
   test_microphone_permission_decisions();
   test_bounded_pcm16_wav_fixture_reader();
-  std::cout << "mic probe core tests passed: 11 groups; 100 state cycles; 2 fixture starts\n";
+  std::cout << "mic probe core tests passed: 12 groups; 100 state cycles; "
+               "permission generation and restart guards; 2 fixture starts\n";
 }
