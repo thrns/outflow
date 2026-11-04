@@ -11,9 +11,11 @@ const emptyDraft: VocabularyDraft = { spoken: "", written: "" };
 function ControlledVocabularyEntryForm({
   initialValue = emptyDraft,
   onClearDraft = vi.fn(),
+  onAddToPreviewList = vi.fn(),
 }: {
   initialValue?: VocabularyDraft;
   onClearDraft?: () => void;
+  onAddToPreviewList?: (value: VocabularyDraft) => void;
 }) {
   const [value, setValue] = useState<VocabularyDraft>(initialValue);
 
@@ -22,10 +24,17 @@ function ControlledVocabularyEntryForm({
     onClearDraft();
   }
 
+  function addToPreviewList(valueToAdd: VocabularyDraft) {
+    setValue(emptyDraft);
+    onAddToPreviewList(valueToAdd);
+  }
+
   return (
     <VocabularyEntryForm
       onChange={setValue}
       onClearDraft={clearDraft}
+      onAddToPreviewList={addToPreviewList}
+      isAtLimit={false}
       value={value}
     />
   );
@@ -259,6 +268,50 @@ describe("VocabularyEntryForm", () => {
     fireEvent.click(clearButton, { detail: 0 });
 
     expect(onClearDraft).toHaveBeenCalledOnce();
+  });
+
+  it("submits a valid pair with keyboard activation and clears the draft", () => {
+    const onAddToPreviewList = vi.fn();
+    render(
+      <ControlledVocabularyEntryForm
+        initialValue={{ spoken: "café", written: "Café" }}
+        onAddToPreviewList={onAddToPreviewList}
+      />,
+    );
+    const addButton = screen.getByRole("button", {
+      name: "Add to preview list",
+    });
+
+    expect(addButton).toHaveAttribute("type", "submit");
+    addButton.focus();
+    fireEvent.click(addButton, { detail: 0 });
+
+    expect(onAddToPreviewList).toHaveBeenCalledWith({
+      spoken: "café",
+      written: "Café",
+    });
+    expect(screen.getByRole("textbox", { name: "Spoken phrase" })).toHaveValue(
+      "",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Written replacement" }),
+    ).toHaveValue("");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows both validation errors and does not add an empty pair", () => {
+    const onAddToPreviewList = vi.fn();
+    render(
+      <ControlledVocabularyEntryForm
+        onAddToPreviewList={onAddToPreviewList}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to preview list" }));
+
+    expect(onAddToPreviewList).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(screen.getByRole("textbox", { name: "Spoken phrase" })).toHaveFocus();
   });
 
   it("enables Clear draft for whitespace-only and invalid input", () => {

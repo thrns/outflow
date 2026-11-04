@@ -997,7 +997,20 @@ The foundation screen displays:
 
 In Settings, use the six section tabs—General, Microphone, Shortcuts, Text & Vocabulary, Privacy, and About & Diagnostics—to change the displayed section. General is selected each time the preview opens. Use **Back** to return to the foundation screen. The tabs support Up/Down arrow keys, Home, and End, with visible keyboard focus.
 
-General contains **Launch at Login**, which defaults to **Off**. Use the switch with a mouse or focus it and press Space. The visible On/Off state and accessible switch state update immediately. The preference is kept only in React memory: it remains selected while changing sections or closing and reopening Settings in the same mounted session, and resets to Off after a full page reload. Text & Vocabulary includes a frontend-only vocabulary draft form and live synthetic example. Privacy shows a static overview of intended protections and preview limitations; Microphone and Shortcuts show their existing preview status messages, and About & Diagnostics remains a placeholder.
+General contains **Launch at Login**, which defaults to **Off**. Use the switch with a mouse or focus it and press Space. The visible On/Off state and accessible switch state update immediately. The preference is kept only in React memory: it remains selected while changing sections or closing and reopening Settings in the same mounted session, and resets to Off after a full page reload. Text & Vocabulary includes a frontend-only vocabulary draft form, a development preview list, and a live synthetic example. Privacy shows a static overview of intended protections and preview limitations; Microphone and Shortcuts show their existing preview status messages, and About & Diagnostics remains a placeholder.
+
+### Vocabulary list preview (development only)
+
+From the repository root, install the locked frontend dependencies and start Vite:
+
+```sh
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite, then go to **Settings → Text & Vocabulary**. Enter a spoken phrase and its written replacement and select **Add to preview list**. Both fields must pass the existing validation (nonempty, valid Unicode, and at most 128 Unicode scalar values). Each accepted pair appears in the list below the form; the draft clears after adding. Select that row's **Remove** button to remove it. The accessible count shows the current total out of 500; when full, remove an entry before adding another. An accessible empty message appears when the list has no entries.
+
+Entries remain in React memory while moving between Settings sections or Home and Settings. A full page reload or fresh application mount clears them. This development preview does not persist entries, connect to native settings, or apply replacements to actual speech. The illustrative sentence remains synthetic. Run the frontend checks listed under [Testing and checks](#testing-and-checks) to verify the UI.
 
 The General section displays: **“Start Outflow automatically when you sign in to your computer.”** and **“Preview only — this setting does not change your computer's startup behavior yet.”** No operating-system login item is registered, and the preference is not written to a configuration file, localStorage, or sessionStorage. The section selection is not persisted. Microphone access, shortcut settings, diagnostics, native Tauri tray/window behavior, and all other dictation features remain unimplemented. The browser preview does not complete F-11, AC-11, T-051, or native startup integration in [`docs/TASKS.md`](docs/TASKS.md). The Rust schema contributes to T-017 but does not complete its migration behavior or its T-001 prerequisite.
 
@@ -2360,7 +2373,7 @@ Run `npm run typecheck`, `npm run test -- --run`, `npm run lint`, and `npm run b
 
 Settings → Text & Vocabulary now has **Spoken phrase** and **Written replacement** text fields after the Clean/Verbatim selector. Each field accepts Unicode text, including accented characters, emoji, and combining sequences. After a field is touched, validation reports empty or whitespace-only input, invalid unpaired UTF-16 surrogates, and values longer than 128 Unicode scalar values. Values are not normalized or truncated. The draft stays in React memory while switching Settings sections or navigating Home/Settings, and resets after a refresh or fresh app mount.
 
-This is a preview only: entries are not saved, edited, deleted, exported, or applied to dictated text. There is no vocabulary list, duplicate detection, 500-entry enforcement, or replacement processing.
+This is a development preview only: valid pairs can be added to and removed from a React-memory list capped at 500 entries. The list survives in-app navigation and clears after reload; it is not persisted, exported, duplicate-checked, connected to native settings, or applied to dictated text. This preview does not complete production T-038 or AC-08.
 
 Run `npm run dev`, open Settings → Text & Vocabulary, and type or paste into both fields. Blur an empty field to see its error, then correct it and confirm the error clears. Check the layout around 320px and 900px, visible keyboard focus, switching sections and Home/Settings, then refresh to confirm the draft resets. A viewport-width check is not a substitute for literal 200% browser zoom.
 

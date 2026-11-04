@@ -1,4 +1,6 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
+
+export const MAX_VOCABULARY_PREVIEW_ENTRIES = 500;
 
 export type VocabularyDraft = {
   spoken: string;
@@ -9,6 +11,8 @@ type VocabularyEntryFormProps = {
   value: VocabularyDraft;
   onChange: (value: VocabularyDraft) => void;
   onClearDraft: () => void;
+  onAddToPreviewList: (value: VocabularyDraft) => void;
+  isAtLimit: boolean;
 };
 
 type VocabularyValidationError =
@@ -79,9 +83,12 @@ export default function VocabularyEntryForm({
   value,
   onChange,
   onClearDraft,
+  onAddToPreviewList,
+  isAtLimit,
 }: VocabularyEntryFormProps) {
   const idPrefix = useId();
   const spokenInput = useRef<HTMLInputElement>(null);
+  const writtenInput = useRef<HTMLInputElement>(null);
   const [touched, setTouched] = useState({ spoken: false, written: false });
   const spokenId = `${idPrefix}-spoken`;
   const spokenDescriptionId = `${spokenId}-description`;
@@ -101,6 +108,7 @@ export default function VocabularyEntryForm({
   const writtenError = writtenValidation
     ? validationMessage(writtenValidation, "Written replacement")
     : null;
+  const limitMessageId = `${idPrefix}-limit-message`;
 
   function clearDraft() {
     setTouched({ spoken: false, written: false });
@@ -109,8 +117,33 @@ export default function VocabularyEntryForm({
     spokenInput.current?.focus();
   }
 
+  function addToPreviewList(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTouched({ spoken: true, written: true });
+
+    const spokenIssue = validateVocabularyValue(value.spoken);
+    const writtenIssue = validateVocabularyValue(value.written);
+
+    if (isAtLimit) return;
+    if (spokenIssue) {
+      spokenInput.current?.focus();
+      return;
+    }
+    if (writtenIssue) {
+      writtenInput.current?.focus();
+      return;
+    }
+
+    onAddToPreviewList(value);
+    setTouched({ spoken: false, written: false });
+  }
+
   return (
-    <div className="vocabulary-entry-form">
+    <form
+      className="vocabulary-entry-form"
+      noValidate
+      onSubmit={addToPreviewList}
+    >
       <div className="vocabulary-field">
         <label className="vocabulary-label" htmlFor={spokenId}>
           Spoken phrase
@@ -159,6 +192,7 @@ export default function VocabularyEntryForm({
           aria-invalid={writtenError ? true : undefined}
           className="vocabulary-input"
           id={writtenId}
+          ref={writtenInput}
           onBlur={() =>
             setTouched((current) => ({ ...current, written: true }))
           }
@@ -180,14 +214,34 @@ export default function VocabularyEntryForm({
         ) : null}
       </div>
 
-      <button
-        className="app-navigation-button vocabulary-clear-button"
-        disabled={value.spoken.length === 0 && value.written.length === 0}
-        onClick={clearDraft}
-        type="button"
-      >
-        Clear draft
-      </button>
-    </div>
+      <div className="vocabulary-entry-actions">
+        <button
+          aria-describedby={isAtLimit ? limitMessageId : undefined}
+          className="home-open-settings-button vocabulary-add-button"
+          disabled={isAtLimit}
+          type="submit"
+        >
+          Add to preview list
+        </button>
+        <button
+          className="app-navigation-button vocabulary-clear-button"
+          disabled={value.spoken.length === 0 && value.written.length === 0}
+          onClick={clearDraft}
+          type="button"
+        >
+          Clear draft
+        </button>
+      </div>
+      {isAtLimit ? (
+        <p
+          className="vocabulary-entry-limit-message"
+          id={limitMessageId}
+          role="status"
+        >
+          The preview list is full at {MAX_VOCABULARY_PREVIEW_ENTRIES} entries.
+          Remove an entry before adding another.
+        </p>
+      ) : null}
+    </form>
   );
 }

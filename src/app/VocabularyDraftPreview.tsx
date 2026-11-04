@@ -65,9 +65,8 @@ export default function VocabularyDraftPreview({
       </div>
 
       <p className="vocabulary-draft-preview-limitation">
-        This is a synthetic illustration of your vocabulary draft. No vocabulary
-        entry is saved, and no speech recognition or text replacement is
-        performed.
+        This is a synthetic illustration of your draft. Entries in the
+        development preview list are not persisted or applied to actual speech.
       </p>
     </>
   );

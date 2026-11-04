@@ -206,7 +206,7 @@ describe("VocabularyDraftPreview", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("states that the example is synthetic and does not save or process text", () => {
+  it("states that the example is synthetic and the list is not persisted or applied", () => {
     render(
       <VocabularyDraftPreview
         value={{ spoken: "north parkade", written: "North Parkade" }}
@@ -215,7 +215,7 @@ describe("VocabularyDraftPreview", () => {
 
     expect(
       screen.getByText(
-        "This is a synthetic illustration of your vocabulary draft. No vocabulary entry is saved, and no speech recognition or text replacement is performed.",
+        "This is a synthetic illustration of your draft. Entries in the development preview list are not persisted or applied to actual speech.",
       ),
     ).toBeVisible();
   });

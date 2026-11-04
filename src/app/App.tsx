@@ -10,8 +10,14 @@ import { SettingsStatusMessage } from "./SettingsStatusMessage";
 import TextCleanupModeSelector, {
   type CleanupMode,
 } from "./TextCleanupModeSelector";
-import VocabularyEntryForm, { type VocabularyDraft } from "./VocabularyEntryForm";
+import VocabularyEntryForm, {
+  MAX_VOCABULARY_PREVIEW_ENTRIES,
+  type VocabularyDraft,
+} from "./VocabularyEntryForm";
 import VocabularyDraftPreview from "./VocabularyDraftPreview";
+import VocabularyPreviewList, {
+  type VocabularyPreviewEntry,
+} from "./VocabularyPreviewList";
 import PrivacyOverview from "./PrivacyOverview";
 import AboutDiagnosticsOverview from "./AboutDiagnosticsOverview";
 
@@ -63,6 +69,12 @@ export default function App() {
     spoken: "",
     written: "",
   });
+  // Keep preview entries above the conditional views so navigation preserves them;
+  // a fresh App mount or page reload starts with an empty list.
+  const [vocabularyEntries, setVocabularyEntries] = useState<
+    VocabularyPreviewEntry[]
+  >([]);
+  const nextVocabularyEntryId = useRef(0);
   const sectionTabs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedIndex = settingsSections.findIndex(
     (section) => section.id === selectedSection,
@@ -83,6 +95,19 @@ export default function App() {
 
     if (page === "settings") setSelectedSection("general");
     setActiveView(page);
+  }
+
+  function addVocabularyPreviewEntry(value: VocabularyDraft) {
+    if (vocabularyEntries.length >= MAX_VOCABULARY_PREVIEW_ENTRIES) return;
+
+    const entry = { id: nextVocabularyEntryId.current, ...value };
+    nextVocabularyEntryId.current += 1;
+    setVocabularyEntries((current) =>
+      current.length >= MAX_VOCABULARY_PREVIEW_ENTRIES
+        ? current
+        : [...current, entry],
+    );
+    setVocabularyDraft({ spoken: "", written: "" });
   }
 
   function handleTabKeyDown(
@@ -233,12 +258,29 @@ export default function App() {
                     className="custom-vocabulary-preview"
                   >
                     <h3 id="custom-vocabulary-heading">Custom vocabulary</h3>
+                    <p className="vocabulary-development-note" role="note">
+                      Development preview only. Entries stay in memory until
+                      this page reloads and do not change actual speech.
+                    </p>
                     <VocabularyEntryForm
                       onClearDraft={() =>
                         setVocabularyDraft({ spoken: "", written: "" })
                       }
+                      onAddToPreviewList={addVocabularyPreviewEntry}
                       onChange={setVocabularyDraft}
+                      isAtLimit={
+                        vocabularyEntries.length >=
+                        MAX_VOCABULARY_PREVIEW_ENTRIES
+                      }
                       value={vocabularyDraft}
+                    />
+                    <VocabularyPreviewList
+                      entries={vocabularyEntries}
+                      onRemove={(id) =>
+                        setVocabularyEntries((current) =>
+                          current.filter((entry) => entry.id !== id),
+                        )
+                      }
                     />
                     <VocabularyDraftPreview value={vocabularyDraft} />
                   </section>
