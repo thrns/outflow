@@ -146,9 +146,10 @@ Run `scripts/run_macos_mic_probe.sh` without fixture options only when a person 
 
 - Branch: `codex/prompt79g-copy-result`, created from the supplied Prompt 79F HEAD.
 - Starting commit: `52336d7c6f3bde1dbf431835bb0cec2ca99d3f34`.
-- Prompt 79G commit(s): to be recorded after the authorized commit and push; the final completion response will include the exact commit SHA and the verified remote branch SHA. This file is part of the Prompt 79G commit.
+- Implementation/evidence commit: `c42e1a1531e4e39324682b92f1bf24411c872e8e` (`feat(native): add explicit copy-result action to macOS probe`). This commit contains all seven changed paths listed in §2, including this handoff.
+- The final completion response records the pushed branch's exact remote SHA. Since this handoff is itself part of the implementation commit, its own containing SHA is identified by the branch HEAD rather than duplicated as self-referential content.
 - Changed repository paths are listed in §2.
-- Final worktree state: to be recorded after commit/push; no model files, audio, transcript, screenshot, native binary, clipboard value, or secret is intended for Git.
+- The worktree was clean after the implementation commit. The final completion response records the post-push clean-worktree check. No model files, audio, transcript, screenshot, native binary, clipboard value, or secret is intended for Git.
 
 ## 14. Remaining production blockers and recommended next step
 
