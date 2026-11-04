@@ -117,6 +117,25 @@ OUTFLOW_MIC_PROBE_BUILD_DIR="$PASTEBOARD_APP_BUILD_DIR" \
   "$REPOSITORY_ROOT/scripts/build_macos_mic_probe.sh" >/dev/null || \
   fail "development probe build for the AppKit test failed"
 PASTEBOARD_APP="$PASTEBOARD_APP_BUILD_DIR/OutflowMicProbe.app"
+
+reject_invalid_verification_id() {
+  local description="$1"
+  shift
+  local exit_status=0
+  "$PASTEBOARD_APP/Contents/MacOS/OutflowMicProbe" "$@" >/dev/null 2>&1 || \
+    exit_status=$?
+  [[ "$exit_status" == 2 ]] || \
+    fail "native app did not reject ${description} verification ID (exit ${exit_status})"
+}
+
+reject_invalid_verification_id "missing-value" --verification-id
+reject_invalid_verification_id "empty" --verification-id ""
+reject_invalid_verification_id "overlong" --verification-id "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+reject_invalid_verification_id "control-character" --verification-id $'line\nbreak'
+reject_invalid_verification_id "repeated" \
+  --verification-id first --verification-id second
+printf 'PASS native app rejected 5 malformed verification ID launches without crashing.\n'
+
 PASTEBOARD_RESULT="$TEST_DIR/pasteboard-integration-result.txt"
 PASTEBOARD_OPEN_STATUS=0
 if /usr/bin/open -n -W -a "$PASTEBOARD_APP" --args \

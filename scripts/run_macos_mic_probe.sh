@@ -32,8 +32,20 @@ print(f"Verified {len(result['asset_sha256'])} local model files ({result['total
 PY
 
 APP_ARGUMENTS=(--model-dir "$OUTFLOW_MIC_PROBE_MODEL_DIR")
+VERIFICATION_ID=""
+VERIFICATION_ID_SET=0
 while (($#)); do
   case "$1" in
+    --verification-id)
+      (($# >= 2)) || fail "--verification-id requires a value"
+      ((VERIFICATION_ID_SET == 0)) || fail "--verification-id may be supplied only once"
+      [[ "$2" =~ ^[A-Za-z0-9-]{1,32}$ ]] || \
+        fail "--verification-id must be 1-32 ASCII letters, digits, or hyphens"
+      VERIFICATION_ID="$2"
+      VERIFICATION_ID_SET=1
+      APP_ARGUMENTS+=(--verification-id "$VERIFICATION_ID")
+      shift 2
+      ;;
     --timed-fixture)
       (($# >= 2)) || fail "--timed-fixture requires a PCM16 mono WAV path"
       APP_ARGUMENTS+=(--timed-fixture "$2")
@@ -53,6 +65,14 @@ while (($#)); do
       ;;
   esac
 done
+
+printf 'Requesting LaunchServices launch for app bundle: %s\n' "$OUTFLOW_MIC_PROBE_APP"
+if ((VERIFICATION_ID_SET)); then
+  printf 'Development verification ID: %s\n' "$VERIFICATION_ID"
+else
+  printf 'Development verification ID: not supplied\n'
+fi
+printf 'Confirm the visible window title and PID before interacting; an open success status alone does not verify the target window.\n'
 
 # Launch through LaunchServices so macOS resolves the app bundle and its
 # NSMicrophoneUsageDescription for the normal TCC permission prompt.

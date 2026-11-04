@@ -3,6 +3,7 @@
 #include "fixture_producer.hpp"
 #include "permission_policy.hpp"
 #include "session_state.hpp"
+#include "verification_identity.hpp"
 #include "wav_fixture.hpp"
 
 #include <array>
@@ -367,6 +368,44 @@ void test_explicit_copy_result_policy_and_exact_text() {
   assert(write_requests == 2);
 }
 
+void test_development_verification_identity_is_bounded_and_title_safe() {
+  assert(is_valid_verification_id("79I-COPY-TEST-01"));
+  assert(is_valid_verification_id("a"));
+  assert(is_valid_verification_id(std::string(kMaximumVerificationIdLength, 'Z')));
+  assert(!is_valid_verification_id(""));
+  assert(!is_valid_verification_id(
+      std::string(kMaximumVerificationIdLength + 1, 'A')));
+  assert(!is_valid_verification_id("has space"));
+  assert(!is_valid_verification_id("bad_identifier"));
+  assert(!is_valid_verification_id("line\nbreak"));
+  assert(!is_valid_verification_id("tab\tvalue"));
+  assert(!is_valid_verification_id("control\x1bvalue"));
+  assert(!is_valid_verification_id("Unicode-😀"));
+
+  const char* no_id_arguments[]{"probe"};
+  const char* valid_id_arguments[]{"probe", "--verification-id", "79I-COPY-TEST-01"};
+  const char* missing_id_arguments[]{"probe", "--verification-id"};
+  const char* empty_id_arguments[]{"probe", "--verification-id", ""};
+  const char* oversized_id_arguments[]{
+      "probe", "--verification-id", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"};
+  const char* control_id_arguments[]{"probe", "--verification-id", "bad\nID"};
+  const char* repeated_id_arguments[]{
+      "probe", "--verification-id", "first", "--verification-id", "second"};
+  assert(verification_id_arguments_valid(1, no_id_arguments));
+  assert(verification_id_arguments_valid(3, valid_id_arguments));
+  assert(!verification_id_arguments_valid(2, missing_id_arguments));
+  assert(!verification_id_arguments_valid(3, empty_id_arguments));
+  assert(!verification_id_arguments_valid(3, oversized_id_arguments));
+  assert(!verification_id_arguments_valid(3, control_id_arguments));
+  assert(!verification_id_arguments_valid(5, repeated_id_arguments));
+
+  const auto diagnostic = verification_diagnostic("79I-COPY-TEST-01", 12345);
+  assert(diagnostic == "Verification ID: 79I-COPY-TEST-01 — PID 12345");
+  assert(diagnostic.find('\n') == std::string::npos);
+  assert(diagnostic.find('\r') == std::string::npos);
+  assert(verification_diagnostic("bad\nID", 12345).empty());
+}
+
 void test_bounded_pcm16_wav_fixture_reader() {
   std::vector<std::uint8_t> bytes{
       'R','I','F','F', 40,0,0,0, 'W','A','V','E',
@@ -415,7 +454,8 @@ int main() {
   test_timed_fixture_producer_supports_two_sessions();
   test_microphone_permission_decisions();
   test_explicit_copy_result_policy_and_exact_text();
+  test_development_verification_identity_is_bounded_and_title_safe();
   test_bounded_pcm16_wav_fixture_reader();
-  std::cout << "mic probe core tests passed: 13 groups; 100 state cycles; "
+  std::cout << "mic probe core tests passed: 14 groups; 100 state cycles; "
                "permission generation and restart guards; 2 fixture starts\n";
 }

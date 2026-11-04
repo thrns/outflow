@@ -6,6 +6,7 @@ import unittest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROBE_ROOT = REPOSITORY_ROOT / "dev" / "macos-mic-probe"
+LAUNCHER = REPOSITORY_ROOT / "scripts" / "run_macos_mic_probe.sh"
 
 
 class MacMicProbePrivacyTests(unittest.TestCase):
@@ -13,6 +14,87 @@ class MacMicProbePrivacyTests(unittest.TestCase):
     def app_method(app: str, signature: str, next_signature: str) -> str:
         implementation = app.split("@implementation MicProbeAppDelegate", 1)[1]
         return implementation.split(signature, 1)[1].split(next_signature, 1)[0]
+
+    def test_verification_identity_is_visible_read_only_and_omitted_by_default(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        identity = (PROBE_ROOT / "verification_identity.hpp").read_text(encoding="utf-8")
+        parser = app.split("LaunchOptions read_launch_options() {", 1)[1].split(
+            "NSString* ns_string(", 1
+        )[0]
+        launch = self.app_method(
+            app,
+            "- (void)applicationDidFinishLaunching:(NSNotification*)notification {",
+            "- (BOOL)applicationShouldTerminateAfterLastWindowClosed:",
+        )
+
+        self.assertIn("kMaximumVerificationIdLength = 32", identity)
+        self.assertIn("is_valid_verification_id", identity)
+        self.assertIn("result.invalid_verification_id = true", parser)
+        self.assertIn("result.verification_id = std::string(utf8)", parser)
+        self.assertIn("verification_diagnostic(", launch)
+        self.assertIn("::getpid()", launch)
+        self.assertIn("_window.accessibilityTitle = _window.title", launch)
+        self.assertIn("verification_label = make_label(diagnostic_text", launch)
+        self.assertIn("verification_label.accessibilityLabel = diagnostic_text", launch)
+        self.assertIn('NSTextField* label = [NSTextField labelWithString:text]', app)
+        self.assertIn('_window.title = @"Outflow Mic Probe — Development Only"', launch)
+        self.assertIn("if (_launch.verification_id.has_value())", launch)
+        self.assertIn("} else {\n    _window.title = @\"Outflow Mic Probe — Development Only\";",
+                      launch)
+        settings_sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (REPOSITORY_ROOT / "crates" / "settings").rglob("*.rs")
+        )
+        self.assertNotIn("verification_id", settings_sources)
+
+    def test_launcher_validates_and_forwards_the_verification_id_once(self) -> None:
+        launcher = LAUNCHER.read_text(encoding="utf-8")
+        forwarding = 'APP_ARGUMENTS+=(--verification-id "$VERIFICATION_ID")'
+        self.assertEqual(launcher.count(forwarding), 1)
+        self.assertIn('[[ "$2" =~ ^[A-Za-z0-9-]{1,32}$ ]] ||', launcher)
+        self.assertIn('VERIFICATION_ID_SET == 0', launcher)
+        self.assertIn('APP_ARGUMENTS=(--model-dir "$OUTFLOW_MIC_PROBE_MODEL_DIR")', launcher)
+        self.assertIn('APP_ARGUMENTS+=(--timed-fixture "$2")', launcher)
+        for option in (
+            "--fixture-seconds",
+            "--metrics-file",
+            "--auto-cancel-after-ms",
+            "--auto-exit-after-final",
+            "--auto-exit-after-cancel",
+        ):
+            with self.subTest(option=option):
+                self.assertIn(option, launcher)
+        self.assertIn('exec /usr/bin/open -n -a "$OUTFLOW_MIC_PROBE_APP" --args "${APP_ARGUMENTS[@]}"',
+                      launcher)
+
+    def test_launch_identity_diagnostics_exclude_session_content_and_model_paths(self) -> None:
+        app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
+        identity = (PROBE_ROOT / "verification_identity.hpp").read_text(encoding="utf-8")
+        launcher = LAUNCHER.read_text(encoding="utf-8")
+        diagnostic = identity.split("inline std::string verification_diagnostic(", 1)[1].split(
+            "}  // namespace", 1
+        )[0]
+        launch_diagnostic = launcher.split(
+            "printf 'Requesting LaunchServices launch", 1
+        )[1].split("# Launch through LaunchServices", 1)[0]
+
+        self.assertIn("std::string_view value", diagnostic)
+        self.assertIn("process_id", diagnostic)
+        self.assertNotIn("event.text", diagnostic)
+        self.assertNotIn("transcript", diagnostic.lower())
+        self.assertNotIn("audio", diagnostic.lower())
+        self.assertNotIn("clipboard", diagnostic.lower())
+        for forbidden in ("transcript", "audio", "clipboard", "MODEL_DIR"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, launch_diagnostic)
+        self.assertIn("open success status alone does not verify the target window", launch_diagnostic)
+        startup = self.app_method(
+            app,
+            "- (void)applicationDidFinishLaunching:(NSNotification*)notification {",
+            "- (BOOL)applicationShouldTerminateAfterLastWindowClosed:",
+        )
+        self.assertNotIn("write_plain_text_to_pasteboard", startup)
+        self.assertNotIn("request_copy_result", startup)
 
     def test_audio_capture_and_asr_worker_do_not_persist_or_log_content(self) -> None:
         capture = (PROBE_ROOT / "macos_capture.mm").read_text(encoding="utf-8")

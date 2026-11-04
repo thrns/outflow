@@ -11,6 +11,7 @@
 #include "session_state.hpp"
 #include "session_worker.hpp"
 #include "tests/pasteboard_integration_test.hpp"
+#include "verification_identity.hpp"
 #include "wav_fixture.hpp"
 
 #include <fcntl.h>
@@ -40,6 +41,8 @@ struct LaunchOptions {
   std::filesystem::path fixture_path;
   std::filesystem::path metrics_path;
   std::filesystem::path pasteboard_test_result_path;
+  std::optional<std::string> verification_id;
+  bool invalid_verification_id = false;
   std::uint32_t fixture_seconds = 12;
   std::uint32_t auto_cancel_after_ms = 0;
   bool fixture_mode = false;
@@ -58,6 +61,7 @@ std::optional<std::uint32_t> parse_unsigned(const char* value) {
 
 LaunchOptions read_launch_options() {
   LaunchOptions result;
+  bool verification_id_seen = false;
   NSArray<NSString*>* arguments = NSProcessInfo.processInfo.arguments;
   for (NSUInteger index = 1; index < arguments.count; ++index) {
     NSString* argument = arguments[index];
@@ -72,6 +76,20 @@ LaunchOptions read_launch_options() {
       NSString* value = next_value();
       if (value != nil) {
         result.pasteboard_test_result_path = value.fileSystemRepresentation;
+      }
+    } else if ([argument isEqualToString:@"--verification-id"]) {
+      NSString* value = next_value();
+      if (verification_id_seen || value == nil ||
+          value.length > kMaximumVerificationIdLength) {
+        result.invalid_verification_id = true;
+      } else {
+        verification_id_seen = true;
+        const char* utf8 = value.UTF8String;
+        if (utf8 == nullptr || !is_valid_verification_id(utf8)) {
+          result.invalid_verification_id = true;
+        } else {
+          result.verification_id = std::string(utf8);
+        }
       }
     } else if ([argument isEqualToString:@"--timed-fixture"]) {
       NSString* value = next_value();
@@ -362,6 +380,13 @@ PreviewViews make_preview() {
 
 - (void)applicationDidFinishLaunching:(NSNotification*)notification {
   (void)notification;
+  if (_launch.invalid_verification_id) {
+    std::cerr << "mic probe launch rejected: invalid or repeated --verification-id; "
+                 "use 1-32 ASCII letters, digits, or hyphens.\n";
+    _pasteboard_test_exit_status = 2;
+    [NSApp terminate:self];
+    return;
+  }
   if (!_launch.pasteboard_test_result_path.empty()) {
     _pasteboard_test_exit_status = run_pasteboard_integration_test(
         _launch.pasteboard_test_result_path.c_str());
@@ -377,7 +402,21 @@ PreviewViews make_preview() {
                                                    NSWindowStyleMaskResizable)
                                           backing:NSBackingStoreBuffered
                                             defer:NO];
-  _window.title = @"Outflow Mic Probe — Development Only";
+  NSTextField* verification_label = nil;
+  if (_launch.verification_id.has_value()) {
+    const auto diagnostic = verification_diagnostic(
+        *_launch.verification_id, static_cast<std::uint32_t>(::getpid()));
+    NSString* diagnostic_text = ns_string(diagnostic);
+    _window.title = [NSString stringWithFormat:
+        @"Outflow Mic Probe — Dev — %@ — PID %d",
+        ns_string(*_launch.verification_id), ::getpid()];
+    _window.accessibilityTitle = _window.title;
+    verification_label = make_label(diagnostic_text, 11.0, NO);
+    verification_label.accessibilityLabel = diagnostic_text;
+    verification_label.textColor = NSColor.secondaryLabelColor;
+  } else {
+    _window.title = @"Outflow Mic Probe — Development Only";
+  }
   _window.minSize = NSMakeSize(560, 520);
   _window.delegate = self;
 
@@ -449,9 +488,12 @@ PreviewViews make_preview() {
   button_row.spacing = 8.0;
   button_row.translatesAutoresizingMaskIntoConstraints = NO;
 
-  for (NSView* view in @[title, subtitle, _permission_label, _state_label,
-                         _partial_label, partial_scroll, _final_label, final_scroll,
-                         copy_row, _copy_warning_label, _metrics_label, button_row]) {
+  NSMutableArray<NSView*>* window_views = [NSMutableArray arrayWithArray:
+      @[title, subtitle, _permission_label, _state_label,
+        _partial_label, partial_scroll, _final_label, final_scroll,
+        copy_row, _copy_warning_label, _metrics_label, button_row]];
+  if (verification_label != nil) [window_views insertObject:verification_label atIndex:2];
+  for (NSView* view in window_views) {
     [content addSubview:view];
   }
   [NSLayoutConstraint activateConstraints:@[
@@ -463,7 +505,9 @@ PreviewViews make_preview() {
     [subtitle.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:4],
     [_permission_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [_permission_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
-    [_permission_label.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:10],
+    [_permission_label.topAnchor constraintEqualToAnchor:
+        (verification_label == nil ? subtitle.bottomAnchor : verification_label.bottomAnchor)
+        constant:10],
     [_state_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
     [_state_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
     [_state_label.topAnchor constraintEqualToAnchor:_permission_label.bottomAnchor constant:8],
@@ -494,6 +538,13 @@ PreviewViews make_preview() {
     [button_row.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-18],
     [final_scroll.bottomAnchor constraintLessThanOrEqualToAnchor:_metrics_label.topAnchor constant:-8],
   ]];
+  if (verification_label != nil) {
+    [NSLayoutConstraint activateConstraints:@[
+      [verification_label.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+      [verification_label.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+      [verification_label.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:4],
+    ]];
+  }
   if (_launch.fixture_mode) {
     _permission_label.stringValue = @"Microphone: not used — this mode replays a local fixture in real time.";
     std::string error;
@@ -1045,6 +1096,11 @@ PreviewViews make_preview() {
 @end
 
 int main(int argc, const char* argv[]) {
+  if (!verification_id_arguments_valid(argc, argv)) {
+    std::cerr << "mic probe launch rejected: invalid or repeated --verification-id; "
+                 "use 1-32 ASCII letters, digits, or hyphens.\n";
+    return 2;
+  }
   for (int index = 1; index < argc; ++index) {
     if (std::string_view(argv[index]) == "--runtime-identity") {
       return print_runtime_identity(argv[0]) ? 0 : 1;

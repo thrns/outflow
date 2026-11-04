@@ -1470,6 +1470,69 @@ Repository evidence must not contain recognized words, clipboard contents, or th
 
 Full validation commands are listed in the preceding Prompt 79G test block. Exact Prompt 79H results and the separate isolated/desktop verification layers are in [`evidence/mvp/prompt-79h-detailed-implementation-handoff.md`](evidence/mvp/prompt-79h-detailed-implementation-handoff.md). This work does not complete T-046, T-047, AC-10, or a production release gate.
 
+### Prompt 79I — identify the fresh probe instance
+
+The development-only runner accepts an optional `--verification-id <identifier>`. IDs are 1–32 ASCII letters, digits, or hyphens. Missing, repeated, empty, overlong, or malformed IDs are rejected before LaunchServices starts the app; the native app performs the same validation if launched directly. The ID is held only for that process and is not written to settings. With an ID, the title is `Outflow Mic Probe — Dev — <ID> — PID <pid>` and the window shows the same ID and PID as a noneditable diagnostic label. Without the option, the normal `Outflow Mic Probe — Development Only` title and UI remain unchanged.
+
+Use the existing pinned Moonshine source, libraries, model, and WAV fixture environment described above. A fresh build directory is required for every app build:
+
+```sh
+export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d /private/tmp/outflow-prompt79i.XXXXXX)"
+scripts/build_macos_mic_probe.sh
+export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
+
+scripts/run_macos_mic_probe.sh \
+  --verification-id "79I-COPY-TEST-01" \
+  --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
+  --fixture-seconds 12
+```
+
+The runner prints the app bundle, verification ID, and a reminder that an `open` success status does not prove the target window is ready. Confirm the exact ID and PID in the visible window before interacting. To cross-check the displayed process, use the PID from the window:
+
+```sh
+PID_FROM_WINDOW=12345 # replace with the PID shown in the window
+ps -p "$PID_FROM_WINDOW" -o pid=,comm=
+```
+
+The command should identify the executable inside the fresh `OutflowMicProbe.app` bundle. Older probe windows do not show the new ID; do not use them for the fixture or copy test. If automation attaches to an older window or reports a stale application ID, use Mission Control or the normal macOS window/application switcher and select the visible title containing the exact ID. If neither automation nor normal desktop selection can reach that window, record the desktop steps as blocked and stop; do not modify TCC, manipulate processes, or weaken system protections.
+
+#### Copy Result → TextEdit desktop check
+
+The app displays this warning before the action: **“Copy replaces the clipboard. If writing fails after clearing it, prior contents may be lost. Clipboard managers or sync may retain copies.”** Copy Result intentionally replaces the system clipboard; a later write failure may lose its previous contents. Do not inspect or restore unrelated clipboard data.
+
+1. In the window with the expected ID and PID, click **Start timed fixture**. Wait for nonempty partial text and press **Stop**; wait for the actual nonempty final result.
+2. Confirm **Copy Result** is enabled. Click it once and record only whether AppKit reports success or the displayed sanitized failure status.
+3. Open a new, blank, unsaved TextEdit document in plain-text mode. Press **⌘V** manually. Compare visually with the final preview, including spaces, punctuation, Unicode, and line breaks. Do not log, screenshot, copy elsewhere, or save the recognized text; discard the document without saving.
+4. Return to the same probe, choose **Dismiss result**, and confirm the result clears and Copy Result disables.
+5. If the first copy succeeds, perform one new fixture session and activate Copy Result with **Return**. This is a second clipboard replacement; proceed only when the operator has authorized it. Separately start a new fixture and choose **Cancel**; verify the preview clears and the action remains disabled.
+
+The isolated AppKit integration test uses a unique test pasteboard with fixed synthetic strings. Its PASS proves only that AppKit can replace and read that isolated board; it does not prove delivery through the system general pasteboard or a manual TextEdit paste. Conversely, a successful LaunchServices request does not prove that the fresh process's window was targeted. Keep those results separate in the handoff.
+
+#### Prompt 79I regression and troubleshooting commands
+
+Run the focused and repository checks with the authorized local assets already configured:
+
+```sh
+scripts/build_macos_mic_probe.sh
+scripts/test_macos_mic_probe.sh
+scripts/test_macos_mic_probe.sh --real-fixture
+python3 -m unittest discover -s scripts/tests -v
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+npm run typecheck
+npm run test -- --run
+npm run lint
+npm run build
+git diff --check
+```
+
+For each additional full app build, choose a new unused `OUTFLOW_MIC_PROBE_BUILD_DIR`. If the visible title lacks the requested ID, the wrong/old instance is selected or the runner did not forward the option; stop before Copy. If the correct window reports an AppKit failure, record the ID, PID, target-window confirmation, nonempty final/action-enabled state, callback result, and exact status. Do not infer permission denial. Run the isolated test separately; do not change the pasteboard writer absent a reproducible new defect. `kLSNoExecutableErr` or automation attachment failure is a launch/host limitation, not evidence about clipboard access.
+
+The detailed run record is [`evidence/mvp/prompt-79i-detailed-implementation-handoff.md`](evidence/mvp/prompt-79i-detailed-implementation-handoff.md). This development probe does not complete production T-046/T-047, T-010/T-011, AC-10, or the MVP.
+
 ### Authorized local development model preparation
 
 The pinned source commit `234f60faa0eb388b01cdf7e60aca232af37aefda` selects the English Small Streaming catalog path `https://download.moonshine.ai/model/small-streaming-en/quantized_26_08_21/`. The path is a dated catalog directory, not a separate immutable artifact revision. The eight files total 142,300,974 bytes. Their observed hashes are recorded in the evidence manifest; the existing verifier checks every byte and SHA-256:
