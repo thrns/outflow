@@ -1,0 +1,253 @@
+[
+  {
+    "id": "empty-input",
+    "category": "whitespace",
+    "input": "",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": ""
+  },
+  {
+    "id": "already-normalized-text",
+    "category": "whitespace",
+    "input": "The quick brown fox.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "The quick brown fox."
+  },
+  {
+    "id": "crlf-tabs-and-paragraph-breaks",
+    "category": "whitespace",
+    "input": " \tFirst\t\tline  \r\n  \r  Second\tline . \n",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "First line\n\nSecond line.\n"
+  },
+  {
+    "id": "new-line-command-enabled",
+    "category": "commands",
+    "input": "alpha new line beta",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "new line", "written": "literal words" }
+    ],
+    "expected": "alpha\nbeta"
+  },
+  {
+    "id": "new-paragraph-command-enabled",
+    "category": "commands",
+    "input": "alpha NEW PARAGRAPH beta",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "alpha\n\nbeta"
+  },
+  {
+    "id": "commands-disabled-remain-literal",
+    "category": "commands",
+    "input": "alpha new line and new paragraph beta",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "alpha new line and new paragraph beta"
+  },
+  {
+    "id": "single-vocabulary-replacement",
+    "category": "vocabulary",
+    "input": "I use outflow.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "outflow", "written": "Outflow" }
+    ],
+    "expected": "I use Outflow."
+  },
+  {
+    "id": "multiple-vocabulary-replacements",
+    "category": "vocabulary",
+    "input": "rust and ubc",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "Rust and UBC"
+  },
+  {
+    "id": "protected-written-punctuation",
+    "category": "safety",
+    "input": "rust .",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust , Edition" }
+    ],
+    "expected": "Rust , Edition."
+  },
+  {
+    "id": "protected-written-filler-like-text",
+    "category": "safety",
+    "input": "outflow",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "outflow", "written": "um, keep this" }
+    ],
+    "expected": "um, keep this"
+  },
+  {
+    "id": "ordinary-punctuation-spacing",
+    "category": "punctuation",
+    "input": "Hello , world !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Hello, world!"
+  },
+  {
+    "id": "numeric-version-spacing-protection",
+    "category": "punctuation",
+    "input": "Version 3 . 14 is ready .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Version 3 . 14 is ready."
+  },
+  {
+    "id": "ambiguous-punctuation-before-quote",
+    "category": "punctuation",
+    "input": "Wait . ” then go",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Wait . ” then go"
+  },
+  {
+    "id": "clean-filler-removal-enabled",
+    "category": "modes",
+    "input": "um, ready",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "ready"
+  },
+  {
+    "id": "clean-filler-removal-disabled",
+    "category": "modes",
+    "input": "um, ready",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, ready"
+  },
+  {
+    "id": "verbatim-filler-setting-enabled",
+    "category": "modes",
+    "input": "um, ready",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, ready"
+  },
+  {
+    "id": "verbatim-filler-setting-disabled",
+    "category": "modes",
+    "input": "uh, ready",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "uh, ready"
+  },
+  {
+    "id": "repeated-fillers-preserved",
+    "category": "fillers",
+    "input": "um, uh, ready\nuh, uh, wait",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, uh, ready\nuh, uh, wait"
+  },
+  {
+    "id": "accented-and-combining-marks",
+    "category": "unicode",
+    "input": "café and café",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "café and café"
+  },
+  {
+    "id": "emoji-and-japanese-text",
+    "category": "unicode",
+    "input": "東京 😀\nこんにちは",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "東京 😀\nこんにちは"
+  },
+  {
+    "id": "proper-noun-and-abbreviation-preservation",
+    "category": "punctuation",
+    "input": "Dr . Élodie met NASA .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Dr. Élodie met NASA."
+  },
+  {
+    "id": "sentence-internal-filler-preserved",
+    "category": "fillers",
+    "input": "I said um, then stopped.",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "I said um, then stopped."
+  },
+  {
+    "id": "exactly-two-opt-in-commands",
+    "category": "commands",
+    "input": "first new line second new paragraph third",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "first\nsecond\n\nthird"
+  },
+  {
+    "id": "command-phrase-is-not-a-punctuation-boundary",
+    "category": "commands",
+    "input": "say new line, then stop",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "say new line, then stop"
+  }
+]

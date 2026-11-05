@@ -151,6 +151,12 @@ Added `docs/CLEANUP_MODE_POLICY.md` to separate confirmed FR-07 requirements and
 
 This remains a characterization only. The three policy questions—formatting stages in Verbatim, vocabulary correction in Verbatim, and behavior of explicitly enabled dictation commands—still require a maintainer decision before complete Verbatim semantics are implemented. No production cleanup behavior, settings fields, defaults, or serialization changed. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact verification commands, observed output, and results are recorded in [`evidence/T-036-cleanup-mode-contract.md`](../evidence/T-036-cleanup-mode-contract.md).
 
+### Cleanup golden corpus foundation — partial T-035/T-036 progress (2026-11-05)
+
+Added `crates/settings/tests/fixtures/cleanup_current_behavior.json` with 24 independently specified synthetic current-behavior cases and a data-driven integration test in `crates/settings/tests/cleanup_golden_corpus.rs`. The cases cover all eight fixture categories, the four Clean/Verbatim and filler-setting combinations, both command-flag values, exact output, determinism, and input/vocabulary/settings immutability. The runner rejects missing or unknown fields and reports fixture-level failures with the fixture ID and category. Its printed “current behavior baseline” summary is characterization only; it does not approve a final Verbatim policy.
+
+This is a small reusable harness foundation, not completion of T-035 or T-036. The corpus is not the required ≥200-case AC-07 acceptance corpus and does not establish its ≥99% exact-output threshold, complete protected-token checks, quality results, production integration, or release gates. No production cleanup behavior, settings schema, defaults, or dependencies changed. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands, results, environment, and limitations are in [`evidence/T-035-T-036-cleanup-golden-foundation.md`](../evidence/T-035-T-036-cleanup-golden-foundation.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

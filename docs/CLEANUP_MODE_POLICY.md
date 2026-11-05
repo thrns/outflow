@@ -27,7 +27,7 @@ The current ordered stages are whitespace normalization → optional dictation c
 
 ## Unresolved product decisions
 
-FR-07.4 describes Verbatim as preserving recognized wording “without cleanup transformations,” while FR-07.3 defines an ordered pipeline containing formatting, opt-in commands, and vocabulary correction. FR-07.2 only explicitly requires disabling filler deletion. Those requirements do not fully define which stages Verbatim skips. In particular, decide:
+FR-07.4 establishes that settings expose Verbatim and Clean, with Clean as the default; it does not define broader Verbatim stage behavior. FR-07.2 explicitly requires Verbatim to disable filler deletion. The broader description of Verbatim as preserving recognized wording “without cleanup transformations” comes from the existing Rust `CleanupMode::Verbatim` documentation. FR-07.3 defines an ordered pipeline containing formatting, opt-in commands, and vocabulary correction. Together, these sources do not fully define which stages Verbatim skips. In particular, decide:
 
 1. Does Verbatim skip additional formatting beyond the whitespace canonicalization required by the current pipeline?
 2. Does a user-configured vocabulary correction still apply in Verbatim?

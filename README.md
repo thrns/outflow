@@ -3677,3 +3677,60 @@ Troubleshooting:
 - **Cargo reports a toolchain or lockfile mismatch:** run from the repository root with the pinned `rust-toolchain.toml` and keep `--locked`; this task adds no dependency or lockfile change.
 
 This is partial T-036 characterization only. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands and results are in [`evidence/T-036-cleanup-mode-contract.md`](evidence/T-036-cleanup-mode-contract.md).
+
+## Cleanup golden corpus — current-behavior baseline
+
+The synthetic golden fixtures are stored in [`crates/settings/tests/fixtures/cleanup_current_behavior.json`](crates/settings/tests/fixtures/cleanup_current_behavior.json). Each JSON object has required fields `id`, `category`, `input`, `mode`, `remove_fillers`, `commands_enabled`, `vocabulary`, and `expected`. `category` is one of `whitespace`, `commands`, `vocabulary`, `punctuation`, `fillers`, `modes`, `unicode`, or `safety`. `mode` is `clean` or `verbatim`. Each vocabulary item contains `spoken` and `written`. Unknown fields are rejected at both fixture and vocabulary-item level.
+
+Example fixture object:
+
+```json
+{
+  "id": "normalized-greeting",
+  "category": "whitespace",
+  "input": "Hello, world.",
+  "mode": "clean",
+  "remove_fillers": true,
+  "commands_enabled": false,
+  "vocabulary": [],
+  "expected": "Hello, world."
+}
+```
+
+To add a fixture, append a synthetic case with a unique descriptive ID and an allowed category. Review the existing Rust stage order and behavior, then write the complete expected string explicitly. Do not produce or regenerate expectations by running cleanup and copying its output. Keep punctuation and Unicode code points exactly as reviewed. If current behavior or the unresolved Verbatim policy changes, review each affected expectation as a deliberate baseline change.
+
+Run the focused corpus test and its expected visible summary from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_golden_corpus --locked -- --nocapture
+```
+
+After all 24 cases pass, the test prints:
+
+```text
+Cleanup golden corpus: 24 fixtures passed
+Categories covered: 8
+Current behavior baseline: true
+```
+
+Run the focused Clean/Verbatim contract regression and the requested workspace checks with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_mode_contract --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+git diff --cached --check
+```
+
+Troubleshooting:
+
+- **JSON or schema error:** check commas and quoting, keep the top-level value an array, include every required field, use an allowed category and mode, and remove unknown fields. Each vocabulary object needs both `spoken` and `written`.
+- **Fixture vocabulary is rejected:** use nonempty valid spoken and written phrases and avoid duplicate spoken phrases under the existing matching policy.
+- **Expected output mismatch:** inspect the named fixture ID and category against the current ordered stages. Correct the explicitly reviewed expected value only when evidence shows the baseline value is wrong; do not silently regenerate it from the implementation.
+- **A policy change is proposed:** the corpus records current behavior. Review affected expectations alongside an approved product decision; the recommendation in [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md) remains **PROPOSED — NOT APPROVED**.
+
+The initial 24 cases are characterization only. They do not complete T-035/T-036 or AC-07. AC-07 still requires the ≥200-case acceptance corpus, ≥99% exact expected output, zero altered numeric tokens/proper nouns in the protected fixture corpus, a Clean/Verbatim distinction, and required production integration. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
