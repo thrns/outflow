@@ -1143,5 +1143,270 @@
       { "spoken": "new york city", "written": "NYC" }
     ],
     "expected": "NYC, ready!"
+  },
+  {
+    "id": "whitespace-ascii-space-tab-only-trims-to-empty",
+    "category": "whitespace",
+    "input": " \t  \t ",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": ""
+  },
+  {
+    "id": "whitespace-outer-horizontal-space-trimmed-short-sentence",
+    "category": "whitespace",
+    "input": " \tHello  world. \t ",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Hello world."
+  },
+  {
+    "id": "whitespace-lf-crlf-and-standalone-cr-canonicalized",
+    "category": "whitespace",
+    "input": "One\nTwo\r\nThree\rFour\nFive",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "One\nTwo\nThree\nFour\nFive"
+  },
+  {
+    "id": "whitespace-spaced-consecutive-blank-lines-preserved",
+    "category": "whitespace",
+    "input": "alpha\n \t \n\t\nbeta",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "alpha\n\n\nbeta"
+  },
+  {
+    "id": "whitespace-unicode-words-with-ascii-separators-collapsed",
+    "category": "whitespace",
+    "input": "café\t東京  😀",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "café 東京 😀"
+  },
+  {
+    "id": "whitespace-trims-around-emoji-across-paragraph-break",
+    "category": "whitespace",
+    "input": " \t😀  \r\n \t\r\n\t😀  ",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "😀\n\n😀"
+  },
+  {
+    "id": "modes-clean-removes-mixed-case-line-leading-fillers",
+    "category": "modes",
+    "input": "Um, ready\nuH, go",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "ready\ngo"
+  },
+  {
+    "id": "modes-clean-disabled-retains-mixed-case-fillers",
+    "category": "modes",
+    "input": "Um, ready\nuH, go",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Um, ready\nuH, go"
+  },
+  {
+    "id": "modes-verbatim-keeps-supported-fillers-with-removal-enabled",
+    "category": "modes",
+    "input": "um, first\nuh, second",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, first\nuh, second"
+  },
+  {
+    "id": "modes-verbatim-still-corrects-vocabulary-and-punctuation",
+    "category": "modes",
+    "input": "um, rust , ready !",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "um, Rust, ready!"
+  },
+  {
+    "id": "fillers-repeated-sequence-after-command-generated-newline-is-preserved",
+    "category": "fillers",
+    "input": "start new line um, uh, continue",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "start\num, uh, continue"
+  },
+  {
+    "id": "safety-protected-filler-like-replacement-and-next-line-filler-removal",
+    "category": "safety",
+    "input": "brand phrase new line uh, remove me",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "brand phrase", "written": "um, keep this" }
+    ],
+    "expected": "um, keep this\nremove me"
+  },
+  {
+    "id": "unicode-vocabulary-matches-canonical-equivalent-spoken-phrase",
+    "category": "unicode",
+    "input": "Café meeting",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" }
+    ],
+    "expected": "Café meeting"
+  },
+  {
+    "id": "unicode-vocabulary-matches-multiword-unicode-phrase",
+    "category": "unicode",
+    "input": "The CAFÉ 東京 group",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café 東京", "written": "Café 東京" }
+    ],
+    "expected": "The Café 東京 group"
+  },
+  {
+    "id": "unicode-combining-mark-blocks-partial-vocabulary-match",
+    "category": "unicode",
+    "input": "rust́ today",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "rust́ today"
+  },
+  {
+    "id": "unicode-emoji-separates-vocabulary-match-from-neighboring-words",
+    "category": "unicode",
+    "input": "pré 😀 café 🎉",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" }
+    ],
+    "expected": "pré 😀 Café 🎉"
+  },
+  {
+    "id": "unicode-vocabulary-corrects-repeated-canonical-phrase-occurrences",
+    "category": "unicode",
+    "input": "café , CAFÉ ; café !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" }
+    ],
+    "expected": "Café, Café; Café!"
+  },
+  {
+    "id": "unicode-vocabulary-longest-overlapping-accented-phrase-wins",
+    "category": "vocabulary",
+    "input": "CAFÉ NOIR and café.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" },
+      { "spoken": "café noir", "written": "Café Noir" }
+    ],
+    "expected": "Café Noir and Café."
+  },
+  {
+    "id": "punctuation-ordinary-spacing-corrected-next-to-protected-decimal",
+    "category": "punctuation",
+    "input": "Ready , 3 . 14 is valid !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Ready, 3 . 14 is valid!"
+  },
+  {
+    "id": "safety-spaced-punctuation-after-digit-bearing-identifier-is-preserved",
+    "category": "safety",
+    "input": "Serial ZX9 . approved , today !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Serial ZX9 . approved, today!"
+  },
+  {
+    "id": "punctuation-supported-spacing-corrected-next-to-accented-names",
+    "category": "punctuation",
+    "input": "Élodie , Zoë !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Élodie, Zoë!"
+  },
+  {
+    "id": "safety-vocabulary-written-leading-trailing-ascii-spaces-preserved",
+    "category": "safety",
+    "input": "ship token , now .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "token", "written": " Rust " }
+    ],
+    "expected": "ship  Rust  , now."
+  },
+  {
+    "id": "safety-protected-replacements-across-paragraph-with-external-punctuation",
+    "category": "safety",
+    "input": "cafe ,\n\nubc , ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "cafe", "written": "Café" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "Café,\n\nUBC, ready!"
+  },
+  {
+    "id": "commands-multiline-vocabulary-punctuation-and-filler-stages-compose",
+    "category": "commands",
+    "input": "Um, review rust , now new line uh, finish ubc .",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "review Rust, now\nfinish UBC."
   }
 ]
