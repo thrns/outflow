@@ -38,7 +38,7 @@ The runnable example's observed output was:
 ```text
 Input: "um, rust , at ubc ."
 Fillers enabled: "Rust , Edition, at UBC."
-Fillers disabled: "um, Rust , at UBC."
+Fillers disabled: "um, Rust , Edition, at UBC."
 Protected replacement preserved: true
 ```
 

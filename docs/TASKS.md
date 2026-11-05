@@ -135,7 +135,15 @@ The protected-aware filler stage deletes a candidate only when no part of its `u
 
 The runnable example prints `Input: "um, rust , at ubc ."`, `Fillers enabled: "Rust , Edition, at UBC."`, `Fillers disabled: "um, Rust , Edition, at UBC."`, and `Protected replacement preserved: true`; it asserts both complete outputs and the protected filler-like replacement. Workspace validation and actual output are recorded in [`evidence/T-036-protected-filler-integration.md`](../evidence/T-036-protected-filler-integration.md).
 
-This remains a partial T-036 slice. T-035/T-017 prerequisites, the full 50-case T-036 goldens and settings policy, acceptance corpus, ASR/application integration, platform testing, and all release gates remain open. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.**
+This remains a partial T-036 slice. T-035/T-017 prerequisites, the full 50-case T-036 goldens, acceptance corpus, ASR/application integration, platform testing, and all release gates remain open. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.**
+
+### Native cleanup preference adapter — partial T-036 evidence (2026-11-05)
+
+`outflow_settings::cleanup_policy::process_transcript_with_filler_preference` maps the existing settings to the core filler flag using exactly `mode == Clean && remove_fillers`. The adapter changes only filler deletion; all four mode/flag combinations still pass through the existing whitespace, optional command, vocabulary, punctuation, and protected-filler stages. It adds no settings fields, migrations, dependencies, or runtime/application integration.
+
+Fifteen focused `cleanup_policy` tests pass, including all four combinations, default settings, command/vocabulary independence, exact protected-replacement bytes, Unicode and paragraph breaks, typed invalid/duplicate errors, immutability, determinism, and settings JSON round-trip. The new runnable example asserts all four complete outputs and the protected `um, keep this` replacement. Workspace tests pass (191 core unit tests, 128 settings unit tests, all integration suites, and all 11 doctests); format, check, Clippy, and build also pass. Exact commands, observed output, environment, and remaining gaps are in [`evidence/T-036-cleanup-preference-adapter.md`](../evidence/T-036-cleanup-preference-adapter.md).
+
+This is only a partial T-036 building block. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.**
 
 ## 1. Milestone map / critical path
 

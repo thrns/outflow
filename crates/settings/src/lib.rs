@@ -18,12 +18,15 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 
+/// Maps persisted cleanup preferences to the core text pipeline's filler flag.
+pub mod cleanup_policy;
 pub mod storage;
 /// In-memory operations for stable-ID vocabulary entries.
 pub mod vocabulary_crud;
 pub mod vocabulary_policy_marker;
 pub mod vocabulary_preflight;
 
+pub use cleanup_policy::process_transcript_with_filler_preference;
 pub use vocabulary_crud::{
     VocabularyManagementError, add_vocabulary_entry, delete_vocabulary_entry, edit_vocabulary_entry,
 };

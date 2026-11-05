@@ -3536,6 +3536,98 @@ Troubleshooting and limitations:
 - **A command phrase becomes a line break:** command recognition is separately opt-in and runs before vocabulary matching; exact `new line`/`new paragraph` phrases can also be literal speech.
 - **Spacing remains inside vocabulary text:** punctuation changes are intentionally blocked inside protected written replacements.
 - **A later call changes vocabulary output:** each call is deterministic and vocabulary matching is non-cascading within that call, but the complete pipeline is not universally idempotent across calls when one replacement matches another entry.
-- **Full Clean/Verbatim behavior is expected:** this API only toggles conservative filler removal. Settings integration, broader cleanup, ASR integration, and the complete acceptance corpus remain unfinished.
+- **Full Clean/Verbatim behavior is expected:** this core API only toggles conservative filler removal. The settings adapter below maps the existing filler preference; application integration, broader cleanup, ASR integration, and the complete acceptance corpus remain unfinished.
 
 This remains a partial implementation. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** See [`evidence/T-036-protected-filler-integration.md`](evidence/T-036-protected-filler-integration.md) for focused implementation and verification evidence.
+
+The settings crate now provides a separate adapter for the filler preference. The core API above still accepts an explicit `fillers_enabled` flag; the adapter maps the existing settings to that flag. It does not define full Clean/Verbatim semantics or connect the application runtime.
+
+## Native cleanup preference adapter (partial T-036)
+
+`outflow_settings::cleanup_policy::process_transcript_with_filler_preference` accepts the existing `CleanupSettings` and `CleanupMode` values from `outflow-settings`, then delegates to `outflow-core`'s `process_transcript_with_optional_fillers`. It accepts borrowed `VocabularyEntryRef` entries and returns the core pipeline's typed `VocabularyCollectionError` when vocabulary validation fails. It performs no file access, settings migration, microphone inspection, or transcript storage.
+
+The supported policy is filler-only:
+
+| `CleanupMode` | `remove_fillers` | Effective filler removal |
+| --- | --- | --- |
+| `Clean` | `true` | Enabled |
+| `Clean` | `false` | Disabled |
+| `Verbatim` | `true` | Disabled |
+| `Verbatim` | `false` | Disabled |
+
+This adapter does **not** implement complete Verbatim mode. Whitespace normalization, opt-in dictation commands, vocabulary correction, and punctuation spacing continue to run in all four combinations. Any broader Clean/Verbatim stage policy needs a separate product decision before production integration.
+
+Example setup using synthetic vocabulary:
+
+```rust
+use outflow_core::vocabulary::VocabularyCollectionError;
+use outflow_core::vocabulary::VocabularyEntryRef;
+use outflow_settings::cleanup_policy::process_transcript_with_filler_preference;
+use outflow_settings::{CleanupMode, CleanupSettings};
+
+fn main() -> Result<(), VocabularyCollectionError> {
+    let vocabulary = [
+        VocabularyEntryRef {
+            spoken: "rust",
+            written: "Rust , Edition",
+        },
+        VocabularyEntryRef {
+            spoken: "ubc",
+            written: "UBC",
+        },
+    ];
+    let cleanup = CleanupSettings {
+        mode: CleanupMode::Clean,
+        remove_fillers: true,
+    };
+    let output = process_transcript_with_filler_preference(
+        "um, rust , at ubc .",
+        &vocabulary,
+        false,
+        &cleanup,
+    )?;
+    assert_eq!(output, "Rust , Edition, at UBC.");
+    Ok(())
+}
+```
+
+Run the complete four-case example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-settings --example cleanup_filler_preferences --locked
+```
+
+Expected output:
+
+```text
+Input: "um, rust , at ubc ."
+Clean, remove_fillers=true: "Rust , Edition, at UBC."
+Clean, remove_fillers=false: "um, Rust , Edition, at UBC."
+Verbatim, remove_fillers=true: "um, Rust , Edition, at UBC."
+Verbatim, remove_fillers=false: "um, Rust , Edition, at UBC."
+```
+
+The example asserts each full output and separately checks byte-for-byte preservation of the protected replacement `um, keep this`.
+
+Focused and workspace verification:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings cleanup_policy --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+git diff --cached --check
+```
+
+Troubleshooting and remaining limits:
+
+- **A leading `um, ` or `uh, ` remains:** removal requires `Clean` and `remove_fillers: true`; the existing core recognizer also requires a line-leading, isolated filler followed by an alphabetic character.
+- **A repeated, quoted, numeric, or sentence-internal filler remains:** those cases are intentionally outside the existing conservative deletion rule.
+- **A filler-like vocabulary replacement is present:** protected written replacements remain byte-for-byte unchanged, including `um,` or `uh,` text.
+- **Commands, vocabulary, or punctuation still change Verbatim output:** this adapter controls only filler removal; other existing pipeline stages run independently of `CleanupMode`.
+- **Application behavior is expected to follow these settings:** the adapter is a pure crate API and is not wired to React, Tauri, Moonshine, or the microphone. T-017/T-018 prerequisites, broader cleanup policy, the complete T-036 golden set, AC-07/AC-08, app integration, platform coverage, and all release gates remain open.
+
+This is partial T-036 evidence only. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** See [`evidence/T-036-cleanup-preference-adapter.md`](evidence/T-036-cleanup-preference-adapter.md) for the actual verification results.
