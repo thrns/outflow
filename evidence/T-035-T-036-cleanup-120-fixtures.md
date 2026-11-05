@@ -8,7 +8,8 @@
 | Requirement | FR-07; AC-07 remains open |
 | Branch | `codex/task-035-036-cleanup-120-fixtures` |
 | Base commit | `6f4a31222a5b0f0fe40b529052491da1a0cac8c7` |
-| Result commit | Commit containing this evidence on the branch; exact SHA is reported in the final handoff |
+| Fixture/docs commit | `521b7475c8cba4745f48895c5bbb9d1d0fe128bc` |
+| Final branch commit | Branch HEAD containing this evidence update; exact SHA is reported in the final handoff |
 | Environment | macOS 26.5.0, Darwin 25.6.0, arm64; Rust 1.99.1; Cargo 1.99.1 |
 | Hardware RAM | Not measured for this task; no 4 GB resource gate was evaluated |
 | Production behavior / dependencies | Unchanged; no dependency or lockfile changes |
@@ -118,6 +119,8 @@ Other requested checks:
 | `RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked` | PASS — exit 0 |
 | `git diff --check` | PASS — exit 0 |
 | `git diff --cached --check` | PASS — exit 0 after staging only the five task files |
+| `git push -u origin codex/task-035-036-cleanup-120-fixtures` | PASS — branch created on origin at `521b7475c8cba4745f48895c5bbb9d1d0fe128bc` |
+| `git ls-remote origin refs/heads/codex/task-035-036-cleanup-120-fixtures` | PASS — remote tip matched local `HEAD` and upstream at `521b7475c8cba4745f48895c5bbb9d1d0fe128bc` at verification time |
 
 Expected strings were written from the reviewed Rust stage rules before the focused run; execution was used to verify them, not to generate them.
 
@@ -136,4 +139,4 @@ Expected strings were written from the reviewed Rust stage rules before the focu
 
 Changed task files: `README.md`, `crates/settings/tests/cleanup_golden_corpus.rs`, `crates/settings/tests/fixtures/cleanup_current_behavior.json`, `docs/TASKS.md`, and this evidence file. No production source or lockfile changed.
 
-Review state: pending maintainer review. The five listed task files are staged, and `git diff --cached --check` passed; unrelated untracked paths are not staged. Next action: commit on the task branch and push the branch. Record the resulting commit and remote tip in the final handoff. No release, acceptance, or policy status is changed.
+Review state: pending maintainer review. The fixture/docs commit was pushed, and `git ls-remote` confirmed the origin branch matched the local branch at `521b7475c8cba4745f48895c5bbb9d1d0fe128bc`. This evidence update is a follow-up commit; its final branch and remote-tip SHA are reported in the final handoff. The unrelated untracked paths remain unstaged. No release, acceptance, or policy status is changed.
