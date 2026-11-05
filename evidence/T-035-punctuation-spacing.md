@@ -7,7 +7,7 @@ flows: [UF-05]
 acceptance: [AC-07]
 owner: Codex / codex/task-035-punctuation-spacing
 base_commit: ab07a93a3ecec14a172b76220dc541ef625343fd
-result_commit: UNCOMMITTED
+result_commit: a13af2e1f1e777cae8f9bcd76361cabba83f0e0f
 platform: macOS 26.6.2 (25G83), arm64; rustc 1.99.1 (58cf8f9c3 2026-10-13)
 implementation: Standalone punctuation-spacing function and 62 exact-output fixtures in crates/core/src/text_cleanup.rs; runnable example in crates/core/examples/text_punctuation_spacing.rs; README.md, docs/TASKS.md, and this evidence record updated.
 commands:
