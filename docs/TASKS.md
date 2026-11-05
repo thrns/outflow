@@ -105,6 +105,12 @@ The exact-output table has 62 fixtures covering all six marks, already-correct t
 
 This remains a partial T-035 building block. Punctuation spacing is not yet ordered after vocabulary correction in the existing pipeline; written-replacement interactions need explicit tests and policy review before integration. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands and results are recorded in [`evidence/T-035-punctuation-spacing.md`](../evidence/T-035-punctuation-spacing.md).
 
+### Native Rust protected vocabulary replacement spans — partial T-035/T-039 evidence (2026-11-04)
+
+The multi-entry vocabulary corrector now has `apply_vocabulary_post_corrections_with_spans`, which returns corrected text and ordered UTF-8 byte ranges for the exact written replacements inserted into it. Ranges are captured during the existing output-building pass, so validation, Unicode 18 matching and boundaries, longest-match precedence, non-overlap, and non-cascading behavior remain shared with the text-only API. Focused tests cover empty and unmatched cases, repeated and multiple replacements, multiword and longest matches, non-cascading behavior, byte offsets across multibyte and combining text, exact replacement whitespace/punctuation/newlines, collection validation and duplicate handling, immutability, determinism, and text-only parity. A synthetic runnable example asserts the exact corrected output, ranges, and replacement slices.
+
+This prepares later formatting to preserve written replacement text; it does not apply punctuation cleanup or change any existing cleanup rules. The exact example output, commands, results, and limitations are recorded in [`evidence/T-035-T-039-protected-vocabulary-spans.md`](../evidence/T-035-T-039-protected-vocabulary-spans.md). **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.**
+
 ## 1. Milestone map / critical path
 
 ```mermaid

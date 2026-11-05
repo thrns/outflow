@@ -25,6 +25,19 @@ use crate::vocabulary_matching::{CURRENT_VOCABULARY_MATCHING_VERSION, comparison
 const COMBINING_CLASS_MAP: CanonicalCombiningClassMapBorrowed<'static> =
     CanonicalCombiningClassMapBorrowed::new();
 
+/// Corrected text and the byte ranges occupied by inserted vocabulary values.
+///
+/// Each range indexes [`Self::text`] using UTF-8 byte offsets. It covers only
+/// the exact written replacement inserted for one match; unmatched transcript
+/// characters, spoken phrases, and vocabulary identifiers are not included.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VocabularyCorrectedText {
+    /// Corrected output with unmatched input bytes preserved.
+    pub text: String,
+    /// Ordered, non-overlapping UTF-8 byte ranges of written replacements.
+    pub protected_ranges: Vec<std::ops::Range<usize>>,
+}
+
 /// Replaces each complete occurrence of one spoken phrase with its written
 /// form, comparing the spoken phrase case-insensitively under Unicode 18 D145.
 ///
@@ -68,7 +81,7 @@ pub fn apply_vocabulary_post_correction(
         written,
     }];
 
-    Ok(apply_prepared_mappings(text, &mappings))
+    Ok(apply_prepared_mappings_with_spans(text, &mappings).text)
 }
 
 /// Applies a complete vocabulary collection to the original text in one pass.
@@ -112,10 +125,53 @@ pub fn apply_vocabulary_post_corrections(
     text: &str,
     entries: &[VocabularyEntryRef<'_>],
 ) -> Result<String, VocabularyCollectionError> {
+    Ok(apply_vocabulary_post_corrections_with_spans(text, entries)?.text)
+}
+
+/// Applies a validated vocabulary collection and records every inserted
+/// written replacement as a UTF-8 byte range in the returned text.
+///
+/// Matching uses the Unicode 18 canonical-caseless keys and conservative word
+/// boundaries used by [`apply_vocabulary_post_corrections`]. Longest-match
+/// precedence, left-to-right non-overlap, and non-cascading behavior are
+/// unchanged. Ranges are recorded as replacements are appended, so each range
+/// contains exactly its configured written value and excludes adjacent input.
+/// No output scan is performed to infer replacement positions.
+///
+/// An empty collection or a collection with no matches returns an empty range
+/// list. The input and entries are not modified. Error formatting continues to
+/// identify only collection indices and validation reasons, never vocabulary
+/// content.
+///
+/// # Errors
+///
+/// Returns [`VocabularyCollectionError`] for an oversized collection, an
+/// invalid spoken or written field, or duplicate spoken phrases under the
+/// Unicode 18 canonical-caseless policy.
+///
+/// # Examples
+///
+/// ```
+/// use outflow_core::vocabulary::{VocabularyCollectionError, VocabularyEntryRef};
+/// use outflow_core::vocabulary_post_correction::apply_vocabulary_post_corrections_with_spans;
+///
+/// let entries = [VocabularyEntryRef { spoken: "rust", written: "Rust" }];
+/// let corrected = apply_vocabulary_post_corrections_with_spans("😀 rust!", &entries)?;
+/// assert_eq!(corrected.text, "😀 Rust!");
+/// assert_eq!(&corrected.text[corrected.protected_ranges[0].clone()], "Rust");
+/// # Ok::<(), VocabularyCollectionError>(())
+/// ```
+pub fn apply_vocabulary_post_corrections_with_spans(
+    text: &str,
+    entries: &[VocabularyEntryRef<'_>],
+) -> Result<VocabularyCorrectedText, VocabularyCollectionError> {
     validate_vocabulary_collection(entries)?;
 
     if entries.is_empty() {
-        return Ok(text.to_owned());
+        return Ok(VocabularyCorrectedText {
+            text: text.to_owned(),
+            protected_ranges: Vec::new(),
+        });
     }
 
     let mappings = entries
@@ -126,7 +182,7 @@ pub fn apply_vocabulary_post_corrections(
         })
         .collect::<Vec<_>>();
 
-    Ok(apply_prepared_mappings(text, &mappings))
+    Ok(apply_prepared_mappings_with_spans(text, &mappings))
 }
 
 struct PreparedMapping<'a> {
@@ -134,9 +190,15 @@ struct PreparedMapping<'a> {
     written: &'a str,
 }
 
-fn apply_prepared_mappings(text: &str, mappings: &[PreparedMapping<'_>]) -> String {
+fn apply_prepared_mappings_with_spans(
+    text: &str,
+    mappings: &[PreparedMapping<'_>],
+) -> VocabularyCorrectedText {
     if mappings.is_empty() {
-        return text.to_owned();
+        return VocabularyCorrectedText {
+            text: text.to_owned(),
+            protected_ranges: Vec::new(),
+        };
     }
 
     let mut mapping_index_by_key = HashMap::<String, usize>::with_capacity(mappings.len());
@@ -158,6 +220,7 @@ fn apply_prepared_mappings(text: &str, mappings: &[PreparedMapping<'_>]) -> Stri
     boundaries.push(text.len());
 
     let mut output = String::with_capacity(text.len());
+    let mut protected_ranges = Vec::new();
     let mut copied_until = 0;
     let mut start_index = 0;
 
@@ -202,7 +265,9 @@ fn apply_prepared_mappings(text: &str, mappings: &[PreparedMapping<'_>]) -> Stri
 
         if let Some((matched_end_index, end, mapping_index)) = longest_match {
             output.push_str(&text[copied_until..start]);
+            let replacement_start = output.len();
             output.push_str(mappings[mapping_index].written);
+            protected_ranges.push(replacement_start..output.len());
             copied_until = end;
             start_index = matched_end_index;
         } else {
@@ -211,7 +276,10 @@ fn apply_prepared_mappings(text: &str, mappings: &[PreparedMapping<'_>]) -> Stri
     }
 
     output.push_str(&text[copied_until..]);
-    output
+    VocabularyCorrectedText {
+        text: output,
+        protected_ranges,
+    }
 }
 
 fn has_word_character_before(text: &str, index: usize) -> bool {
@@ -290,7 +358,10 @@ fn is_invisible_format_control(character: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_vocabulary_post_correction, apply_vocabulary_post_corrections};
+    use super::{
+        VocabularyCorrectedText, apply_vocabulary_post_correction,
+        apply_vocabulary_post_corrections, apply_vocabulary_post_corrections_with_spans,
+    };
     use crate::vocabulary::{
         MAX_VOCABULARY_ENTRIES, VocabularyCollectionError, VocabularyEntryRef, VocabularyField,
         VocabularyValidationError,
@@ -311,6 +382,45 @@ mod tests {
     fn correct(text: &str, spoken: &str, written: &str) -> String {
         apply_vocabulary_post_correction(text, spoken, written)
             .expect("test mapping should be valid")
+    }
+
+    fn correct_many_with_spans(
+        text: &str,
+        entries: &[(&str, &str)],
+    ) -> Result<VocabularyCorrectedText, VocabularyCollectionError> {
+        let entries = entries
+            .iter()
+            .map(|&(spoken, written)| VocabularyEntryRef { spoken, written })
+            .collect::<Vec<_>>();
+
+        apply_vocabulary_post_corrections_with_spans(text, &entries)
+    }
+
+    fn assert_protected_ranges(
+        corrected: &VocabularyCorrectedText,
+        expected_replacements: &[&str],
+    ) {
+        assert_eq!(
+            corrected.protected_ranges.len(),
+            expected_replacements.len()
+        );
+
+        let mut previous_end = 0;
+        let actual_replacements = corrected
+            .protected_ranges
+            .iter()
+            .map(|range| {
+                assert!(range.start <= range.end);
+                assert!(range.end <= corrected.text.len());
+                assert!(range.start >= previous_end);
+                assert!(corrected.text.is_char_boundary(range.start));
+                assert!(corrected.text.is_char_boundary(range.end));
+                previous_end = range.end;
+                &corrected.text[range.clone()]
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual_replacements, expected_replacements);
     }
 
     #[test]
@@ -685,5 +795,191 @@ mod tests {
             assert_eq!(correct_many(&input, &entries), Ok(expected.clone()));
         }
         assert_eq!(input, snapshot);
+    }
+
+    #[test]
+    fn spans_are_empty_for_empty_collections_and_unmatched_text() {
+        let input = "unchanged 東京 😀";
+        let empty = correct_many_with_spans(input, &[]).expect("empty collection is valid");
+        assert_eq!(empty.text, input);
+        assert_protected_ranges(&empty, &[]);
+
+        let unmatched =
+            correct_many_with_spans(input, &[("rust", "Rust")]).expect("mapping should be valid");
+        assert_eq!(unmatched.text, input);
+        assert_protected_ranges(&unmatched, &[]);
+    }
+
+    #[test]
+    fn records_one_replacement_without_including_adjacent_input() {
+        let corrected = correct_many_with_spans("before rust, after", &[("rust", "Rust")])
+            .expect("mapping should be valid");
+
+        assert_eq!(corrected.text, "before Rust, after");
+        assert_protected_ranges(&corrected, &["Rust"]);
+    }
+
+    #[test]
+    fn records_multiple_replacements_and_repeated_occurrences_in_output_order() {
+        let corrected = correct_many_with_spans(
+            "rust at ubc, then RUST at UBC",
+            &[("rust", "Rust"), ("ubc", "UBC")],
+        )
+        .expect("mappings should be valid");
+
+        assert_eq!(corrected.text, "Rust at UBC, then Rust at UBC");
+        assert_protected_ranges(&corrected, &["Rust", "UBC", "Rust", "UBC"]);
+    }
+
+    #[test]
+    fn one_range_covers_a_multiple_word_replacement_exactly() {
+        let corrected =
+            correct_many_with_spans("north parkade!", &[("north parkade", "North Parkade")])
+                .expect("mapping should be valid");
+
+        assert_eq!(corrected.text, "North Parkade!");
+        assert_protected_ranges(&corrected, &["North Parkade"]);
+    }
+
+    #[test]
+    fn longest_match_precedence_is_reflected_in_the_protected_span() {
+        let corrected = correct_many_with_spans(
+            "new york today",
+            &[("new", "New"), ("new york", "New York")],
+        )
+        .expect("mappings should be valid");
+
+        assert_eq!(corrected.text, "New York today");
+        assert_protected_ranges(&corrected, &["New York"]);
+    }
+
+    #[test]
+    fn spans_do_not_cascade_from_inserted_text() {
+        let corrected = correct_many_with_spans("rust", &[("rust", "ubc"), ("ubc", "UBC")])
+            .expect("mappings should be valid");
+
+        assert_eq!(corrected.text, "ubc");
+        assert_protected_ranges(&corrected, &["ubc"]);
+    }
+
+    #[test]
+    fn offsets_are_utf8_bytes_after_multibyte_input_and_replacements() {
+        let corrected = correct_many_with_spans("😀 rust 東京", &[("rust", "naïve 😀")])
+            .expect("mapping should be valid");
+
+        assert_eq!(corrected.text, "😀 naïve 😀 東京");
+        assert_eq!(corrected.protected_ranges[0], 5..16);
+        assert_protected_ranges(&corrected, &["naïve 😀"]);
+    }
+
+    #[test]
+    fn accented_canonical_matches_report_exact_replacement_bytes() {
+        let corrected = correct_many_with_spans("cafe\u{301} then café", &[("café", "Café")])
+            .expect("mapping should be valid");
+
+        assert_eq!(corrected.text, "Café then Café");
+        assert_eq!(corrected.protected_ranges, [0..5, 11..16]);
+        assert_protected_ranges(&corrected, &["Café", "Café"]);
+    }
+
+    #[test]
+    fn combining_characters_inside_replacements_keep_valid_boundaries() {
+        let decomposed_written = "Cafe\u{301}";
+        let corrected = correct_many_with_spans("😀 cafe\u{301}!", &[("café", decomposed_written)])
+            .expect("mapping should be valid");
+
+        assert_eq!(corrected.text, "😀 Cafe\u{301}!");
+        assert_eq!(corrected.protected_ranges[0], 5..11);
+        assert_protected_ranges(&corrected, &[decomposed_written]);
+    }
+
+    #[test]
+    fn replacement_spaces_punctuation_and_newlines_are_protected_exactly() {
+        let written = "Rust  , Edition!\n\n v 2";
+        let corrected = correct_many_with_spans("before rust after", &[("rust", written)])
+            .expect("mapping should be valid");
+
+        assert_eq!(corrected.text, format!("before {written} after"));
+        assert_protected_ranges(&corrected, &[written]);
+    }
+
+    #[test]
+    fn invalid_and_duplicate_collections_are_rejected_by_the_shared_validator() {
+        assert_eq!(
+            correct_many_with_spans("rust", &[("rust", "  ")]),
+            Err(VocabularyCollectionError::InvalidEntry {
+                index: 0,
+                source: VocabularyValidationError::Empty(VocabularyField::Written),
+            })
+        );
+        assert_eq!(
+            correct_many_with_spans("text", &[("Straße", "First"), ("STRASSE", "Second")]),
+            Err(VocabularyCollectionError::DuplicateSpoken {
+                first_index: 0,
+                duplicate_index: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn span_calls_preserve_input_and_collection_and_are_deterministic() {
+        let input = String::from("😀 north PARKADE; café");
+        let input_snapshot = input.clone();
+        let entries = vec![
+            VocabularyEntryRef {
+                spoken: "north parkade",
+                written: "North Parkade",
+            },
+            VocabularyEntryRef {
+                spoken: "café",
+                written: "Café",
+            },
+        ];
+        let entries_snapshot = entries.clone();
+        let expected = apply_vocabulary_post_corrections_with_spans(&input, &entries)
+            .expect("mappings should be valid");
+
+        for _ in 0..20 {
+            assert_eq!(
+                apply_vocabulary_post_corrections_with_spans(&input, &entries),
+                Ok(expected.clone())
+            );
+        }
+        assert_eq!(input, input_snapshot);
+        assert_eq!(entries, entries_snapshot);
+        assert_eq!(expected.text, "😀 North Parkade; Café");
+        assert_protected_ranges(&expected, &["North Parkade", "Café"]);
+    }
+
+    #[test]
+    fn text_only_multi_entry_api_matches_the_new_api_text() {
+        let input = "😀 STRASSE; north PARKADE; rust; cafe\u{301}";
+        let entries = [
+            VocabularyEntryRef {
+                spoken: "straße",
+                written: "Straße",
+            },
+            VocabularyEntryRef {
+                spoken: "north parkade",
+                written: "North Parkade",
+            },
+            VocabularyEntryRef {
+                spoken: "rust",
+                written: "Rust",
+            },
+            VocabularyEntryRef {
+                spoken: "café",
+                written: "Café",
+            },
+        ];
+
+        let with_spans = apply_vocabulary_post_corrections_with_spans(input, &entries)
+            .expect("mappings should be valid");
+        let text_only =
+            apply_vocabulary_post_corrections(input, &entries).expect("mappings should be valid");
+
+        assert_eq!(text_only, with_spans.text);
+        assert_eq!(with_spans.text, "😀 Straße; North Parkade; Rust; Café");
+        assert_protected_ranges(&with_spans, &["Straße", "North Parkade", "Rust", "Café"]);
     }
 }

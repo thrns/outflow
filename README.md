@@ -381,6 +381,55 @@ Troubleshooting and limitations:
 
 This remains a partial T-039 building block. It does not implement Moonshine keyterm hints, the full punctuation/filler cleanup pipeline, settings persistence, or ASR/frontend integration. T-035, T-038, T-039, AC-07, AC-08, and all release gates remain open.
 
+### Protected vocabulary replacement spans
+
+`outflow-core::vocabulary_post_correction::apply_vocabulary_post_corrections_with_spans` returns a `VocabularyCorrectedText` with the corrected `text` and a `protected_ranges` vector. Each `std::ops::Range<usize>` is a UTF-8 byte range into that returned text. It covers exactly one written vocabulary replacement, excluding adjacent transcript punctuation, spaces, and other unmatched input. Ranges appear in output order, do not overlap, and start and end at valid UTF-8 boundaries. The scanner records offsets as each replacement is appended; it does not search the output afterward. No spoken phrase or vocabulary ID is included in the metadata.
+
+The API reuses the existing vocabulary collection validator, Unicode 18 canonical-caseless matching and boundaries, left-to-right non-overlap, and longest-match precedence. Written text is preserved exactly, and inserted text is not scanned again. Empty collections and inputs with no matches return no ranges. The existing text-only single-entry and multi-entry APIs remain available and return the same corrected strings.
+
+Run the synthetic example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_protected_spans --locked
+```
+
+Expected output (Rust debug formatting):
+
+```text
+Original input: "rust , at ubc ."
+Corrected output: "Rust , Edition , at UBC ."
+Protected ranges: 2
+Protected replacement 1: "Rust , Edition"
+Protected replacement 2: "UBC"
+All range assertions passed: true
+```
+
+The example checks the complete output, exact byte ranges, UTF-8 boundaries, ordering, non-overlap, and the two exact replacement slices. It uses synthetic strings only and exits unsuccessfully if an assertion fails.
+
+Run the focused core tests and workspace verification from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core --locked
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_protected_spans --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+```
+
+Troubleshooting and limitations:
+
+- **No protected range is returned:** only successful vocabulary replacements receive ranges. An empty collection or an unmatched phrase correctly produces an empty list.
+- **An offset looks too large for the visible text:** offsets count UTF-8 bytes, not Unicode scalar values or grapheme clusters. Slice the returned `text` with the returned range; do not use character counts as byte offsets.
+- **Collection validation fails:** use at most 500 entries with nonempty, non-whitespace spoken and written fields of at most 128 Unicode scalar values. Canonically equivalent spoken phrases are duplicates. Errors do not include vocabulary text.
+- **Ranges are used after further text edits:** any edit to the returned string can invalidate its ranges. Apply later formatting with awareness of these protected spans or recompute from the original text.
+- **A Unicode boundary differs from expectations:** matching uses the current conservative boundary classifier, not a complete Unicode word-break algorithm.
+- **Punctuation remains unchanged:** this API only reports provenance. It does not run punctuation cleanup, capitalization, filler removal, dictation commands, or any later formatting stage.
+
+This is a partial T-035/T-039 building block. It is not connected to Moonshine, settings persistence, the application pipeline, or punctuation-spacing cleanup. T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
+
 ### Native Rust whitespace and vocabulary composition
 
 `outflow-core::text_cleanup::normalize_whitespace_and_apply_vocabulary` composes the existing whitespace normalizer and validated multi-entry vocabulary corrector. It normalizes ASCII spaces, tabs, CRLF, and standalone carriage returns first, then validates the complete vocabulary collection and applies Unicode 18 canonical-caseless matching with the existing word boundaries and longest-match precedence. Paragraph breaks and unrelated text remain intact. Written replacement values are copied exactly, including repeated spaces and line breaks; the output is not normalized again.
