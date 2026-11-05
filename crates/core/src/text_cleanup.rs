@@ -114,6 +114,79 @@ pub fn normalize_punctuation_spacing(input: &str) -> String {
     normalize_punctuation_spacing_with_protection(input, &[]).text
 }
 
+/// Removes a narrowly recognized filler at the beginning of each line.
+///
+/// When `enabled` is `true`, this removes only an ASCII case-insensitive
+/// `um, ` or `uh, ` prefix when the next character is alphabetic. The next
+/// word and all other text are copied exactly. If another supported filler
+/// token follows immediately, the complete line is preserved rather than
+/// guessing which hesitation was intentional. A line with leading spaces or
+/// tabs is not considered to start with a filler.
+///
+/// The caller should pass normalized transcript input: recognized phrases
+/// contain exactly one ASCII space after the comma. This function does not
+/// normalize whitespace. It recognizes line starts after LF and CR characters
+/// while preserving those bytes and all unrelated UTF-8 text. It is a
+/// standalone partial FR-07.2 stage and is not part of the composed cleanup
+/// APIs. When later integrated, it must run after punctuation spacing and
+/// honor protected vocabulary replacement ranges.
+///
+/// With `enabled` set to `false`, the input is returned unchanged, which
+/// represents Verbatim mode or disabled filler removal. The function is
+/// deterministic and idempotent and has no storage, network, or global-state
+/// effects.
+///
+/// # Examples
+///
+/// ```
+/// use outflow_core::text_cleanup::remove_leading_isolated_fillers;
+///
+/// assert_eq!(remove_leading_isolated_fillers("um, Rust.", true), "Rust.");
+/// assert_eq!(remove_leading_isolated_fillers("um, Rust.", false), "um, Rust.");
+/// assert_eq!(remove_leading_isolated_fillers("um, uh, yes", true), "um, uh, yes");
+/// ```
+pub fn remove_leading_isolated_fillers(input: &str, enabled: bool) -> String {
+    if !enabled {
+        return input.to_owned();
+    }
+
+    let mut output = String::with_capacity(input.len());
+    for line in input.split_inclusive(['\n', '\r']) {
+        output.push_str(remove_line_leading_isolated_filler(line));
+    }
+    output
+}
+
+fn remove_line_leading_isolated_filler(line: &str) -> &str {
+    let prefix_length = if line
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("um, "))
+        || line
+            .get(..4)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("uh, "))
+    {
+        4
+    } else {
+        return line;
+    };
+
+    let remaining = &line[prefix_length..];
+    if !remaining.chars().next().is_some_and(char::is_alphabetic)
+        || starts_with_supported_filler_comma(remaining)
+    {
+        return line;
+    }
+
+    remaining
+}
+
+fn starts_with_supported_filler_comma(text: &str) -> bool {
+    text.as_bytes().get(..3).is_some_and(|prefix| {
+        prefix[..2].eq_ignore_ascii_case(b"um") && prefix[2] == b','
+            || prefix[..2].eq_ignore_ascii_case(b"uh") && prefix[2] == b','
+    })
+}
+
 /// Punctuation output and its adjusted internal provenance ranges.
 ///
 /// The ranges are kept private: callers of the composed pipeline receive only
@@ -537,7 +610,7 @@ mod tests {
         normalize_punctuation_spacing_with_protection, normalize_transcript_whitespace,
         normalize_whitespace_and_apply_vocabulary,
         normalize_whitespace_commands_and_apply_vocabulary,
-        normalize_whitespace_commands_vocabulary_and_punctuation,
+        normalize_whitespace_commands_vocabulary_and_punctuation, remove_leading_isolated_fillers,
     };
     use crate::vocabulary::{
         MAX_VOCABULARY_ENTRIES, VocabularyCollectionError, VocabularyEntryRef, VocabularyField,
@@ -598,6 +671,235 @@ mod tests {
         }
 
         actual
+    }
+
+    #[test]
+    fn removes_only_supported_line_leading_fillers_in_clean_mode() {
+        let fixtures = [
+            ("empty enabled", "", true, ""),
+            ("empty disabled", "", false, ""),
+            (
+                "disabled um",
+                "um, so I went home.",
+                false,
+                "um, so I went home.",
+            ),
+            ("disabled uh", "Uh, I use Rust.", false, "Uh, I use Rust."),
+            (
+                "lowercase um",
+                "um, so I went home.",
+                true,
+                "so I went home.",
+            ),
+            ("lowercase uh", "uh, I use Rust.", true, "I use Rust."),
+            (
+                "uppercase um",
+                "UM, So I went home.",
+                true,
+                "So I went home.",
+            ),
+            (
+                "mixed-case um",
+                "uM, café is nearby.",
+                true,
+                "café is nearby.",
+            ),
+            ("title-case um", "Um, I am ready.", true, "I am ready."),
+            ("uppercase uh", "UH, We can begin.", true, "We can begin."),
+            (
+                "mixed-case uh",
+                "uH, Rust is local.",
+                true,
+                "Rust is local.",
+            ),
+            (
+                "filler after first line",
+                "first line\num, second line",
+                true,
+                "first line\nsecond line",
+            ),
+            (
+                "both fillers at separate line starts",
+                "um, first\nuh, second",
+                true,
+                "first\nsecond",
+            ),
+            (
+                "filler after blank paragraph",
+                "first\n\nUh, second",
+                true,
+                "first\n\nsecond",
+            ),
+            (
+                "filler in sentence middle",
+                "I, um, went home.",
+                true,
+                "I, um, went home.",
+            ),
+            (
+                "fillers in sentence middle",
+                "I said um, not uh.",
+                true,
+                "I said um, not uh.",
+            ),
+            ("filler at sentence end", "I went, um,", true, "I went, um,"),
+            (
+                "filler at end of final line",
+                "I said uh.",
+                true,
+                "I said uh.",
+            ),
+            (
+                "repeated different fillers",
+                "um, uh, yes",
+                true,
+                "um, uh, yes",
+            ),
+            (
+                "repeated different fillers reversed",
+                "Uh, UM, yes",
+                true,
+                "Uh, UM, yes",
+            ),
+            ("repeated um", "um, um, okay", true, "um, um, okay"),
+            ("repeated uh", "uh, uh, yes", true, "uh, uh, yes"),
+            (
+                "repeated incomplete second filler",
+                "um, uh,",
+                true,
+                "um, uh,",
+            ),
+            ("incomplete um token", "um", true, "um"),
+            ("incomplete uh token", "uh", true, "uh"),
+            ("comma without space", "um,yes", true, "um,yes"),
+            ("comma with no following text", "uh, ", true, "uh, "),
+            ("two spaces after comma", "um,  yes", true, "um,  yes"),
+            ("tab after comma", "uh,\tyes", true, "uh,\tyes"),
+            (
+                "number after comma",
+                "um, 2026 was different.",
+                true,
+                "um, 2026 was different.",
+            ),
+            (
+                "decimal after comma",
+                "uh, 3.14 is known.",
+                true,
+                "uh, 3.14 is known.",
+            ),
+            (
+                "abbreviation preserved",
+                "um, e.g. this one.",
+                true,
+                "e.g. this one.",
+            ),
+            (
+                "title preserved",
+                "uh, Dr. Smith spoke.",
+                true,
+                "Dr. Smith spoke.",
+            ),
+            (
+                "proper noun preserved",
+                "um, North Parkade is nearby.",
+                true,
+                "North Parkade is nearby.",
+            ),
+            ("acronym preserved", "uh, UBC!", true, "UBC!"),
+            ("quoted filler phrase", "\"um, yes\"", true, "\"um, yes\""),
+            ("curly quoted next word", "um, “yes”", true, "um, “yes”"),
+            ("single quoted next word", "uh, 'yes'", true, "uh, 'yes'"),
+            ("parenthesized next word", "um, (yes)", true, "um, (yes)"),
+            ("punctuation next", "uh, !go", true, "uh, !go"),
+            ("period next", "um, .", true, "um, ."),
+            ("leading space", " um, yes", true, " um, yes"),
+            ("leading tab", "\tum, yes", true, "\tum, yes"),
+            ("multiple leading spaces", "  uh, okay", true, "  uh, okay"),
+            (
+                "newlines and paragraph bytes preserved",
+                "um, first\n\nuh, second\n",
+                true,
+                "first\n\nsecond\n",
+            ),
+            (
+                "CRLF bytes preserved",
+                "um, first\r\nuh, second\r\n",
+                true,
+                "first\r\nsecond\r\n",
+            ),
+            (
+                "standalone CR line break preserved",
+                "um, first\ruh, second\r",
+                true,
+                "first\rsecond\r",
+            ),
+            (
+                "precomposed accent preserved",
+                "um, café is nearby.",
+                true,
+                "café is nearby.",
+            ),
+            (
+                "combining text preserved",
+                "uh, cafe\u{301} is nearby.",
+                true,
+                "cafe\u{301} is nearby.",
+            ),
+            (
+                "non-ASCII filler spelling unchanged",
+                "úm, yes",
+                true,
+                "úm, yes",
+            ),
+            ("Japanese next word", "um, 東京です。", true, "東京です。"),
+            (
+                "emoji immediately after comma",
+                "uh, 😀 yes",
+                true,
+                "uh, 😀 yes",
+            ),
+            ("emoji after next word", "um, café 😀", true, "café 😀"),
+            (
+                "non-ASCII space after comma",
+                "um,\u{a0}yes",
+                true,
+                "um,\u{a0}yes",
+            ),
+            (
+                "unrelated lines unchanged",
+                "plain text\n\tindented text\n",
+                true,
+                "plain text\n\tindented text\n",
+            ),
+        ];
+
+        assert_eq!(fixtures.len(), 55);
+        for (name, input, enabled, expected) in fixtures {
+            let actual = remove_leading_isolated_fillers(input, enabled);
+            assert_eq!(actual, expected, "fixture: {name}");
+            assert_eq!(
+                remove_leading_isolated_fillers(input, enabled),
+                actual,
+                "determinism fixture: {name}"
+            );
+            assert_eq!(
+                remove_leading_isolated_fillers(&actual, enabled),
+                actual,
+                "idempotence fixture: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn leading_filler_removal_does_not_modify_original_input() {
+        let input = String::from("um, café 😀\nUh, 東京");
+        let snapshot = input.clone();
+
+        assert_eq!(
+            remove_leading_isolated_fillers(&input, true),
+            "café 😀\n東京"
+        );
+        assert_eq!(input, snapshot);
     }
 
     #[test]

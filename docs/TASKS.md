@@ -119,6 +119,14 @@ Focused exact-output coverage includes empty inputs/collections, the requested r
 
 This is one integration slice only, not completion of production T-035 or T-039. T-023 prerequisites, the full cleanup corpus and filler/capitalization work, Moonshine hints, persistent vocabulary integration, ASR/frontend integration, and release gates remain outstanding. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact environment, commands, results, example output, and remaining gaps are in [`evidence/T-035-T-039-protected-punctuation-integration.md`](../evidence/T-035-T-039-protected-punctuation-integration.md).
 
+### Native line-leading filler removal — partial T-036 evidence (2026-11-05)
+
+`outflow_core::text_cleanup::remove_leading_isolated_fillers(input, enabled)` is a standalone Clean/Verbatim stage. Enabled calls remove only ASCII case-insensitive `um, ` or `uh, ` at the beginning of a line when the following character is alphabetic. Disabled calls preserve the input. The implementation keeps repeated supported filler sequences, indentation, quoted/punctuation-adjacent phrases, numbers, sentence-internal/final fillers, and unrelated UTF-8 bytes unchanged; it preserves existing LF, CRLF, and CR line endings. Its normalized-input assumption and exact one-ASCII-space matching rule are documented.
+
+Fifty-five exact-output fixtures cover the requested filler, mode, capitalization, position, incomplete phrase, repeated sequence, punctuation, number, abbreviation, proper-noun, whitespace, newline, Unicode, emoji, immutability, determinism, and idempotence cases. The synthetic example prints the input and Clean/Verbatim outputs with Rust debug formatting and asserts both exact outputs, idempotence, and unchanged input. No dependency, persisted settings schema, or composed cleanup API changed.
+
+This is a standalone partial implementation only. Filler removal is not integrated after punctuation spacing, has no settings adapter, and does not yet use protected vocabulary ranges. The remaining T-035/T-017 prerequisites, broader cleanup policy, complete acceptance corpus, application integration, and release gates remain outstanding. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands, results, environment, commit, and limitations are in [`evidence/T-036-leading-filler-removal.md`](../evidence/T-036-leading-filler-removal.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

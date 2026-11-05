@@ -242,6 +242,7 @@ crates/
 │   └── examples/
 │       ├── foundation.rs
 │       ├── text_cleanup_composition.rs
+│       ├── text_filler_removal.rs
 │       ├── vocabulary_matching_benchmark.rs
 │       ├── vocabulary_validation.rs
 │       ├── vocabulary_migration_check.rs
@@ -3438,3 +3439,46 @@ Troubleshooting:
 - **A byte offset appears different after formatting:** offsets are private to the pipeline and are not returned; do not reuse ranges from the vocabulary stage against final output.
 
 This is a partial implementation only. Automatic punctuation insertion, capitalization, Clean/Verbatim filler handling, ASR/settings/frontend integration, the complete golden corpus, and production prerequisites remain outstanding. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** See [`evidence/T-035-T-039-protected-punctuation-integration.md`](evidence/T-035-T-039-protected-punctuation-integration.md) for implementation and verification evidence.
+
+## Native line-leading filler removal (partial T-036)
+
+`outflow_core::text_cleanup::remove_leading_isolated_fillers(input, enabled)` is a standalone, deterministic Clean/Verbatim building block. When enabled, it removes only ASCII case-insensitive `um, ` or `uh, ` at the beginning of a line, and only when the next character is alphabetic. It removes exactly that prefix, preserves the following word's original spelling and capitalization, and copies unrelated UTF-8 text and line endings unchanged. Leading spaces/tabs, numbers, quotes, punctuation, incomplete phrases, and repeated filler sequences such as `um, uh, yes` remain intact. Middle- and sentence-final fillers are not considered.
+
+Pass `false` for Verbatim mode or when filler removal is disabled; the original text is returned unchanged. The function expects normalized transcript input with one ASCII space after the filler comma and does not normalize whitespace. It does not detect general hesitation, remove repeated words, or infer speaker intent. This standalone stage is not yet part of the composed cleanup pipeline. A future integration belongs after punctuation spacing and must honor protected vocabulary replacement ranges. The settings crate's persisted schema is not duplicated or imported into core.
+
+Run the synthetic example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example text_filler_removal --locked
+```
+
+It prints Rust debug-formatted input and outputs, then asserts exact Clean and Verbatim results, Clean idempotence, and input immutability. Expected output:
+
+```text
+Input: "um, so I visited north parkade.\nUh, I use Rust at UBC.\nI said um, not uh."
+Clean: "so I visited north parkade.\nI use Rust at UBC.\nI said um, not uh."
+Verbatim: "um, so I visited north parkade.\nUh, I use Rust at UBC.\nI said um, not uh."
+```
+
+Run the focused fixtures and workspace checks:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core leading_filler --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+git diff --cached --check
+```
+
+Troubleshooting:
+
+- **The filler remains:** pass `true`, start the line with the filler without leading spaces or tabs, use its comma and exactly one ASCII space, and follow it with a letter.
+- **A repeated sequence remains:** this is deliberate; `um, uh, yes` is preserved to avoid guessing which hesitation was intended.
+- **A filler after punctuation, inside quotes, before a number, or in the middle/end of a sentence remains:** these positions are outside the narrowly supported rule.
+- **A multi-space, tab, or non-ASCII separator does not match:** normalize transcript whitespace before calling this standalone stage.
+- **Vocabulary replacement text contains `um,` or `uh,`:** keep filler removal outside the composed pipeline until the future integration respects protected replacement ranges.
+
+This is a partial implementation only. It does not integrate Clean/Verbatim settings, protected vocabulary spans, punctuation formatting, ASR, or the full cleanup policy. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** See [`evidence/T-036-leading-filler-removal.md`](evidence/T-036-leading-filler-removal.md) for exact commands, results, and limitations.
