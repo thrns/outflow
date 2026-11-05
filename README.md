@@ -3249,7 +3249,7 @@ Troubleshooting:
 - **Punctuation or capitalization changed:** that behavior is outside this API; check that another cleanup stage is not being applied by the caller.
 - **Cargo reports a locked dependency or toolchain issue:** run the commands at the repository root with the stable toolchain and verify the tracked `Cargo.lock`; this change does not add or update dependencies.
 
-This is the standalone whitespace stage. The next partial T-035 slice adds opt-in dictation commands and places them before vocabulary correction; neither stage is connected to the application. T-023 remains an unmet prerequisite, and production T-035/T-036, T-038/T-039, AC-07/AC-08, and all release gates remain unchecked. See [`evidence/T-035-whitespace-normalization.md`](evidence/T-035-whitespace-normalization.md) for the whitespace-stage evidence and the following section for command-stage evidence.
+This is the standalone whitespace stage. The following partial T-035 slice adds opt-in dictation commands and places them before vocabulary correction; neither stage is connected to the application. T-023 remains an unmet prerequisite, and production T-035/T-036, T-038/T-039, AC-07/AC-08, and all release gates remain unchecked. See [`evidence/T-035-whitespace-normalization.md`](evidence/T-035-whitespace-normalization.md) for the whitespace-stage evidence and the following section for command-stage evidence.
 
 ## Native Rust opt-in dictation commands (partial T-035)
 
