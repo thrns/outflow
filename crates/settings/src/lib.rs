@@ -19,8 +19,14 @@ use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 
 pub mod storage;
+/// In-memory operations for stable-ID vocabulary entries.
+pub mod vocabulary_crud;
 pub mod vocabulary_policy_marker;
 pub mod vocabulary_preflight;
+
+pub use vocabulary_crud::{
+    VocabularyManagementError, add_vocabulary_entry, delete_vocabulary_entry, edit_vocabulary_entry,
+};
 
 pub use storage::{
     MAX_SETTINGS_FILE_BYTES, SettingsStorageError, SettingsStorageOperation, load_settings,
