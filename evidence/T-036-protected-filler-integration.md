@@ -8,7 +8,7 @@ acceptance: [AC-07]
 owner: Codex coordinator
 branch: codex/task-036-protected-filler-integration
 base_commit: e5344efbac3051bccea31d550a429045ce0a474d
-result_commit: pending implementation commit; exact SHA recorded in the final task handoff
+result_commit: d508902d57c825cd15b492260090b14d744e57e0
 platform: macOS 26.6.2, arm64; rustc 1.99.1; Cargo 1.99.1
 implementation: Shared conservative filler recognizer; private protected-aware removal with adjusted UTF-8 ranges; five-stage public composition; focused exact-output tests; runnable example.
 commands:
