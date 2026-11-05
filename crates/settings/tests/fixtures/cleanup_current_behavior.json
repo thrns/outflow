@@ -1957,5 +1957,264 @@
       { "spoken": "beta code", "written": "Beta; Code" }
     ],
     "expected": "begin Alpha  Code, now.\nfinish Beta; Code; later!"
+  },
+  {
+    "id": "numeric-signed-value-with-eligible-ordinary-punctuation",
+    "category": "safety",
+    "input": "The balance is -42 units , said Maya !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "The balance is -42 units, said Maya!"
+  },
+  {
+    "id": "numeric-scientific-notation-like-text-stays-literal",
+    "category": "safety",
+    "input": "Keep 6 . 02e23 , not 6.02e23 !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Keep 6 . 02e23 , not 6.02e23 !"
+  },
+  {
+    "id": "numeric-date-version-and-ambiguous-sequence",
+    "category": "punctuation",
+    "input": "Date 2026-11-05 / build v3 . 7 ? !",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Date 2026-11-05 / build v3 . 7 ? !"
+  },
+  {
+    "id": "proper-noun-accented-multiword-place-boundary",
+    "category": "safety",
+    "input": "Université de Montréal , meets Kyoto .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Université de Montréal, meets Kyoto."
+  },
+  {
+    "id": "proper-noun-acronym-and-person-name-share-sentence",
+    "category": "safety",
+    "input": "FBI briefed Zoë , then IBM .",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "FBI briefed Zoë, then IBM."
+  },
+  {
+    "id": "safety-numeric-names-around-protected-vocabulary-replacement",
+    "category": "safety",
+    "input": "Room 12B , on 2026 . 11 , Zoë met comet archive , today !",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "comet archive", "written": "Comet Archive, Vol. 2" }
+    ],
+    "expected": "Room 12B , on 2026 . 11 , Zoë met Comet Archive, Vol. 2 , today!"
+  },
+  {
+    "id": "whitespace-nonbreaking-space-between-multilingual-words",
+    "category": "whitespace",
+    "input": "café 東京 , ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "café 東京, ready!"
+  },
+  {
+    "id": "whitespace-thin-and-narrow-spaces-next-to-ascii-runs",
+    "category": "whitespace",
+    "input": "North Parkade  meets Café  , today !",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "North Parkade meets Café  , today!"
+  },
+  {
+    "id": "whitespace-ideographic-space-in-multilingual-sentence",
+    "category": "whitespace",
+    "input": "東京　Bonjour , 皆さん !",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "東京　Bonjour, 皆さん!"
+  },
+  {
+    "id": "whitespace-tabs-adjacent-to-decomposed-combining-sequence",
+    "category": "whitespace",
+    "input": "Café\t\ẗ\t ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Café ̈ ready!"
+  },
+  {
+    "id": "whitespace-emoji-japanese-mixed-crlf-lf-with-command-disabled",
+    "category": "whitespace",
+    "input": "😀東京\r\nnew line\nこんにちは\r\n👋",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "😀東京\nnew line\nこんにちは\n👋"
+  },
+  {
+    "id": "whitespace-nonascii-line-space-before-punctuation",
+    "category": "whitespace",
+    "input": "left\n right\n　,\nend !",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "left\n right\n　,\nend!"
+  },
+  {
+    "id": "commands-supported-new-line-at-transcript-start",
+    "category": "commands",
+    "input": "new line  Begin here",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "\nBegin here"
+  },
+  {
+    "id": "commands-supported-new-paragraph-at-transcript-end",
+    "category": "commands",
+    "input": "Keep going new paragraph",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Keep going\n\n"
+  },
+  {
+    "id": "commands-consecutive-supported-commands-compose-breaks",
+    "category": "commands",
+    "input": "new line new paragraph new line done",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "\n\n\n\ndone"
+  },
+  {
+    "id": "commands-punctuation-interruption-keeps-command-like-text",
+    "category": "commands",
+    "input": "Please say new, line then stop.",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Please say new, line then stop."
+  },
+  {
+    "id": "commands-generated-line-keeps-repeated-filler-sequence",
+    "category": "commands",
+    "input": "Ready new line um, uh, continue",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Ready\num, uh, continue"
+  },
+  {
+    "id": "commands-paragraph-removes-ordinary-filler-and-protects-vocabulary-filler",
+    "category": "commands",
+    "input": "brand marker new paragraph uh, remove this",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "brand marker", "written": "um, keep exact" }
+    ],
+    "expected": "um, keep exact\n\nremove this"
+  },
+  {
+    "id": "vocabulary-multiple-replacements-separated-by-accent-and-emoji",
+    "category": "unicode",
+    "input": "Café met 東京 😀 comet station , ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" },
+      { "spoken": "comet station", "written": "Comet Station" }
+    ],
+    "expected": "Café met 東京 😀 Comet Station, ready!"
+  },
+  {
+    "id": "vocabulary-longer-decomposed-accented-phrase-wins",
+    "category": "vocabulary",
+    "input": "crème brûlée tastes good .",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "crème", "written": "Short Match" },
+      { "spoken": "crème brûlée", "written": "Crème Brûlée" }
+    ],
+    "expected": "Crème Brûlée tastes good."
+  },
+  {
+    "id": "safety-written-punctuation-spacing-next-to-ordinary-comma",
+    "category": "safety",
+    "input": "north star , met us !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "north star", "written": "North Star , v2 . 1" }
+    ],
+    "expected": "North Star , v2 . 1 , met us!"
+  },
+  {
+    "id": "safety-embedded-line-break-replacement-keeps-filler-like-lines",
+    "category": "safety",
+    "input": "brand phrase",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "brand phrase", "written": "North\num, Parkade\nuh, Annex" }
+    ],
+    "expected": "North\num, Parkade\nuh, Annex"
+  },
+  {
+    "id": "safety-short-and-long-replacements-survive-prior-punctuation-edits",
+    "category": "safety",
+    "input": "alpha key , then beta key ; done !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "alpha key", "written": "A" },
+      { "spoken": "beta key", "written": "The Long Replacement Name" }
+    ],
+    "expected": "A, then The Long Replacement Name; done!"
+  },
+  {
+    "id": "commands-multiline-vocabulary-protected-punctuation-and-clean-fillers",
+    "category": "commands",
+    "input": "um, start new paragraph alpha phrase , keeps um text new line uh, finish !",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "alpha phrase", "written": "Alpha , Mark" }
+    ],
+    "expected": "start\n\nAlpha , Mark, keeps um text\nfinish!"
   }
 ]
