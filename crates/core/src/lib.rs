@@ -4,7 +4,7 @@
 //! `docs/ARCHITECTURE.md`. It intentionally has no frontend, Tauri, operating
 //! system, or external-service dependencies.
 
-/// Deterministic whitespace normalization for transcript text.
+/// Transcript whitespace normalization and vocabulary-stage composition.
 pub mod text_cleanup;
 /// Pure validation for the spoken and written sides of a vocabulary entry.
 pub mod vocabulary;
