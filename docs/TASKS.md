@@ -157,6 +157,12 @@ Added `crates/settings/tests/fixtures/cleanup_current_behavior.json` with 24 ind
 
 This is a small reusable harness foundation, not completion of T-035 or T-036. The corpus is not the required ≥200-case AC-07 acceptance corpus and does not establish its ≥99% exact-output threshold, complete protected-token checks, quality results, production integration, or release gates. No production cleanup behavior, settings schema, defaults, or dependencies changed. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands, results, environment, and limitations are in [`evidence/T-035-T-036-cleanup-golden-foundation.md`](../evidence/T-035-T-036-cleanup-golden-foundation.md).
 
+### Cleanup preservation fixture expansion — partial T-035/T-036 progress (2026-11-05)
+
+Expanded the synthetic current-behavior corpus from 24 to 48 explicit fixtures, adding six cases each for numeric preservation, proper nouns/abbreviations, Unicode preservation, and protected vocabulary interactions. The runner now requires exactly 48 fixtures and retains the existing schema, category/mode/flag coverage, exact-output, determinism, and immutability checks. No production cleanup behavior, settings schema, defaults, dependencies, or Verbatim policy changed.
+
+The focused corpus test passes all 48 cases. One source-confirmed current behavior is recorded: punctuation spacing after the year `2026` remains as `2026 .` because the existing rule trims only when the preceding character is alphabetic and the adjacent alphanumeric token contains no number. This is a characterization, not an approved cleanup-policy change. The 48 fixtures do not satisfy AC-07's ≥200-case corpus or prove universal numeric/proper-noun protection. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Verification commands, results, and remaining limitations are recorded in [`evidence/T-035-T-036-cleanup-safety-fixtures.md`](../evidence/T-035-T-036-cleanup-safety-fixtures.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

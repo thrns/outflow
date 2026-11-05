@@ -249,5 +249,258 @@
     "commands_enabled": true,
     "vocabulary": [],
     "expected": "say new line, then stop"
+  },
+  {
+    "id": "numeric-decimal-spaced-period-preserved",
+    "category": "safety",
+    "input": "Version 3 . 14 is ready .",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Version 3 . 14 is ready."
+  },
+  {
+    "id": "numeric-comma-grouping-and-year-preserved",
+    "category": "safety",
+    "input": "The 1,234,567 units shipped in 2026 .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "The 1,234,567 units shipped in 2026 ."
+  },
+  {
+    "id": "numeric-version-like-string-preserved",
+    "category": "safety",
+    "input": "Build v2 . 8 . 1 is stable .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Build v2 . 8 . 1 is stable."
+  },
+  {
+    "id": "numeric-alphanumeric-identifiers-preserved",
+    "category": "safety",
+    "input": "IDs A7B-42 and ZX9 are ready .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "IDs A7B-42 and ZX9 are ready."
+  },
+  {
+    "id": "numeric-multiple-tokens-preserved-in-sentence",
+    "category": "safety",
+    "input": "At 9 . 30 on 2026-11-05, room 204 is ready .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "At 9 . 30 on 2026-11-05, room 204 is ready."
+  },
+  {
+    "id": "numeric-content-with-eligible-surrounding-punctuation",
+    "category": "safety",
+    "input": "Send 16 . 5 units , now !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Send 16 . 5 units, now!"
+  },
+  {
+    "id": "proper-noun-accented-person-name-preserved",
+    "category": "safety",
+    "input": "Élodie said hello .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Élodie said hello."
+  },
+  {
+    "id": "proper-noun-multiword-place-preserved",
+    "category": "safety",
+    "input": "I visited North Parkade yesterday .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "I visited North Parkade yesterday."
+  },
+  {
+    "id": "proper-noun-uppercase-acronym-preserved",
+    "category": "safety",
+    "input": "NASA sent Artemis to Mars .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "NASA sent Artemis to Mars."
+  },
+  {
+    "id": "proper-noun-abbreviation-period-spacing-corrected",
+    "category": "safety",
+    "input": "Dr . Élodie arrived today .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Dr. Élodie arrived today."
+  },
+  {
+    "id": "proper-nouns-several-in-one-sentence-preserved",
+    "category": "safety",
+    "input": "Maya met NASA in Montréal .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Maya met NASA in Montréal."
+  },
+  {
+    "id": "proper-nouns-beside-eligible-punctuation-spacing",
+    "category": "safety",
+    "input": "Visit UBC , Vancouver .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Visit UBC, Vancouver."
+  },
+  {
+    "id": "unicode-precomposed-accent-preserved",
+    "category": "unicode",
+    "input": "Café déjà vu .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Café déjà vu."
+  },
+  {
+    "id": "unicode-decomposed-accent-preserved",
+    "category": "unicode",
+    "input": "Cafe\u0301 joined Zoë .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Cafe\u0301 joined Zoë."
+  },
+  {
+    "id": "unicode-japanese-text-preserved",
+    "category": "unicode",
+    "input": "東京で会いましょう .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "東京で会いましょう."
+  },
+  {
+    "id": "unicode-emoji-before-punctuation-preserved",
+    "category": "unicode",
+    "input": "Hi , 😀 .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Hi, 😀 ."
+  },
+  {
+    "id": "unicode-emoji-after-punctuation-preserved",
+    "category": "unicode",
+    "input": "Wow ! 😀",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Wow! 😀"
+  },
+  {
+    "id": "unicode-nonbreaking-space-preserved",
+    "category": "unicode",
+    "input": "alpha\u00A0beta !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "alpha\u00A0beta!"
+  },
+  {
+    "id": "safety-protected-spaced-replacement-and-outer-punctuation",
+    "category": "safety",
+    "input": "rust , and wait .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust  , Edition" }
+    ],
+    "expected": "Rust  , Edition, and wait."
+  },
+  {
+    "id": "safety-filler-like-replacement-protected-during-cleanup",
+    "category": "safety",
+    "input": "rust , then go .",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "um, keep this" }
+    ],
+    "expected": "um, keep this, then go."
+  },
+  {
+    "id": "safety-embedded-newline-replacement-protected",
+    "category": "safety",
+    "input": "say rust , then wait .",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "North\num, Parkade" }
+    ],
+    "expected": "say North\num, Parkade, then wait."
+  },
+  {
+    "id": "vocabulary-multiple-protected-replacements-and-outer-punctuation",
+    "category": "vocabulary",
+    "input": "rust , then ubc .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust , Edition" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "Rust , Edition, then UBC."
+  },
+  {
+    "id": "commands-vocabulary-correction-after-opt-in-new-line",
+    "category": "commands",
+    "input": "start new line rust , continue .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust , Edition" }
+    ],
+    "expected": "start\nRust , Edition, continue."
+  },
+  {
+    "id": "safety-protected-unicode-replacement-next-to-numeric-text",
+    "category": "safety",
+    "input": "rust 3 . 14 then 東京 !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "naïve 😀" }
+    ],
+    "expected": "naïve 😀 3 . 14 then 東京!"
   }
 ]

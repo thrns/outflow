@@ -1,6 +1,6 @@
 //! Current-behavior characterization for the native Rust cleanup pipeline.
 //!
-//! These 24 synthetic cases are an independently reviewed baseline, not the
+//! These 48 synthetic cases are an independently reviewed baseline, not the
 //! approved final AC-07 acceptance corpus or an approval of complete Verbatim
 //! semantics. Keep fixture expectations explicit when behavior changes.
 
@@ -204,8 +204,8 @@ fn fixture_schema_ids_categories_and_mode_flags_are_complete() {
     let values = fixture_values();
     assert_eq!(
         values.len(),
-        24,
-        "the initial cleanup current-behavior corpus must contain exactly 24 fixtures"
+        48,
+        "the cleanup current-behavior corpus must contain exactly 48 fixtures"
     );
 
     let mut ids = HashSet::new();

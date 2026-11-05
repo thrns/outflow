@@ -3705,17 +3705,20 @@ Run the focused corpus test and its expected visible summary from the repository
 RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_golden_corpus --locked -- --nocapture
 ```
 
-After all 24 cases pass, the test prints:
+The current-behavior baseline contains 48 explicitly reviewed synthetic fixtures: the original 24 plus 24 cases in four groups covering numeric preservation, proper nouns and abbreviations, Unicode preservation, and protected vocabulary interactions. Numeric tokens and protected replacement text are expected byte-for-byte; eligible punctuation outside protected text may still be normalized. The expectations characterize the existing implementation and do not approve a final Verbatim policy.
+
+After all 48 cases pass, the test prints:
 
 ```text
-Cleanup golden corpus: 24 fixtures passed
+Cleanup golden corpus: 48 fixtures passed
 Categories covered: 8
 Current behavior baseline: true
 ```
 
-Run the focused Clean/Verbatim contract regression and the requested workspace checks with:
+Run the focused corpus and Clean/Verbatim contract tests, then the requested workspace checks from the repository root:
 
 ```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_golden_corpus --locked -- --nocapture
 RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_mode_contract --locked
 RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
 RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
@@ -3723,6 +3726,7 @@ RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
 RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
 RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
 git diff --check
+# Run after staging only the intended task files.
 git diff --cached --check
 ```
 
@@ -3731,6 +3735,7 @@ Troubleshooting:
 - **JSON or schema error:** check commas and quoting, keep the top-level value an array, include every required field, use an allowed category and mode, and remove unknown fields. Each vocabulary object needs both `spoken` and `written`.
 - **Fixture vocabulary is rejected:** use nonempty valid spoken and written phrases and avoid duplicate spoken phrases under the existing matching policy.
 - **Expected output mismatch:** inspect the named fixture ID and category against the current ordered stages. Correct the explicitly reviewed expected value only when evidence shows the baseline value is wrong; do not silently regenerate it from the implementation.
+- **A period after a year or other numeric token stays spaced:** the current rule trims punctuation spacing only when the preceding character is alphabetic and its adjacent alphanumeric token contains no number. The `numeric-comma-grouping-and-year-preserved` fixture records the observed `2026 .` output; preserve the numeric token and document any proposed behavior change separately.
 - **A policy change is proposed:** the corpus records current behavior. Review affected expectations alongside an approved product decision; the recommendation in [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md) remains **PROPOSED — NOT APPROVED**.
 
-The initial 24 cases are characterization only. They do not complete T-035/T-036 or AC-07. AC-07 still requires the ≥200-case acceptance corpus, ≥99% exact expected output, zero altered numeric tokens/proper nouns in the protected fixture corpus, a Clean/Verbatim distinction, and required production integration. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
+These 48 cases remain a current-behavior baseline only; they do not complete T-035/T-036 or AC-07. AC-07 still requires the ≥200-case acceptance corpus, ≥99% exact expected output, zero altered numeric tokens/proper nouns across its protected fixture corpus, a demonstrated Clean/Verbatim distinction, and required production integration. Passing these 48 cases does not prove universal protection of numeric tokens or proper nouns. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
