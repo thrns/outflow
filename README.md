@@ -3833,3 +3833,44 @@ Troubleshooting:
 - **A policy change is proposed:** the corpus records current behavior. Review affected expectations alongside an approved product decision; the recommendation in [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md) remains **PROPOSED — NOT APPROVED**.
 
 These 200 cases remain a current-behavior characterization only; their exact-output passes do not establish an approved acceptance corpus or prove the ≥99% production threshold. They do not complete T-035/T-036 or AC-07: T-035 prerequisites, full idempotence requirements, final Clean/Verbatim semantics, the acceptance fixture set, and production ASR/application integration remain open. The 16 protected annotations are selected examples, not a universal preservation guarantee. Numeric-adjacent punctuation such as `2026 .`, `6.02e23 !`, and replacement-adjacent numeric punctuation remains spaced under existing conservative guards. Command-generated breaks preserve source breaks, and protected replacements preserve intentional whitespace. The Clean/Verbatim proposal remains **PROPOSED — NOT APPROVED**. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
+
+## Independent AC-07 exact-output scorer
+
+[`scripts/score_cleanup_ac07.py`](scripts/score_cleanup_ac07.py) compares independently supplied expected and actual strings in memory. It counts byte-for-byte exact string matches as represented by Python strings: punctuation, capitalization, whitespace, and Unicode code points must all match, with no normalization. It reports the corpus size, exact matches, mismatches, percentage, the 200-case minimum, and the 99% exact-output threshold. The threshold is decided with integer arithmetic, so a displayed percentage cannot round a failing score into a pass.
+
+Run the synthetic demonstration from the repository root:
+
+```sh
+python3 scripts/score_cleanup_ac07.py --demo
+```
+
+Expected output:
+
+```text
+AC-07 exact-output scorer: SYNTHETIC DEMO
+Cases: 200
+Exact matches: 198
+Mismatches: 2
+Exact-output rate: 99.00%
+Minimum corpus size: PASS
+Exact-output threshold: PASS
+Protected-token acceptance: NOT EVALUATED
+Final Clean/Verbatim policy: NOT APPROVED
+AC-07 acceptance: NOT EVALUATED
+```
+
+In application code, call `scripts.score_cleanup_ac07.score_cleanup_cases()` with iterable records containing unique nonempty string IDs and string `expected` and `actual` fields. Empty output strings are valid. A corpus can pass the percentage check while failing the minimum count (for example, 199/199); both checks must pass for numerical eligibility. The 99% check uses `exact_matches * 100 >= total_cases * 99`; for example, 198/201 fails even though rounding the rate to a whole percentage would show 99%.
+
+Run the focused tests and the complete standard-library script suite:
+
+```sh
+python3 -m unittest scripts.tests.test_score_cleanup_ac07 -v
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+```
+
+Troubleshooting:
+
+- **At least one case is required:** pass a nonempty iterable of records.
+- **Invalid record or field error:** each record must be a mapping with `id`, `expected`, and `actual`; IDs must be nonempty unique strings, and both outputs must be strings. Empty strings are permitted for outputs.
+- **Unexpected mismatch:** compare exact strings, including capitalization, punctuation, whitespace, and Unicode composition. The scorer deliberately does not normalize them.
+- **Demo passes:** this verifies only synthetic arithmetic. It does not run Rust cleanup, read `cleanup_current_behavior.json`, evaluate protected tokens, or establish AC-07 acceptance. See the proposed [AC-07 evaluation plan](docs/AC07_EVALUATION_PLAN.md) for the remaining evidence gates.

@@ -217,6 +217,12 @@ The focused 200-fixture test passes with all eight categories, all four mode/fil
 
 This is a numerical corpus milestone only. T-035 prerequisites, idempotence, and production integration remain open; T-036 final semantics and integration remain open. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact comparison output, test environment, commands, results, and AC-07 status are recorded in [`evidence/T-035-T-036-cleanup-200-fixture-milestone.md`](../evidence/T-035-T-036-cleanup-200-fixture-milestone.md).
 
+### Independent AC-07 scoring utility — partial T-035/T-036 evaluation-tool progress (2026-11-05)
+
+Added a standalone Python standard-library scorer for caller-supplied expected/actual strings and in-memory synthetic threshold tests. Exact equality does not normalize Unicode, punctuation, capitalization, or whitespace; the 200-case minimum and 99% threshold are reported separately, and the latter uses integer arithmetic. The `--demo` output explicitly marks protected-token acceptance and AC-07 acceptance **NOT EVALUATED** and the Clean/Verbatim policy **NOT APPROVED**. Added [`docs/AC07_EVALUATION_PLAN.md`](AC07_EVALUATION_PLAN.md) to distinguish numerical scoring from acceptance evidence.
+
+This is evaluation infrastructure only. The existing 200 current-behavior fixtures are not automatically an independently approved acceptance oracle; protected-token evaluation, final mode semantics, and production integration evidence remain outstanding. The cleanup policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands, observed output, and limitations are recorded in [`evidence/T-035-T-036-ac07-scoring-foundation.md`](../evidence/T-035-T-036-ac07-scoring-foundation.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid
