@@ -1,11 +1,10 @@
 //! Conservative transcript whitespace normalization and composition for C-06.
 //!
-//! The first standalone cleanup stage normalizes horizontal ASCII spacing and
-//! line endings while preserving every other character. A partial composition
-//! then applies the existing validated vocabulary replacement stage. Neither
-//! operation changes punctuation, capitalization, fillers, or dictation
-//! commands, and this module has no storage, network, speech, UI, or global-
-//! state effects.
+//! The standalone cleanup stages normalize horizontal ASCII spacing and line
+//! endings, optionally recognize two explicit dictation commands, and apply
+//! validated vocabulary corrections in FR-07.3 order. This partial pipeline
+//! does not change punctuation, capitalization, or fillers, and has no
+//! storage, network, speech, UI, or global-state effects.
 
 use crate::vocabulary::{VocabularyCollectionError, VocabularyEntryRef};
 use crate::vocabulary_post_correction::apply_vocabulary_post_corrections;
@@ -77,25 +76,117 @@ pub fn normalize_transcript_whitespace(input: &str) -> String {
     output
 }
 
-/// Normalizes transcript whitespace, then applies a validated vocabulary map.
+/// Converts recognized `new line` and `new paragraph` phrases into line breaks.
 ///
-/// This composes two existing stages in order: first
+/// Matching is ASCII case-insensitive. A phrase must use exactly one ASCII
+/// space between its words and be bounded by ASCII spaces, input edges, or
+/// line boundaries (`\r` or `\n`). Punctuation and quotation marks are not
+/// command boundaries. Immediate ASCII spaces around a match are removed so
+/// the line break does not retain surrounding spaces. Existing line breaks
+/// and every unrelated input character are preserved. The scan reads only the
+/// original input and never scans inserted line breaks again.
+///
+/// This function is intended for normalized transcript input: use
+/// [`normalize_transcript_whitespace`] first when source whitespace may
+/// contain tabs, repeated spaces, or noncanonical line endings. Even exact
+/// phrases can be ordinary spoken text; this is an opt-in literal rule, not a
+/// semantic intent classifier.
+///
+/// When `enabled` is `false`, the input is returned unchanged.
+///
+/// # Examples
+///
+/// ```
+/// use outflow_core::text_cleanup::apply_dictation_commands;
+///
+/// assert_eq!(apply_dictation_commands("hello NEW LINE world", true), "hello\nworld");
+/// assert_eq!(apply_dictation_commands("new paragraph", false), "new paragraph");
+/// ```
+pub fn apply_dictation_commands(input: &str, enabled: bool) -> String {
+    if !enabled {
+        return input.to_owned();
+    }
+
+    let bytes = input.as_bytes();
+    let mut output = String::with_capacity(input.len());
+    let mut cursor = 0;
+
+    while cursor < bytes.len() {
+        let has_left_boundary = cursor == 0 || is_command_boundary(bytes[cursor - 1]);
+        if has_left_boundary && let Some((phrase_length, newline_count)) = command_at(bytes, cursor)
+        {
+            // The separator before a command has already been copied. Remove
+            // its trailing ASCII spaces, then skip the separator after the
+            // command directly in the original input.
+            while output.ends_with(' ') {
+                output.pop();
+            }
+
+            cursor += phrase_length;
+            while bytes.get(cursor) == Some(&b' ') {
+                cursor += 1;
+            }
+            output.extend(std::iter::repeat_n('\n', newline_count));
+            continue;
+        }
+
+        let character = input[cursor..]
+            .chars()
+            .next()
+            .expect("cursor remains at a UTF-8 character boundary");
+        output.push(character);
+        cursor += character.len_utf8();
+    }
+
+    output
+}
+
+fn command_at(bytes: &[u8], start: usize) -> Option<(usize, usize)> {
+    const COMMANDS: [(&[u8], usize); 2] = [(b"new line", 1), (b"new paragraph", 2)];
+
+    COMMANDS.iter().find_map(|(phrase, newline_count)| {
+        let end = start.checked_add(phrase.len())?;
+        let is_phrase = bytes
+            .get(start..end)
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(phrase));
+        let has_right_boundary = end == bytes.len()
+            || bytes
+                .get(end)
+                .is_some_and(|byte| is_command_boundary(*byte));
+
+        (is_phrase && has_right_boundary).then_some((phrase.len(), *newline_count))
+    })
+}
+
+fn is_command_boundary(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\r' | b'\n')
+}
+
+/// Normalizes whitespace, optionally applies dictation commands, then applies
+/// a validated vocabulary map.
+///
+/// This composes the FR-07.3 stages in exact order:
 /// [`normalize_transcript_whitespace`] canonicalizes ASCII spaces, tabs, and
-/// line endings; then [`apply_vocabulary_post_corrections`] validates and
-/// applies the complete vocabulary collection using its Unicode 18 matching
-/// and boundary rules. Future dictation-command recognition belongs between
-/// these stages, as specified by FR-07.3.
+/// line endings; [`apply_dictation_commands`] optionally converts the two
+/// supported literal commands; then [`apply_vocabulary_post_corrections`]
+/// validates and applies the complete collection using its Unicode 18
+/// matching and boundary rules. Recognized commands therefore take precedence
+/// over vocabulary entries for those phrases.
 ///
-/// Vocabulary matching sees the normalized original transcript. The existing
-/// collection scanner preserves longest-match precedence and does not scan
-/// inserted replacement text again during this call. Written values are
-/// copied exactly, and the output is not whitespace-normalized a second time.
+/// Vocabulary matching scans the normalized transcript after optional command
+/// replacement. The existing collection scanner preserves longest-match
+/// precedence and does not scan inserted replacement text again during this
+/// call. Written values are copied exactly, and the output is not
+/// whitespace-normalized a second time.
 /// Thus, single-call non-cascading behavior does not make repeated application
 /// of this whole function universally idempotent: with `rust` → `ubc` and
 /// `ubc` → `UBC`, input `rust` yields `ubc` on the first call and `UBC` on a
 /// later call. The vocabulary is never rewritten to force idempotence.
 ///
-/// The input and borrowed entries are read-only and remain unchanged.
+/// Vocabulary replacement output is not normalized afterward. The input and
+/// borrowed entries are read-only and remain unchanged. Exact spoken command
+/// phrases can also occur as ordinary language, so command recognition should
+/// remain opt-in rather than acting as a semantic intent classifier.
 ///
 /// # Errors
 ///
@@ -106,30 +197,50 @@ pub fn normalize_transcript_whitespace(input: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use outflow_core::text_cleanup::normalize_whitespace_and_apply_vocabulary;
+/// use outflow_core::text_cleanup::normalize_whitespace_commands_and_apply_vocabulary;
 /// use outflow_core::vocabulary::VocabularyEntryRef;
 ///
 /// let vocabulary = [VocabularyEntryRef {
 ///     spoken: "rust",
 ///     written: "Rust",
 /// }];
-/// let output = normalize_whitespace_and_apply_vocabulary("  rust\t", &vocabulary)?;
-/// assert_eq!(output, "Rust");
+/// let output = normalize_whitespace_commands_and_apply_vocabulary(
+///     "  rust  new line  ubc  ",
+///     &vocabulary,
+///     true,
+/// )?;
+/// assert_eq!(output, "Rust\nubc");
 /// # Ok::<(), outflow_core::vocabulary::VocabularyCollectionError>(())
 /// ```
+pub fn normalize_whitespace_commands_and_apply_vocabulary(
+    input: &str,
+    entries: &[VocabularyEntryRef<'_>],
+    commands_enabled: bool,
+) -> Result<String, VocabularyCollectionError> {
+    let normalized = normalize_transcript_whitespace(input);
+    let commanded = apply_dictation_commands(&normalized, commands_enabled);
+    apply_vocabulary_post_corrections(&commanded, entries)
+}
+
+/// Normalizes transcript whitespace and applies vocabulary corrections with
+/// dictation-command recognition disabled.
+///
+/// This preserves the original two-stage API behavior by delegating to
+/// [`normalize_whitespace_commands_and_apply_vocabulary`] with `false`.
 pub fn normalize_whitespace_and_apply_vocabulary(
     input: &str,
     entries: &[VocabularyEntryRef<'_>],
 ) -> Result<String, VocabularyCollectionError> {
-    // Keep these calls in FR-07.3 order. Command recognition can be inserted
-    // between them later without duplicating either stage's implementation.
-    let normalized = normalize_transcript_whitespace(input);
-    apply_vocabulary_post_corrections(&normalized, entries)
+    normalize_whitespace_commands_and_apply_vocabulary(input, entries, false)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_transcript_whitespace, normalize_whitespace_and_apply_vocabulary};
+    use super::{
+        apply_dictation_commands, normalize_transcript_whitespace,
+        normalize_whitespace_and_apply_vocabulary,
+        normalize_whitespace_commands_and_apply_vocabulary,
+    };
     use crate::vocabulary::{
         MAX_VOCABULARY_ENTRIES, VocabularyCollectionError, VocabularyEntryRef, VocabularyField,
         VocabularyValidationError,
@@ -140,6 +251,321 @@ mod tests {
             .iter()
             .map(|&(spoken, written)| VocabularyEntryRef { spoken, written })
             .collect()
+    }
+
+    #[test]
+    fn applies_dictation_commands_to_a_table_of_exact_fixtures() {
+        let fixtures = [
+            (
+                "disabled command remains literal",
+                "new line",
+                false,
+                "new line",
+            ),
+            (
+                "disabled mixed case remains literal",
+                "NEW PARAGRAPH",
+                false,
+                "NEW PARAGRAPH",
+            ),
+            ("new line at beginning", "new line start", true, "\nstart"),
+            (
+                "new line in middle",
+                "before new line after",
+                true,
+                "before\nafter",
+            ),
+            ("new line at end", "before new line", true, "before\n"),
+            (
+                "new paragraph at beginning",
+                "new paragraph start",
+                true,
+                "\n\nstart",
+            ),
+            (
+                "new paragraph in middle",
+                "before new paragraph after",
+                true,
+                "before\n\nafter",
+            ),
+            (
+                "new paragraph at end",
+                "before new paragraph",
+                true,
+                "before\n\n",
+            ),
+            ("uppercase command", "NEW LINE", true, "\n"),
+            ("mixed case command", "NeW PaRaGrApH", true, "\n\n"),
+            (
+                "multiple commands",
+                "a new line b new paragraph c",
+                true,
+                "a\nb\n\nc",
+            ),
+            (
+                "consecutive commands",
+                "new line new paragraph",
+                true,
+                "\n\n\n",
+            ),
+            (
+                "spaces around command are removed",
+                "left   new line   right",
+                true,
+                "left\nright",
+            ),
+            (
+                "leading and trailing separator spaces",
+                "  new line  ",
+                true,
+                "\n",
+            ),
+            (
+                "existing newline before and after is retained",
+                "before\nnew line\nafter",
+                true,
+                "before\n\n\nafter",
+            ),
+            (
+                "existing paragraph break is retained",
+                "before\n\nnew line\n\nafter",
+                true,
+                "before\n\n\n\n\nafter",
+            ),
+            (
+                "command after line boundary",
+                "first\nnew line next",
+                true,
+                "first\n\nnext",
+            ),
+            (
+                "command before line boundary",
+                "first new line\nnext",
+                true,
+                "first\n\nnext",
+            ),
+            (
+                "punctuation outside command is preserved",
+                "Hi, new line world!?",
+                true,
+                "Hi,\nworld!?",
+            ),
+            (
+                "punctuation adjacent to command blocks match",
+                "(new line)",
+                true,
+                "(new line)",
+            ),
+            (
+                "double quotes block match",
+                "\"new line\"",
+                true,
+                "\"new line\"",
+            ),
+            (
+                "single quotes block match",
+                "'new paragraph'",
+                true,
+                "'new paragraph'",
+            ),
+            (
+                "prefix inside a larger word does not match",
+                "renew line",
+                true,
+                "renew line",
+            ),
+            (
+                "suffix inside a larger word does not match",
+                "new linebreak",
+                true,
+                "new linebreak",
+            ),
+            (
+                "phrase inside a larger word does not match",
+                "brandnew line",
+                true,
+                "brandnew line",
+            ),
+            ("incomplete first word is unchanged", "new", true, "new"),
+            (
+                "incomplete second word is unchanged",
+                "new par",
+                true,
+                "new par",
+            ),
+            (
+                "two internal spaces are not a command",
+                "new  line",
+                true,
+                "new  line",
+            ),
+            (
+                "tab inside command is not a command",
+                "new\tline",
+                true,
+                "new\tline",
+            ),
+            (
+                "Unicode text and emoji are preserved",
+                "café new line 東京 😀",
+                true,
+                "café\n東京 😀",
+            ),
+            (
+                "Unicode adjacency blocks left boundary",
+                "énew line",
+                true,
+                "énew line",
+            ),
+            (
+                "Unicode adjacency blocks right boundary",
+                "new lineé",
+                true,
+                "new lineé",
+            ),
+            (
+                "nonbreaking space is not a command boundary",
+                "\u{00a0}new line",
+                true,
+                "\u{00a0}new line",
+            ),
+            (
+                "carriage returns are line boundaries",
+                "a\rnew line\rb",
+                true,
+                "a\r\n\rb",
+            ),
+            (
+                "CRLF remains while command creates another break",
+                "a\r\nnew line\r\nb",
+                true,
+                "a\r\n\n\r\nb",
+            ),
+            (
+                "repeated same command",
+                "x new line y new line z",
+                true,
+                "x\ny\nz",
+            ),
+            ("empty input", "", true, ""),
+        ];
+
+        assert!(fixtures.len() >= 25);
+        for (name, input, enabled, expected) in fixtures {
+            assert_eq!(
+                apply_dictation_commands(input, enabled),
+                expected,
+                "fixture {name}: input {input:?}"
+            );
+            assert_eq!(input, input.to_owned(), "fixture {name} changed its input");
+        }
+    }
+
+    #[test]
+    fn command_stage_preserves_a_supplied_string_when_disabled() {
+        let input = "  new line\tnew paragraph  ";
+
+        assert_eq!(apply_dictation_commands(input, false), input);
+    }
+
+    #[test]
+    fn composing_pipeline_normalizes_tabs_and_crlf_before_commands() {
+        let input = "  before\tnew\tline\r\n  after  ";
+
+        assert_eq!(
+            normalize_whitespace_commands_and_apply_vocabulary(input, &[], true),
+            Ok("before\n\nafter".to_owned())
+        );
+    }
+
+    #[test]
+    fn commands_take_precedence_over_vocabulary_when_enabled() {
+        let entries = vocabulary_refs(&[
+            ("new line", "literal line"),
+            ("new paragraph", "literal paragraph"),
+        ]);
+
+        assert_eq!(
+            normalize_whitespace_commands_and_apply_vocabulary(
+                "new line and new paragraph",
+                &entries,
+                true
+            ),
+            Ok("\nand\n\n".to_owned())
+        );
+        assert_eq!(
+            normalize_whitespace_commands_and_apply_vocabulary(
+                "new line and new paragraph",
+                &entries,
+                false
+            ),
+            Ok("literal line and literal paragraph".to_owned())
+        );
+    }
+
+    #[test]
+    fn vocabulary_correction_runs_after_commands_and_is_not_normalized_again() {
+        let entries = vocabulary_refs(&[("ubc", "  UBC\t")]);
+
+        assert_eq!(
+            normalize_whitespace_commands_and_apply_vocabulary(
+                "go new line at ubc",
+                &entries,
+                true
+            ),
+            Ok("go\nat   UBC\t".to_owned())
+        );
+    }
+
+    #[test]
+    fn new_composition_keeps_longest_match_and_non_cascading_behavior() {
+        let entries = vocabulary_refs(&[
+            ("new", "Short"),
+            ("new york", "New York"),
+            ("rust", "ubc"),
+            ("ubc", "UBC"),
+        ]);
+
+        assert_eq!(
+            normalize_whitespace_commands_and_apply_vocabulary("new york and rust", &entries, true),
+            Ok("New York and ubc".to_owned())
+        );
+    }
+
+    #[test]
+    fn new_composition_returns_existing_typed_validation_errors() {
+        let entries = vocabulary_refs(&[("rust", " \t")]);
+
+        assert_eq!(
+            normalize_whitespace_commands_and_apply_vocabulary("new line rust", &entries, true),
+            Err(VocabularyCollectionError::InvalidEntry {
+                index: 0,
+                source: VocabularyValidationError::Empty(VocabularyField::Written),
+            })
+        );
+    }
+
+    #[test]
+    fn new_composition_leaves_input_and_entries_unchanged_and_is_deterministic() {
+        let input = String::from("  rust  new line  ubc  ");
+        let owned_entries = vec![
+            (String::from("rust"), String::from("Rust")),
+            (String::from("ubc"), String::from("UBC")),
+        ];
+        let original_input = input.clone();
+        let original_entries = owned_entries.clone();
+        let entries = owned_entries
+            .iter()
+            .map(|(spoken, written)| VocabularyEntryRef { spoken, written })
+            .collect::<Vec<_>>();
+
+        let first = normalize_whitespace_commands_and_apply_vocabulary(&input, &entries, true);
+        let second = normalize_whitespace_commands_and_apply_vocabulary(&input, &entries, true);
+
+        assert_eq!(first, Ok("Rust\nUBC".to_owned()));
+        assert_eq!(second, first);
+        assert_eq!(input, original_input);
+        assert_eq!(owned_entries, original_entries);
     }
 
     #[test]

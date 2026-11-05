@@ -87,6 +87,16 @@ Sixteen focused unit tests cover empty input and vocabulary, normalization befor
 
 This remains a partial development slice. Dictation-command recognition, punctuation/capitalization cleanup, Clean/Verbatim filler policy, Moonshine keyterm hints, persistence, and ASR/frontend integration remain out of scope. T-023 and the prerequisites for full T-035/T-039 are unresolved. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands and observed results are recorded in [`evidence/T-035-T-039-text-cleanup-composition.md`](../evidence/T-035-T-039-text-cleanup-composition.md).
 
+### Native Rust opt-in dictation commands — partial T-035 evidence (2026-11-04)
+
+`outflow_core::text_cleanup::apply_dictation_commands` adds deterministic, opt-in recognition for the exact ASCII phrases `new line` and `new paragraph`. The new `normalize_whitespace_commands_and_apply_vocabulary` composition follows FR-07.3 order: normalize source whitespace, optionally convert commands, then apply validated vocabulary corrections. Recognized commands take precedence over vocabulary matches. Vocabulary output is copied exactly and is not normalized afterward. The existing `normalize_whitespace_and_apply_vocabulary` API preserves its behavior by delegating with command recognition disabled.
+
+The focused command fixtures cover disabled handling; start/middle/end positions; both break types; ASCII case variants; repeated and consecutive commands; separator trimming; normalized tabs and CRLF; existing line/paragraph breaks; word boundaries; quotes/punctuation; incomplete phrases; Unicode and emoji; and deterministic input preservation. Composition coverage includes command precedence, correction after commands, longest-match and non-cascading vocabulary behavior, typed validation errors, unchanged input/entries, and repeatability. A synthetic example asserts the exact enabled and disabled outputs with debug-formatted output.
+
+On macOS Darwin 25.6.0 arm64 with Rust 1.99.1, the example, formatting check, workspace check, workspace tests/doctests, Clippy with warnings denied, workspace build, and `git diff --check` all passed after formatting was applied. The example printed enabled output `"I use Rust\nat UBC\n\nNorth Parkade"` and disabled output `"I use Rust new line at UBC new paragraph North Parkade"`. The 37 command fixtures and seven additional command-composition tests passed as part of the workspace suite. No dependency or lockfile changed; memory, latency, and release gates were not measured.
+
+This is a partial T-035 building block only. Exact command and workspace validation results, observed example output, environment, and remaining limitations are recorded in [`evidence/T-035-dictation-commands.md`](../evidence/T-035-dictation-commands.md). T-023 remains unmet, and punctuation/capitalization cleanup, Clean/Verbatim filler policy, full golden-corpus acceptance, and application integration remain open. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.**
+
 ## 1. Milestone map / critical path
 
 ```mermaid

@@ -3249,4 +3249,47 @@ Troubleshooting:
 - **Punctuation or capitalization changed:** that behavior is outside this API; check that another cleanup stage is not being applied by the caller.
 - **Cargo reports a locked dependency or toolchain issue:** run the commands at the repository root with the stable toolchain and verify the tracked `Cargo.lock`; this change does not add or update dependencies.
 
-This is only the whitespace stage; it is not connected to vocabulary correction, punctuation, capitalization, filler removal, dictation commands, or the application. T-023 remains an unmet prerequisite, and production T-035/T-036, T-038/T-039, AC-07/AC-08, and all release gates remain unchecked. See [`evidence/T-035-whitespace-normalization.md`](evidence/T-035-whitespace-normalization.md) for exact environment, commands, results, and scope.
+This is the standalone whitespace stage. The next partial T-035 slice adds opt-in dictation commands and places them before vocabulary correction; neither stage is connected to the application. T-023 remains an unmet prerequisite, and production T-035/T-036, T-038/T-039, AC-07/AC-08, and all release gates remain unchecked. See [`evidence/T-035-whitespace-normalization.md`](evidence/T-035-whitespace-normalization.md) for the whitespace-stage evidence and the following section for command-stage evidence.
+
+## Native Rust opt-in dictation commands (partial T-035)
+
+`outflow_core::text_cleanup::apply_dictation_commands(input, enabled)` recognizes only `new line` and `new paragraph`. Matching is ASCII case-insensitive and requires a complete phrase bounded by the start/end of input, an ASCII space, or a line boundary. The two words must be on one line with one ASCII space between them. Adjacent punctuation and quotation marks block recognition. The stage replaces a recognized command with `\n` or `\n\n`, removes its immediate ASCII separator spaces, preserves unrelated text and existing line breaks, and scans the original input once.
+
+The `enabled` argument is the opt-in flag. The standalone function returns its input unchanged when `enabled` is `false`. The composed API `normalize_whitespace_commands_and_apply_vocabulary(input, entries, commands_enabled)` uses the documented order: normalize whitespace, optionally interpret commands, then correct vocabulary. Recognized commands take precedence over vocabulary entries. Vocabulary replacement output is not normalized afterward. The prior `normalize_whitespace_and_apply_vocabulary` API remains available and delegates with commands disabled.
+
+The composed API normalizes source tabs, repeated ASCII spaces, CRLF, and standalone CR before matching. The standalone command function is intended for already-normalized transcript input; it requires the command phrase itself to contain one ASCII space.
+
+Run the synthetic example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example text_dictation_commands --locked
+```
+
+It prints the input and outputs with Rust debug formatting and asserts both results exactly:
+
+```text
+commands enabled: "I use Rust\nat UBC\n\nNorth Parkade"
+commands disabled: "I use Rust new line at UBC new paragraph North Parkade"
+```
+
+The focused tests and workspace checks are:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core text_cleanup --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+```
+
+Troubleshooting:
+
+- **A phrase remains literal:** pass `true` to the opt-in command flag. Commands remain disabled in the compatibility composition.
+- **A phrase in quotation marks or beside punctuation remains literal:** only ASCII spaces and line boundaries count as surrounding separators; quotes and punctuation are intentionally conservative non-matches.
+- **Tabs or repeated spaces inside a phrase do not match the standalone function:** use the composed API, which normalizes source whitespace before command matching.
+- **An extra blank line appears around a command:** existing line breaks are preserved. A command on its own already-separated line adds its requested line break without deleting the original separators.
+- **Ordinary speech becomes a line break:** exact phrases can be literal spoken content. This initial feature is opt-in and uses exact phrase matching, not a semantic intent classifier.
+
+This is only the whitespace, command, and existing vocabulary slice. Punctuation/capitalization cleanup, Clean/Verbatim filler handling, ASR/settings integration, and the full T-035 golden corpus are not implemented. T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked. See [`evidence/T-035-dictation-commands.md`](evidence/T-035-dictation-commands.md) for exact environment, commands, results, and limitations.
