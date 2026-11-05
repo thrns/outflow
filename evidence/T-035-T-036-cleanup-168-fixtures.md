@@ -9,7 +9,8 @@ owner: /root (single-agent coordinator)
 branch: codex/task-035-036-cleanup-168-fixtures
 base_branch: codex/task-035-036-cleanup-144-fixtures
 base_commit: f0bf356147f3fe0d63990f1365403f54130a9caa
-result_commit: pending; the implementation commit hash will be recorded in a follow-up evidence commit
+result_commit: de06432cb282b5688395afd573bdea89f6abe212
+evidence_finalization: follow-up commit records this implementation SHA and final push result
 platform: macOS 26.6.2 (25G83), arm64
 toolchain: Rust 1.99.1, cargo 1.99.1, stable override from rust-toolchain.toml
 review: PENDING
