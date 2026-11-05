@@ -1674,5 +1674,288 @@
       { "spoken": "finish mark", "written": "Finish Mark" }
     ],
     "expected": "start\nComet Station, then\n\n\nFinish Mark!"
+  },
+  {
+    "id": "punctuation-supported-mark-next-to-curly-quotation",
+    "category": "punctuation",
+    "input": "She called it ready , ”then” left .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "She called it ready , ”then” left."
+  },
+  {
+    "id": "punctuation-spaced-ellipsis-with-eligible-ending",
+    "category": "punctuation",
+    "input": "Wait . . . then go !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Wait . . . then go!"
+  },
+  {
+    "id": "punctuation-question-exclamation-sequence",
+    "category": "punctuation",
+    "input": "Really ? ! I asked .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Really ? ! I asked."
+  },
+  {
+    "id": "punctuation-between-quoted-phrases",
+    "category": "punctuation",
+    "input": "She said \"go\" , \"stop\" then wait .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "She said \"go\" , \"stop\" then wait."
+  },
+  {
+    "id": "punctuation-abbreviation-with-nearby-spacing",
+    "category": "punctuation",
+    "input": "St . James noted , correctly .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "St. James noted, correctly."
+  },
+  {
+    "id": "punctuation-multiline-ambiguous-and-eligible-sequences",
+    "category": "punctuation",
+    "input": "“Wait .” then move , slowly !\nReally ? ! stay .\n“Ready .” Move , please .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "“Wait .” then move, slowly!\nReally ? ! stay.\n“Ready .” Move, please."
+  },
+  {
+    "id": "unicode-precomposed-and-decomposed-accent-match-in-one-input",
+    "category": "unicode",
+    "input": "We met CAFÉ , then Café , okay .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" }
+    ],
+    "expected": "We met Café, then Café, okay."
+  },
+  {
+    "id": "unicode-capital-sharp-s-casefold-matches-street",
+    "category": "unicode",
+    "input": "The STRAẞE is long .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "straße", "written": "Straße" }
+    ],
+    "expected": "The Straße is long."
+  },
+  {
+    "id": "unicode-combining-mark-blocks-shorter-vocabulary-entry",
+    "category": "unicode",
+    "input": "I saw caféteria and café today.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "cafe", "written": "Café" }
+    ],
+    "expected": "I saw caféteria and café today."
+  },
+  {
+    "id": "unicode-cafe-adjacent-to-japanese-punctuation",
+    "category": "unicode",
+    "input": "café。café , 東京 !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" }
+    ],
+    "expected": "Café。Café, 東京!"
+  },
+  {
+    "id": "unicode-emoji-separates-two-vocabulary-matches",
+    "category": "unicode",
+    "input": "café😀RUST",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" },
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "Café😀Rust"
+  },
+  {
+    "id": "unicode-multiword-written-replacement-keeps-exact-spacing",
+    "category": "unicode",
+    "input": "creme brulee , then wait .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "creme brulee", "written": "Crème  brûlée, v2 . 0" }
+    ],
+    "expected": "Crème  brûlée, v2 . 0 , then wait."
+  },
+  {
+    "id": "vocabulary-three-repeated-phrase-capitalizations",
+    "category": "vocabulary",
+    "input": "RUST and Rust; rust!",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "Rust and Rust; Rust!"
+  },
+  {
+    "id": "vocabulary-longer-competing-phrase-wins-at-same-start",
+    "category": "vocabulary",
+    "input": "San Francisco Bay and SAN FRANCISCO.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "san francisco", "written": "SF" },
+      { "spoken": "san francisco bay", "written": "SF Bay" }
+    ],
+    "expected": "SF Bay and SF."
+  },
+  {
+    "id": "vocabulary-multiple-mappings-with-eligible-punctuation",
+    "category": "vocabulary",
+    "input": "We saw lunar module beside creme brulee and rust !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "lunar module", "written": "Lunar Module" },
+      { "spoken": "creme brulee", "written": "Crème Brûlée" },
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "We saw Lunar Module beside Crème Brûlée and Rust!"
+  },
+  {
+    "id": "vocabulary-written-replacement-does-not-cascade",
+    "category": "vocabulary",
+    "input": "lunar map",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "lunar map", "written": "north parkade" },
+      { "spoken": "north parkade", "written": "North Parkade" }
+    ],
+    "expected": "north parkade"
+  },
+  {
+    "id": "vocabulary-match-adjacent-to-punctuation-and-numbers",
+    "category": "vocabulary",
+    "input": "At 7:30, use rust-2; not crust 2026 .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "At 7:30, use Rust-2; not crust 2026 ."
+  },
+  {
+    "id": "safety-two-replacements-allow-spacing-outside-spans",
+    "category": "safety",
+    "input": "alpha code , then beta code ; done !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "alpha code", "written": "Alpha Code" },
+      { "spoken": "beta code", "written": "Beta Code" }
+    ],
+    "expected": "Alpha Code, then Beta Code; done!"
+  },
+  {
+    "id": "commands-clean-removes-fillers-and-corrects-vocabulary",
+    "category": "commands",
+    "input": "um, revise lunar map , now new line uh, send café .",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "lunar map", "written": "Lunar Map" },
+      { "spoken": "café", "written": "Café" }
+    ],
+    "expected": "revise Lunar Map, now\nsend Café."
+  },
+  {
+    "id": "fillers-clean-preserves-fillers-when-removal-disabled",
+    "category": "fillers",
+    "input": "uh, revise solar map , now new line um, send crème .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "solar map", "written": "Solar Map" },
+      { "spoken": "crème", "written": "Crème" }
+    ],
+    "expected": "uh, revise Solar Map, now\num, send Crème."
+  },
+  {
+    "id": "modes-verbatim-retains-fillers-but-runs-enabled-command",
+    "category": "modes",
+    "input": "um, say new paragraph uh, keep rust , ready .",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "um, say\n\nuh, keep Rust, ready."
+  },
+  {
+    "id": "safety-numeric-token-neighbor-protected-replacement-and-spacing",
+    "category": "safety",
+    "input": "Build 4 . 2, rust , then go !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust, v2 . 1" }
+    ],
+    "expected": "Build 4 . 2, Rust, v2 . 1 , then go!"
+  },
+  {
+    "id": "commands-accented-name-before-generated-paragraph-break",
+    "category": "commands",
+    "input": "Élodie said new paragraph replied , kindly .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Élodie said\n\nreplied, kindly."
+  },
+  {
+    "id": "safety-multiline-fillers-and-two-protected-replacements",
+    "category": "safety",
+    "input": "um, begin alpha code , now .\nuh, finish beta code ; later !",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "alpha code", "written": "Alpha  Code" },
+      { "spoken": "beta code", "written": "Beta; Code" }
+    ],
+    "expected": "begin Alpha  Code, now.\nfinish Beta; Code; later!"
   }
 ]
