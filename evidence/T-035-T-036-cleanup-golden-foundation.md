@@ -4,7 +4,7 @@
 **Date:** 2026-11-05
 **Branch:** `codex/task-036-cleanup-golden-foundation`
 **Starting commit:** `0f1a8d53200a83c09be206e0d17067d1367d689b`
-**Implementation commit:** pending final local commit recording.
+**Implementation commit:** `b7f3f30` (`test(cleanup): add current behavior golden corpus`).
 
 ## Scope and result
 
@@ -55,4 +55,4 @@ This 24-case baseline is not the ≥200-case AC-07 acceptance corpus and does no
 
 The Verbatim policy remains unresolved. FR-07.2 explicitly disables filler deletion in Verbatim; FR-07.4 establishes the available modes and Clean default; the broader wording-preservation phrase is from the existing Rust `CleanupMode::Verbatim` documentation. The policy recommendation remains proposed and unapproved. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.**
 
-Next action: complete final diff checks, stage only the six task-owned paths, commit and push this branch, then record the implementation commit SHA and verify local/remote SHA equality.
+The implementation commit is local. The remaining delivery action is to push this task branch and verify that the local branch SHA matches `origin/codex/task-036-cleanup-golden-foundation`.
