@@ -5,6 +5,7 @@
 **Branch:** `codex/task-036-cleanup-golden-foundation`
 **Starting commit:** `0f1a8d53200a83c09be206e0d17067d1367d689b`
 **Implementation commit:** `b7f3f30` (`test(cleanup): add current behavior golden corpus`).
+**Pushed checkpoint verified:** `d8b80770cd39eacafa0b6f377ffc4300cfd441b7`.
 
 ## Scope and result
 
@@ -55,4 +56,4 @@ This 24-case baseline is not the ≥200-case AC-07 acceptance corpus and does no
 
 The Verbatim policy remains unresolved. FR-07.2 explicitly disables filler deletion in Verbatim; FR-07.4 establishes the available modes and Clean default; the broader wording-preservation phrase is from the existing Rust `CleanupMode::Verbatim` documentation. The policy recommendation remains proposed and unapproved. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.**
 
-The implementation commit is local. The remaining delivery action is to push this task branch and verify that the local branch SHA matches `origin/codex/task-036-cleanup-golden-foundation`.
+The branch push succeeded. At pushed checkpoint `d8b80770cd39eacafa0b6f377ffc4300cfd441b7`, `git rev-parse HEAD origin/codex/task-036-cleanup-golden-foundation` returned the same SHA for both refs, and `git ls-remote origin refs/heads/codex/task-036-cleanup-golden-foundation` returned that same SHA. This evidence update is a follow-up documentation commit; the final branch-tip SHA is recorded in the task handoff.
