@@ -8,9 +8,9 @@ acceptance: [AC-07]
 owner: Codex
 branch: codex/task-036-cleanup-safety-fixtures
 base_commit: 76a09a72a757b4b902e1cb1ce9d438ec0ce66baa
-implementation_commit: pending first task commit; update recorded in follow-up evidence commit
+implementation_commit: 9cb63cb5e71f1cdf3891f05c36ed8b44db8e5468
 platform: macOS 26.6.2; Rust 1.99.1; Cargo 1.99.1; hardware metrics not applicable or measured
-result: VERIFIED LOCALLY; pending commit/push completion
+result: VERIFIED LOCALLY AND COMMITTED; push pending
 review: PENDING
 ```
 
