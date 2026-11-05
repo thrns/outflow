@@ -7,7 +7,7 @@
 - Task branch: `codex/task-035-036-cleanup-200-fixtures`
 - Base branch: `codex/task-035-036-cleanup-192-fixtures`
 - Base commit: `ba1a7d1fb4491e628ac1950c19b78083aefa0735`
-- Implementation commit: pending task commit
+- Implementation commit: `876645f9dfdd869714c67432f83321742b38cbdf`
 - Feature/acceptance: F-07 / AC-07; partial T-035 and T-036 progress only
 - Environment: macOS Darwin 25.6.0, arm64; Rust/Cargo 1.99.1 stable
 
