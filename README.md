@@ -3874,3 +3874,89 @@ Troubleshooting:
 - **Invalid record or field error:** each record must be a mapping with `id`, `expected`, and `actual`; IDs must be nonempty unique strings, and both outputs must be strings. Empty strings are permitted for outputs.
 - **Unexpected mismatch:** compare exact strings, including capitalization, punctuation, whitespace, and Unicode composition. The scorer deliberately does not normalize them.
 - **Demo passes:** this verifies only synthetic arithmetic. It does not run Rust cleanup, read `cleanup_current_behavior.json`, evaluate protected tokens, or establish AC-07 acceptance. See the proposed [AC-07 evaluation plan](docs/AC07_EVALUATION_PLAN.md) for the remaining evidence gates.
+
+## Independent AC-07 protected-token evaluator
+
+[`scripts/score_cleanup_protected_ac07.py`](scripts/score_cleanup_protected_ac07.py)
+checks exact UTF-8 byte preservation for explicitly annotated numeric tokens
+and proper nouns. It is independent of
+[`score_cleanup_ac07.py`](scripts/score_cleanup_ac07.py), which measures
+corpus size and the exact-output percentage. The protected-token evaluator
+does not invoke Rust cleanup, read the characterization corpus, derive token
+ranges or expected text from actual output, or establish AC-07 acceptance.
+
+Run its two-case synthetic demonstration and focused tests from the repository
+root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/score_cleanup_protected_ac07.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_score_cleanup_protected_ac07 -v
+```
+
+Expected demonstration summary:
+
+```text
+AC-07 protected-token scorer: SYNTHETIC DEMO
+Cases: 2
+Annotated cases: 2
+Protected numeric tokens: 1 (0 altered)
+Protected proper nouns: 1 (0 altered)
+Both token kinds represented: PASS
+Protected-token gate: PASS (synthetic only)
+AC-07 acceptance: NOT EVALUATED
+```
+
+Supply records in memory to `score_protected_cleanup_cases()`:
+
+```python
+{
+    "id": "case-001",
+    "input": "Dr . Élodie",
+    "expected": "Dr. Élodie",
+    "actual": "Dr. Élodie",
+    "protected_tokens": [
+        {
+            "kind": "proper_noun",
+            "text": "Élodie",
+            "input_bytes": [5, 12],
+            "output_bytes": [4, 11],
+        }
+    ],
+}
+```
+
+Supported kinds are `number` and `proper_noun`. Ranges are zero-based,
+half-open UTF-8 **byte** offsets, not character indexes. The input range must
+select the declared token in `input`; the output range must independently
+select it in `expected`. Both ends must lie on UTF-8 character boundaries.
+The evaluator checks `actual` only at the declared expected-output range and
+does not search for or relocate a token.
+
+The returned immutable summary includes case counts, per-kind protected and
+altered counts, kind coverage, zero-alteration status, and the protected-token
+gate. That gate passes only if both kinds are annotated and neither kind has
+alterations. A preceding insertion or deletion in `actual` can shift a token
+away from its expected byte range and therefore count conservatively as an
+alteration. This behavior is intentional.
+
+Troubleshooting:
+
+- **Invalid range or token mismatch:** count UTF-8 encoded bytes independently
+  in `input` and `expected`. A punctuation edit can make their ranges differ.
+  End offsets are exclusive, and neither range may split a multibyte character.
+- **Altered token:** inspect `actual` at the exact declared `output_bytes`
+  offset. The scorer intentionally does not relocate tokens after insertions,
+  deletions, or other output changes.
+- **Gate does not pass with zero alterations:** at least one valid annotation
+  of both `number` and `proper_noun` is required for gate completeness.
+- **Validation error:** fix the case or annotation schema. Invalid reference
+  metadata rejects evaluation; an actual-output mismatch is reported as an
+  alteration count instead.
+
+The exact-output and protected-token tools have separate inputs, validations,
+and results. For formal AC-07 evaluation, both must ultimately use the same
+independently approved corpus and its corresponding production outputs. The
+synthetic unit tests and demo validate evaluator behavior only; they do not
+certify cleanup quality, comprehensive preservation, or AC-07 acceptance.
+See the [AC-07 evaluation plan](docs/AC07_EVALUATION_PLAN.md) for the
+remaining evidence requirements.

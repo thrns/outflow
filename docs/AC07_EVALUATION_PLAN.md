@@ -26,7 +26,43 @@ decision. The synthetic `--demo` creates 200 in-memory pairs with 198 exact
 matches and two mismatches. It reads no current-behavior fixture and writes no
 case content to logs or disk. It verifies arithmetic only.
 
-## B. Actual acceptance evidence
+## B. Protected-token scoring
+
+[`scripts/score_cleanup_protected_ac07.py`](../scripts/score_cleanup_protected_ac07.py)
+is a separate in-memory evaluator for explicitly reviewed token annotations.
+Each record supplies `id`, `input`, `expected`, `actual`, and a
+`protected_tokens` list. Every annotation supplies a supported `kind`
+(`number` or `proper_noun`), nonempty token `text`, `input_bytes`, and
+`output_bytes`. Both ranges are zero-based, half-open UTF-8 byte offsets: the
+input range selects the token in `input`; the output range independently
+selects the same token in reviewed `expected` text.
+
+It rejects empty collections, malformed or unknown fields, invalid strings,
+duplicate/empty IDs, invalid or unsupported annotations, out-of-bounds or
+overlapping reference ranges, non-boundary UTF-8 offsets, and ranges whose
+input or expected bytes differ from the declared token. Errors identify the
+case position, token kind when valid, and field without printing transcript
+contents. Invalid reference metadata rejects the evaluation; mutations in
+`actual` are counted as altered tokens.
+
+For actual-output scoring, the evaluator checks the same `output_bytes` range
+against `actual`. It does not search elsewhere for the token or shift offsets
+based on actual text. Therefore, an insertion or deletion before a protected
+token can move that token and conservatively produce an alteration even when
+the token's spelling is unchanged. The result reports case and token counts,
+alteration counts, whether both token kinds are represented, whether zero
+alterations were observed, and whether the protected-token gate passes. That
+gate requires at least one annotation for each kind and zero alterations.
+Kind coverage is an evaluation-completeness safeguard; it does not establish
+comprehensive protection from a small sample.
+
+The `--demo` uses two manually annotated synthetic examples, including a
+punctuation correction that shifts the expected numeric token's byte offset
+and an accented proper noun. It reads no characterization corpus and prints
+counts only. A passing synthetic gate is verification of scoring logic, not
+AC-07 acceptance evidence.
+
+## C. Actual acceptance evidence
 
 Scoring a set of strings is only one part of AC-07. Before an acceptance result
 can be reported, the project still needs all of the following:
@@ -42,8 +78,9 @@ can be reported, the project still needs all of the following:
    modes. Preserve byte-for-byte output for scoring and retain only
    appropriately reviewed, privacy-safe evaluation artifacts.
 4. **Protected-token gate.** Demonstrate zero altered numeric and proper-noun
-   tokens in the protected acceptance cases. The exact-output scorer does not
-   inspect token annotations or evaluate this gate.
+   tokens in the protected acceptance cases with the separate protected-token
+   evaluator. The exact-output scorer does not inspect token annotations or
+   evaluate this gate.
 5. **Approved mode semantics.** Resolve the proposed Clean/Verbatim policy,
    document the final semantics, and verify the required distinction with
    paired cases. [`CLEANUP_MODE_POLICY.md`](CLEANUP_MODE_POLICY.md) remains
@@ -69,12 +106,18 @@ protection.
    expected-output set and protected-token annotations.
 3. Run the production cleanup path against that exact corpus without changing
    expected strings after seeing the output.
-4. Use `score_cleanup_cases()` on the in-memory ID/expected/actual records and
-   evaluate protected-token annotations with a separate reviewed check.
-5. Record both gates, mode distinction, production integration evidence, and
-   limitations. Report AC-07 only after every formal acceptance condition is
-   satisfied.
+4. Run `score_cleanup_cases()` and
+   `score_protected_cleanup_cases()` against the same independently approved
+   corpus and its corresponding production outputs. The exact-output input is
+   the corpus IDs and expected/actual strings; protected-token scoring also
+   receives each record's input and reviewed annotations.
+5. Record both numerical gates, the mode distinction, production integration
+   evidence, and limitations. Report AC-07 only after every formal acceptance
+   condition is satisfied.
 
-This procedure is a proposal for future evaluation. The scorer does not
-implement protected-token evaluation, approve Verbatim behavior, modify PRD
-thresholds, or make a current-behavior test pass into AC-07 acceptance.
+This procedure is a proposal for future evaluation. The two scorers are
+independent and neither alone establishes final acceptance. The
+protected-token evaluator cannot establish AC-07 without the approved corpus
+and corresponding production outputs. Neither scorer approves Verbatim
+behavior, modifies PRD thresholds, or makes a current-behavior test pass into
+AC-07 acceptance.

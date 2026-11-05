@@ -223,6 +223,12 @@ Added a standalone Python standard-library scorer for caller-supplied expected/a
 
 This is evaluation infrastructure only. The existing 200 current-behavior fixtures are not automatically an independently approved acceptance oracle; protected-token evaluation, final mode semantics, and production integration evidence remain outstanding. The cleanup policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands, observed output, and limitations are recorded in [`evidence/T-035-T-036-ac07-scoring-foundation.md`](../evidence/T-035-T-036-ac07-scoring-foundation.md).
 
+### Independent AC-07 protected-token evaluator — partial T-035/T-036 evaluation-tool progress (2026-11-05)
+
+Added `scripts/score_cleanup_protected_ac07.py`, a standard-library in-memory evaluator for reviewed UTF-8 byte ranges on numeric and proper-noun tokens. It validates input and independently specified expected-output ranges, then checks the same expected-output offsets in actual output; invalid reference metadata raises a dedicated error, while changed, missing, out-of-bounds, or UTF-8-splitting actual ranges count as alterations. Its two-case synthetic demo reports a passing evaluator gate but explicitly prints `AC-07 acceptance: NOT EVALUATED`. Updated the evaluation plan and README to distinguish this protected-token gate from the exact-output scorer and require both numerical scorers to evaluate the same independently approved corpus and corresponding production outputs.
+
+This remains evaluation infrastructure only. The demo and unit tests establish scorer behavior, not corpus-wide protection or AC-07 acceptance. Actual output shifts before a token may conservatively count as alterations because offsets are not searched or adjusted. No production cleanup, Rust runner, fixtures, schema/defaults, dependencies, PRD thresholds, or proposed Clean/Verbatim policy changed. The policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands, results, environment, and limitations are recorded in [`evidence/T-035-T-036-ac07-protected-scoring-foundation.md`](../evidence/T-035-T-036-ac07-protected-scoring-foundation.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid
