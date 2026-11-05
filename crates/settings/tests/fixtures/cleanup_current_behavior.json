@@ -502,5 +502,267 @@
       { "spoken": "rust", "written": "naïve 😀" }
     ],
     "expected": "naïve 😀 3 . 14 then 東京!"
+  },
+  {
+    "id": "commands-uppercase-new-line-with-cleanup-enabled",
+    "category": "commands",
+    "input": "Please review NEW LINE the draft.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Please review\nthe draft."
+  },
+  {
+    "id": "commands-mixed-case-new-paragraph-with-cleanup-enabled",
+    "category": "commands",
+    "input": "We agreed New PaRaGrApH continue tomorrow.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "We agreed\n\ncontinue tomorrow."
+  },
+  {
+    "id": "commands-disabled-preserve-both-literal-phrases",
+    "category": "commands",
+    "input": "Say new line then new paragraph literally.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Say new line then new paragraph literally."
+  },
+  {
+    "id": "commands-boundaries-reject-larger-words",
+    "category": "commands",
+    "input": "renew line and new linebreak remain words",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "renew line and new linebreak remain words"
+  },
+  {
+    "id": "commands-quotes-and-punctuation-are-not-boundaries",
+    "category": "commands",
+    "input": "Say(\"new line\"), then [new paragraph]!",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Say(\"new line\"), then [new paragraph]!"
+  },
+  {
+    "id": "commands-multiple-breaks-interleaved-with-text",
+    "category": "commands",
+    "input": "Start new line here new paragraph there NEW LINE done",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Start\nhere\n\nthere\ndone"
+  },
+  {
+    "id": "fillers-removed-after-command-generated-line-breaks",
+    "category": "fillers",
+    "input": "um, begin new line um, continue",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "begin\ncontinue"
+  },
+  {
+    "id": "fillers-uh-removed-after-existing-paragraph-break",
+    "category": "fillers",
+    "input": "First paragraph.\n\nuh, continue here",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "First paragraph.\n\ncontinue here"
+  },
+  {
+    "id": "modes-clean-with-filler-removal-disabled-preserves-prefix",
+    "category": "modes",
+    "input": "um, keep this phrase",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, keep this phrase"
+  },
+  {
+    "id": "modes-verbatim-with-filler-setting-enabled-preserves-prefix",
+    "category": "modes",
+    "input": "uh, keep this phrase",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "uh, keep this phrase"
+  },
+  {
+    "id": "fillers-repeated-um-uh-sequence-is-preserved",
+    "category": "fillers",
+    "input": "um, uh, yes",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, uh, yes"
+  },
+  {
+    "id": "fillers-sentence-internal-and-quoted-phrases-remain",
+    "category": "fillers",
+    "input": "I said um, then \"uh, keep it\".",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "I said um, then \"uh, keep it\"."
+  },
+  {
+    "id": "vocabulary-longest-spoken-phrase-wins",
+    "category": "vocabulary",
+    "input": "new york city then new york",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "new york", "written": "NY" },
+      { "spoken": "new york city", "written": "NYC" }
+    ],
+    "expected": "NYC then NY"
+  },
+  {
+    "id": "vocabulary-replaces-every-repeated-occurrence",
+    "category": "vocabulary",
+    "input": "rust and rust again",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "Rust and Rust again"
+  },
+  {
+    "id": "vocabulary-multiple-entries-correct-one-transcript",
+    "category": "vocabulary",
+    "input": "rust at ubc.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "Rust at UBC."
+  },
+  {
+    "id": "unicode-vocabulary-matches-canonical-equivalent-spelling",
+    "category": "unicode",
+    "input": "cafe\u0301",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café", "written": "Café" }
+    ],
+    "expected": "Café"
+  },
+  {
+    "id": "safety-vocabulary-word-boundaries-block-partial-words",
+    "category": "safety",
+    "input": "crusty rustacean",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "crusty rustacean"
+  },
+  {
+    "id": "vocabulary-replacement-is-not-scanned-again-in-one-call",
+    "category": "vocabulary",
+    "input": "rust",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "ubc" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "ubc"
+  },
+  {
+    "id": "punctuation-supported-marks-normalized-together",
+    "category": "punctuation",
+    "input": "Comma , period . bang ! question ? semicolon ; colon :",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Comma, period. bang! question? semicolon; colon:"
+  },
+  {
+    "id": "punctuation-ambiguous-quote-sequences-stay-spaced",
+    "category": "punctuation",
+    "input": "Wait , \"really ?\"",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Wait , \"really ?\""
+  },
+  {
+    "id": "safety-year-adjacent-period-spacing-remains-protected",
+    "category": "safety",
+    "input": "The report ends in 2026 .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "The report ends in 2026 ."
+  },
+  {
+    "id": "safety-written-replacement-internal-punctuation-spacing-protected",
+    "category": "safety",
+    "input": "I chose rust today.",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust , Edition" }
+    ],
+    "expected": "I chose Rust , Edition today."
+  },
+  {
+    "id": "safety-written-replacement-leading-trailing-space-stays-distinct",
+    "category": "safety",
+    "input": "north parkade  outside .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "north parkade", "written": " North Parkade " }
+    ],
+    "expected": " North Parkade  outside."
+  },
+  {
+    "id": "safety-punctuation-and-fillers-around-two-protected-replacements",
+    "category": "safety",
+    "input": "um, rust .\nuh, ubc ;\nuh, done .",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust , Edition" },
+      { "spoken": "ubc", "written": "UBC , University" }
+    ],
+    "expected": "Rust , Edition.\nUBC , University;\ndone."
   }
 ]

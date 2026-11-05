@@ -3705,12 +3705,12 @@ Run the focused corpus test and its expected visible summary from the repository
 RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_golden_corpus --locked -- --nocapture
 ```
 
-The current-behavior baseline contains 48 explicitly reviewed synthetic fixtures: the original 24 plus 24 cases in four groups covering numeric preservation, proper nouns and abbreviations, Unicode preservation, and protected vocabulary interactions. Numeric tokens and protected replacement text are expected byte-for-byte; eligible punctuation outside protected text may still be normalized. The expectations characterize the existing implementation and do not approve a final Verbatim policy.
+The current-behavior baseline contains 72 explicitly reviewed synthetic fixtures: the original 24, 24 preservation cases, and 24 additional interaction cases. The latest 24 are organized into four groups of six: command case variants, opt-in and conservative boundaries; filler removal after existing and command-generated breaks, mode settings, repeated/internal/quoted fillers; vocabulary longest-match precedence, repetition, multiple entries, Unicode 18 canonical-equivalent matching, boundaries, and non-cascading replacements; and supported/ambiguous/numeric punctuation plus protected replacement punctuation and whitespace. The final safety group also combines punctuation and filler cleanup around two different protected replacements. Numeric tokens and protected replacement text are expected byte-for-byte; eligible punctuation outside protected text may still be normalized. The expectations characterize the existing implementation and do not approve a final Verbatim policy.
 
-After all 48 cases pass, the test prints:
+After all 72 cases pass, the test prints:
 
 ```text
-Cleanup golden corpus: 48 fixtures passed
+Cleanup golden corpus: 72 fixtures passed
 Categories covered: 8
 Current behavior baseline: true
 ```
@@ -3738,4 +3738,4 @@ Troubleshooting:
 - **A period after a year or other numeric token stays spaced:** the current rule trims punctuation spacing only when the preceding character is alphabetic and its adjacent alphanumeric token contains no number. The `numeric-comma-grouping-and-year-preserved` fixture records the observed `2026 .` output; preserve the numeric token and document any proposed behavior change separately.
 - **A policy change is proposed:** the corpus records current behavior. Review affected expectations alongside an approved product decision; the recommendation in [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md) remains **PROPOSED — NOT APPROVED**.
 
-These 48 cases remain a current-behavior baseline only; they do not complete T-035/T-036 or AC-07. AC-07 still requires the ≥200-case acceptance corpus, ≥99% exact expected output, zero altered numeric tokens/proper nouns across its protected fixture corpus, a demonstrated Clean/Verbatim distinction, and required production integration. Passing these 48 cases does not prove universal protection of numeric tokens or proper nouns. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
+These 72 cases remain a current-behavior baseline only; they do not complete T-035/T-036 or AC-07. AC-07 still requires the ≥200-case acceptance corpus, ≥99% exact expected output, zero altered numeric tokens/proper nouns across its protected fixture corpus, a demonstrated Clean/Verbatim distinction, and required production integration. Passing these 72 cases does not prove universal protection of numeric tokens or proper nouns. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
