@@ -2,12 +2,18 @@
 //!
 //! The standalone cleanup stages normalize horizontal ASCII spacing and line
 //! endings, optionally recognize two explicit dictation commands, and apply
-//! validated vocabulary corrections in FR-07.3 order. This partial pipeline
-//! does not change punctuation, capitalization, or fillers, and has no
-//! storage, network, speech, UI, or global-state effects.
+//! validated vocabulary corrections in FR-07.3 order. A separate composed
+//! API also applies conservative punctuation spacing after vocabulary
+//! correction while protecting replacement bytes. These partial pipelines do
+//! not change capitalization or fillers, and have no storage, network, speech,
+//! UI, or global-state effects.
+
+use std::ops::Range;
 
 use crate::vocabulary::{VocabularyCollectionError, VocabularyEntryRef};
-use crate::vocabulary_post_correction::apply_vocabulary_post_corrections;
+use crate::vocabulary_post_correction::{
+    apply_vocabulary_post_corrections, apply_vocabulary_post_corrections_with_spans,
+};
 
 /// Normalizes ASCII horizontal whitespace and line endings in a transcript.
 ///
@@ -88,10 +94,10 @@ pub fn normalize_transcript_whitespace(input: &str) -> String {
 /// or changes punctuation or inserts spacing after punctuation.
 ///
 /// This intentionally narrow rule is a standalone partial FR-07.1 / FR-07.3
-/// stage; it is not complete punctuation restoration and is not yet part of
-/// [`normalize_whitespace_commands_and_apply_vocabulary`]. A future pipeline
-/// must run it after vocabulary correction and test the effect on written
-/// replacements before integration.
+/// stage; it is not complete punctuation restoration. The composed
+/// [`normalize_whitespace_commands_vocabulary_and_punctuation`] API applies
+/// this same rule after vocabulary correction while preserving replacement
+/// spans.
 ///
 /// The scan is deterministic, idempotent, and linear-time. It reads but does
 /// not modify the input and uses no global state.
@@ -105,8 +111,35 @@ pub fn normalize_transcript_whitespace(input: &str) -> String {
 /// assert_eq!(normalize_punctuation_spacing("Version 3 . 14"), "Version 3 . 14");
 /// ```
 pub fn normalize_punctuation_spacing(input: &str) -> String {
+    normalize_punctuation_spacing_with_protection(input, &[]).text
+}
+
+/// Punctuation output and its adjusted internal provenance ranges.
+///
+/// The ranges are kept private: callers of the composed pipeline receive only
+/// final text, never offsets that could be mistaken for offsets in an earlier
+/// stage.
+#[derive(Debug)]
+struct ProtectedPunctuationOutput {
+    text: String,
+    protected_ranges: Vec<Range<usize>>,
+}
+
+fn normalize_punctuation_spacing_with_protection(
+    input: &str,
+    protected_ranges: &[Range<usize>],
+) -> ProtectedPunctuationOutput {
     let characters: Vec<char> = input.chars().collect();
+    let mut byte_offsets = input
+        .char_indices()
+        .map(|(byte_offset, _)| byte_offset)
+        .collect::<Vec<_>>();
+    byte_offsets.push(input.len());
+    let token_contains_number = alphanumeric_token_number_flags(&characters);
+
     let mut output = String::with_capacity(input.len());
+    let mut removed_ranges = Vec::new();
+    let mut protected_range_index = 0;
     let mut index = 0;
 
     while index < characters.len() {
@@ -119,7 +152,17 @@ pub fn normalize_punctuation_spacing(input: &str) -> String {
                 index += 1;
             }
 
-            if !should_remove_punctuation_spacing(&characters, whitespace_start, index) {
+            if should_remove_punctuation_spacing(
+                &characters,
+                &byte_offsets,
+                &token_contains_number,
+                whitespace_start,
+                index,
+                protected_ranges,
+                &mut protected_range_index,
+            ) {
+                removed_ranges.push(byte_offsets[whitespace_start]..byte_offsets[index]);
+            } else {
                 output.extend(characters[whitespace_start..index].iter().copied());
             }
         } else {
@@ -128,13 +171,23 @@ pub fn normalize_punctuation_spacing(input: &str) -> String {
         }
     }
 
-    output
+    let adjusted_protected_ranges =
+        adjust_protected_ranges_after_deletions(protected_ranges, &removed_ranges);
+
+    ProtectedPunctuationOutput {
+        text: output,
+        protected_ranges: adjusted_protected_ranges,
+    }
 }
 
 fn should_remove_punctuation_spacing(
     characters: &[char],
+    byte_offsets: &[usize],
+    token_contains_number: &[bool],
     whitespace_start: usize,
     mark_index: usize,
+    protected_ranges: &[Range<usize>],
+    protected_range_index: &mut usize,
 ) -> bool {
     let Some(&mark) = characters.get(mark_index) else {
         return false;
@@ -151,8 +204,13 @@ fn should_remove_punctuation_spacing(
         return false;
     };
     if !characters[preceding_index].is_alphabetic()
-        || adjacent_alphanumeric_token_contains_number(characters, preceding_index)
+        || adjacent_alphanumeric_token_contains_number(token_contains_number, preceding_index)
         || is_ambiguous_punctuation_sequence(characters, mark_index)
+        || protected_range_intersects(
+            protected_ranges,
+            protected_range_index,
+            byte_offsets[whitespace_start]..byte_offsets[mark_index],
+        )
     {
         return false;
     }
@@ -160,15 +218,66 @@ fn should_remove_punctuation_spacing(
     true
 }
 
-fn adjacent_alphanumeric_token_contains_number(characters: &[char], end: usize) -> bool {
-    let mut start = end;
-    while start > 0 && characters[start - 1].is_alphanumeric() {
-        start -= 1;
+fn adjacent_alphanumeric_token_contains_number(token_contains_number: &[bool], end: usize) -> bool {
+    token_contains_number.get(end).copied().unwrap_or(false)
+}
+
+fn alphanumeric_token_number_flags(characters: &[char]) -> Vec<bool> {
+    let mut token_contains_number = false;
+
+    characters
+        .iter()
+        .map(|character| {
+            if character.is_alphanumeric() {
+                token_contains_number |= character.is_numeric();
+            } else {
+                token_contains_number = false;
+            }
+
+            token_contains_number
+        })
+        .collect()
+}
+
+fn protected_range_intersects(
+    protected_ranges: &[Range<usize>],
+    range_index: &mut usize,
+    candidate: Range<usize>,
+) -> bool {
+    while protected_ranges
+        .get(*range_index)
+        .is_some_and(|protected| protected.end <= candidate.start)
+    {
+        *range_index += 1;
     }
 
-    characters[start..=end]
+    protected_ranges
+        .get(*range_index)
+        .is_some_and(|protected| protected.start < candidate.end)
+}
+
+fn adjust_protected_ranges_after_deletions(
+    protected_ranges: &[Range<usize>],
+    removed_ranges: &[Range<usize>],
+) -> Vec<Range<usize>> {
+    let mut removed_index = 0;
+    let mut removed_bytes = 0;
+
+    protected_ranges
         .iter()
-        .any(|character| character.is_numeric())
+        .map(|protected| {
+            while removed_ranges
+                .get(removed_index)
+                .is_some_and(|removed| removed.end <= protected.start)
+            {
+                let removed = &removed_ranges[removed_index];
+                removed_bytes += removed.end - removed.start;
+                removed_index += 1;
+            }
+
+            (protected.start - removed_bytes)..(protected.end - removed_bytes)
+        })
+        .collect()
 }
 
 fn is_ambiguous_punctuation_sequence(characters: &[char], mark_index: usize) -> bool {
@@ -347,6 +456,68 @@ pub fn normalize_whitespace_commands_and_apply_vocabulary(
     apply_vocabulary_post_corrections(&commanded, entries)
 }
 
+/// Normalizes whitespace, optionally applies dictation commands and
+/// vocabulary corrections, then removes only unambiguous punctuation spacing.
+///
+/// The stages run in FR-07.3 order:
+/// [`normalize_transcript_whitespace`], [`apply_dictation_commands`],
+/// [`apply_vocabulary_post_corrections_with_spans`], then the same punctuation
+/// spacing rule used by [`normalize_punctuation_spacing`]. The vocabulary
+/// stage's UTF-8 byte ranges are passed directly to punctuation formatting.
+/// Candidate whitespace runs that overlap a written replacement are kept
+/// whole, so every written replacement remains byte-for-byte unchanged.
+/// Eligible spacing outside replacements can still be corrected, including
+/// when the preceding alphabetic character is part of a replacement.
+///
+/// Vocabulary replacements are non-cascading within one call. Reapplying the
+/// complete pipeline is not universally idempotent: for example, `rust` →
+/// `ubc` and `ubc` → `UBC` produces `ubc` on the first call and `UBC` on a
+/// later call. The configured vocabulary is never rewritten to force
+/// idempotence. This API returns final text only; it does not expose byte
+/// ranges from an intermediate or formatted string.
+///
+/// # Errors
+///
+/// Returns [`VocabularyCollectionError`] when the collection exceeds its
+/// existing size limit, contains an invalid entry, or has duplicate spoken
+/// phrases under the existing Unicode 18 canonical-caseless matching policy.
+///
+/// # Examples
+///
+/// ```
+/// use outflow_core::text_cleanup::normalize_whitespace_commands_vocabulary_and_punctuation;
+/// use outflow_core::vocabulary::{VocabularyCollectionError, VocabularyEntryRef};
+///
+/// let vocabulary = [
+///     VocabularyEntryRef { spoken: "rust", written: "Rust , Edition" },
+///     VocabularyEntryRef { spoken: "ubc", written: "UBC" },
+/// ];
+/// let output = normalize_whitespace_commands_vocabulary_and_punctuation(
+///     "rust , at ubc .",
+///     &vocabulary,
+///     false,
+/// )?;
+/// assert_eq!(output, "Rust , Edition, at UBC.");
+/// # Ok::<(), VocabularyCollectionError>(())
+/// ```
+pub fn normalize_whitespace_commands_vocabulary_and_punctuation(
+    input: &str,
+    entries: &[VocabularyEntryRef<'_>],
+    commands_enabled: bool,
+) -> Result<String, VocabularyCollectionError> {
+    let normalized = normalize_transcript_whitespace(input);
+    let commanded = apply_dictation_commands(&normalized, commands_enabled);
+    let corrected = apply_vocabulary_post_corrections_with_spans(&commanded, entries)?;
+    let ProtectedPunctuationOutput {
+        text,
+        protected_ranges: _adjusted_internal_ranges,
+    } = normalize_punctuation_spacing_with_protection(&corrected.text, &corrected.protected_ranges);
+
+    // Updated provenance is private to this stage; callers receive final text
+    // only, so intermediate byte offsets cannot escape as stale metadata.
+    Ok(text)
+}
+
 /// Normalizes transcript whitespace and applies vocabulary corrections with
 /// dictation-command recognition disabled.
 ///
@@ -362,9 +533,11 @@ pub fn normalize_whitespace_and_apply_vocabulary(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_dictation_commands, normalize_punctuation_spacing, normalize_transcript_whitespace,
+        apply_dictation_commands, normalize_punctuation_spacing,
+        normalize_punctuation_spacing_with_protection, normalize_transcript_whitespace,
         normalize_whitespace_and_apply_vocabulary,
         normalize_whitespace_commands_and_apply_vocabulary,
+        normalize_whitespace_commands_vocabulary_and_punctuation,
     };
     use crate::vocabulary::{
         MAX_VOCABULARY_ENTRIES, VocabularyCollectionError, VocabularyEntryRef, VocabularyField,
@@ -376,6 +549,55 @@ mod tests {
             .iter()
             .map(|&(spoken, written)| VocabularyEntryRef { spoken, written })
             .collect()
+    }
+
+    fn assert_protected_pipeline_fixture(
+        input: &str,
+        entries: &[VocabularyEntryRef<'_>],
+        commands_enabled: bool,
+        expected: &str,
+    ) -> String {
+        let actual = normalize_whitespace_commands_vocabulary_and_punctuation(
+            input,
+            entries,
+            commands_enabled,
+        )
+        .expect("the fixture vocabulary is valid");
+
+        let normalized = normalize_transcript_whitespace(input);
+        let commanded = apply_dictation_commands(&normalized, commands_enabled);
+        let corrected =
+            crate::vocabulary_post_correction::apply_vocabulary_post_corrections_with_spans(
+                &commanded, entries,
+            )
+            .expect("the fixture vocabulary is valid");
+        let formatted = normalize_punctuation_spacing_with_protection(
+            &corrected.text,
+            &corrected.protected_ranges,
+        );
+
+        assert_eq!(actual, expected);
+        assert_eq!(formatted.text, actual);
+        assert_eq!(
+            formatted.protected_ranges.len(),
+            corrected.protected_ranges.len(),
+            "every inserted replacement must retain its ordered provenance"
+        );
+
+        for (index, (source_range, final_range)) in corrected
+            .protected_ranges
+            .iter()
+            .zip(&formatted.protected_ranges)
+            .enumerate()
+        {
+            assert_eq!(
+                &formatted.text[final_range.clone()],
+                &corrected.text[source_range.clone()],
+                "protected replacement at provenance index {index} changed"
+            );
+        }
+
+        actual
     }
 
     #[test]
@@ -1176,6 +1398,198 @@ mod tests {
 
         assert_eq!(first, "ubc");
         assert_eq!(second, "UBC");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn protected_composed_pipeline_handles_empty_and_ordinary_text() {
+        assert_protected_pipeline_fixture("", &[], false, "");
+        assert_protected_pipeline_fixture("  \t \r\n", &[], false, "\n");
+        assert_protected_pipeline_fixture("  hello\t world.  ", &[], false, "hello world.");
+        assert_protected_pipeline_fixture("Hello , world !", &[], false, "Hello, world!");
+    }
+
+    #[test]
+    fn protected_composed_pipeline_preserves_the_requested_vocabulary_example() {
+        let entries = vocabulary_refs(&[("rust", "Rust , Edition"), ("ubc", "UBC")]);
+
+        assert_protected_pipeline_fixture(
+            "rust , at ubc .",
+            &entries,
+            false,
+            "Rust , Edition, at UBC.",
+        );
+    }
+
+    #[test]
+    fn protected_composed_pipeline_preserves_exact_leading_trailing_and_intersecting_spaces() {
+        let trailing = vocabulary_refs(&[("rust", "Rust ")]);
+        assert_protected_pipeline_fixture("rust,", &trailing, false, "Rust ,");
+
+        let leading = vocabulary_refs(&[("rust", " Rust")]);
+        assert_protected_pipeline_fixture("rust ,", &leading, false, " Rust,");
+
+        // The source contributes one space after the replacement's protected
+        // trailing space. Since the complete run intersects the range, neither
+        // byte is deleted.
+        assert_protected_pipeline_fixture("rust  ,", &trailing, false, "Rust  ,");
+
+        let newlines = vocabulary_refs(&[("rust", "Rust ,\nEdition ")]);
+        assert_protected_pipeline_fixture("rust !", &newlines, false, "Rust ,\nEdition  !");
+    }
+
+    #[test]
+    fn protected_composed_pipeline_handles_multiple_repeated_and_unicode_replacements() {
+        let entries = vocabulary_refs(&[("rust", "Rust , Edition"), ("ubc", "UBC")]);
+        assert_protected_pipeline_fixture(
+            "rust , and ubc !",
+            &entries,
+            false,
+            "Rust , Edition, and UBC!",
+        );
+
+        let repeated = vocabulary_refs(&[("rust", "Same , Phrase")]);
+        assert_protected_pipeline_fixture(
+            "rust, then rust !",
+            &repeated,
+            false,
+            "Same , Phrase, then Same , Phrase!",
+        );
+
+        assert_protected_pipeline_fixture(
+            "😀 rust , café , 東京 !",
+            &entries,
+            false,
+            "😀 Rust , Edition, café, 東京!",
+        );
+
+        // A combining mark is not an alphabetic character for the existing
+        // spacing rule, while the later correction outside the replacement is.
+        assert_protected_pipeline_fixture(
+            "cafe\u{301} , rust ,",
+            &entries,
+            false,
+            "cafe\u{301} , Rust , Edition,",
+        );
+    }
+
+    #[test]
+    fn protected_composed_pipeline_retains_paragraph_breaks_and_numeric_ambiguity() {
+        assert_protected_pipeline_fixture("café ,\n\n東京 !", &[], false, "café,\n\n東京!");
+        assert_protected_pipeline_fixture(
+            "Version 3 . 14 and v1 . 2; e.g. , value. Dr. Smith , said! Wait , ; Hello , world",
+            &[],
+            false,
+            "Version 3 . 14 and v1 . 2; e.g. , value. Dr. Smith, said! Wait , ; Hello, world",
+        );
+        assert_protected_pipeline_fixture("“Hello ,”", &[], false, "“Hello ,”");
+        assert_protected_pipeline_fixture("“Hello , ”", &[], false, "“Hello , ”");
+        assert_protected_pipeline_fixture("“Hello , world”", &[], false, "“Hello, world”");
+    }
+
+    #[test]
+    fn protected_composed_pipeline_runs_commands_before_vocabulary_correction() {
+        let entries = vocabulary_refs(&[("new line", "Literal"), ("rust", "Rust")]);
+
+        assert_protected_pipeline_fixture("a new line b", &entries, true, "a\nb");
+        assert_protected_pipeline_fixture("a new line b", &entries, false, "a Literal b");
+        assert_protected_pipeline_fixture("rust new line rust .", &entries, true, "Rust\nRust.");
+        assert_protected_pipeline_fixture(
+            "rust new line rust .",
+            &entries,
+            false,
+            "Rust Literal Rust.",
+        );
+    }
+
+    #[test]
+    fn protected_composed_pipeline_keeps_longest_match_and_non_cascading_rules() {
+        let entries = vocabulary_refs(&[
+            ("new", "Short"),
+            ("new york", "New York"),
+            ("rust", "ubc"),
+            ("ubc", "UBC , Place"),
+        ]);
+
+        assert_protected_pipeline_fixture(
+            "new york and rust .",
+            &entries,
+            false,
+            "New York and ubc.",
+        );
+    }
+
+    #[test]
+    fn protected_composed_pipeline_reports_existing_validation_errors() {
+        let invalid = vocabulary_refs(&[("rust", " \t")]);
+        assert_eq!(
+            normalize_whitespace_commands_vocabulary_and_punctuation("rust .", &invalid, false),
+            Err(VocabularyCollectionError::InvalidEntry {
+                index: 0,
+                source: VocabularyValidationError::Empty(VocabularyField::Written),
+            })
+        );
+
+        let duplicate = vocabulary_refs(&[("café", "Cafe"), ("cafe\u{301}", "Other")]);
+        assert_eq!(
+            normalize_whitespace_commands_vocabulary_and_punctuation("café .", &duplicate, false),
+            Err(VocabularyCollectionError::DuplicateSpoken {
+                first_index: 0,
+                duplicate_index: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn protected_composed_pipeline_is_deterministic_and_does_not_mutate_inputs() {
+        let input = String::from("😀 rust , then rust !");
+        let vocabulary = vec![(String::from("rust"), String::from("Same , Phrase"))];
+        let input_before = input.clone();
+        let vocabulary_before = vocabulary.clone();
+        let entries = vocabulary
+            .iter()
+            .map(|(spoken, written)| VocabularyEntryRef { spoken, written })
+            .collect::<Vec<_>>();
+
+        let first =
+            normalize_whitespace_commands_vocabulary_and_punctuation(&input, &entries, false);
+        let second =
+            normalize_whitespace_commands_vocabulary_and_punctuation(&input, &entries, false);
+
+        assert_eq!(
+            first,
+            Ok("😀 Same , Phrase, then Same , Phrase!".to_owned())
+        );
+        assert_eq!(second, first);
+        assert_eq!(input, input_before);
+        assert_eq!(vocabulary, vocabulary_before);
+    }
+
+    #[test]
+    fn protected_composed_pipeline_retains_existing_api_behavior() {
+        assert_eq!(normalize_punctuation_spacing("Hello ,"), "Hello,");
+        assert_eq!(
+            normalize_whitespace_commands_and_apply_vocabulary("Hello ,", &[], false),
+            Ok("Hello ,".to_owned())
+        );
+        assert_eq!(
+            normalize_whitespace_and_apply_vocabulary("Hello ,", &[]),
+            Ok("Hello ,".to_owned())
+        );
+    }
+
+    #[test]
+    fn protected_composed_pipeline_documents_non_idempotent_vocabulary_cascades() {
+        let entries = vocabulary_refs(&[("rust", "ubc"), ("ubc", "UBC")]);
+        let first =
+            normalize_whitespace_commands_vocabulary_and_punctuation("rust ,", &entries, false)
+                .expect("the test vocabulary is valid");
+        let second =
+            normalize_whitespace_commands_vocabulary_and_punctuation(&first, &entries, false)
+                .expect("the test vocabulary is valid");
+
+        assert_eq!(first, "ubc,");
+        assert_eq!(second, "UBC,");
         assert_ne!(first, second);
     }
 }

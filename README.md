@@ -3347,7 +3347,7 @@ This is only the whitespace, command, and existing vocabulary slice. Punctuation
 
 The standalone `outflow_core::text_cleanup::normalize_punctuation_spacing(input)` function removes ASCII spaces and tabs before `, . ! ? ; :` only when the previous non-whitespace character is alphabetic, the mark is followed by whitespace or the end of input, and the adjacent alphanumeric token contains no number. It leaves ambiguous spaced punctuation and quote sequences unchanged. It preserves all punctuation, words, capitalization, numeric content, Unicode, emoji, and line/paragraph breaks. It does not add punctuation or spacing after punctuation and does not perform complete punctuation restoration.
 
-This stage is intentionally not connected to the existing cleanup composition. Future integration must run punctuation spacing after vocabulary correction and add explicit tests for its effect on written replacements.
+The standalone API retains its original text-only behavior. The protected-aware composition described below now runs this same spacing rule after vocabulary correction, while preserving every configured written replacement.
 
 Run the synthetic example from the repository root after installing the Rust toolchain described under [Prerequisites](#prerequisites):
 
@@ -3383,4 +3383,58 @@ Troubleshooting:
 - **The example output changes after editing:** inspect that only the six supported marks are normalized; punctuation insertion, capitalization, and post-punctuation spacing are not implemented here.
 - **Cargo reports a toolchain or lock issue:** run from the repository root with the stable toolchain and tracked lockfile; this stage adds no dependency.
 
-This is another partial T-035 building block. It does not change the existing whitespace/command/vocabulary APIs or pipeline, and does not complete T-035, T-036, T-038, T-039, AC-07, AC-08, or any release gate. See [`evidence/T-035-punctuation-spacing.md`](evidence/T-035-punctuation-spacing.md) for exact implementation, verification, and limitations.
+This is a partial T-035 building block. It does not change the behavior of the existing whitespace/command/vocabulary APIs. See [`evidence/T-035-punctuation-spacing.md`](evidence/T-035-punctuation-spacing.md) for the standalone stage's exact implementation, verification, and limitations.
+
+## Native protected punctuation and vocabulary composition (partial T-035/T-039)
+
+`outflow_core::text_cleanup::normalize_whitespace_commands_vocabulary_and_punctuation(input, entries, commands_enabled)` composes four deterministic stages in this order:
+
+1. `normalize_transcript_whitespace`
+2. `apply_dictation_commands` (only when enabled)
+3. `apply_vocabulary_post_corrections_with_spans`
+4. Protected-aware punctuation spacing using the existing rules from `normalize_punctuation_spacing`
+
+The vocabulary corrector records the exact UTF-8 byte ranges of written replacements. The punctuation formatter receives those ranges immediately, before any other change to corrected text. It never deletes bytes inside a replacement. When a candidate whitespace run intersects a protected range, it retains the complete run. This preserves internal punctuation and spacing, including replacement leading/trailing spaces and line breaks. Existing eligible spacing outside a replacement can still be corrected, even when the preceding alphabetic character belongs to the replacement. Emoji, accented text, combining marks, numeric tokens, versions, abbreviations, ambiguous punctuation, quotes, and paragraph breaks retain the standalone stage's existing conservative behavior.
+
+The new API returns final text only; protected byte offsets are internal because punctuation removal can shift later offsets. Existing composition APIs and the standalone `normalize_punctuation_spacing(input)` API keep their previous behavior.
+
+Runnable example:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example text_protected_punctuation_pipeline --locked
+```
+
+Expected output (Rust debug formatting):
+
+```text
+Input: "rust , at ubc ."
+Output: "Rust , Edition, at UBC."
+Matches expected: true
+Protected replacement preserved: true
+```
+
+The example asserts the full output and checks both ordered vocabulary replacements against their source-stage provenance ranges. The unit tests also assert exact strings for ordinary punctuation, protected punctuation and spaces, trailing/leading replacement whitespace, intersecting whitespace runs, repeated replacements, Unicode byte offsets, combining marks, newlines, paragraph breaks, numbers, abbreviations, commands, longest-match precedence, non-cascading replacements, validation errors, input immutability, and determinism.
+
+Run the focused tests and requested workspace checks from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core text_cleanup --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+git diff --cached --check
+```
+
+Troubleshooting:
+
+- **Spaces inside a written replacement remain:** the replacement is protected byte-for-byte; this includes spaces immediately before its punctuation.
+- **Spacing outside a replacement remains:** punctuation must be one of `, . ! ? ; :`, follow the existing alphabetic and no-number rule, and not form an ambiguous punctuation or quote sequence.
+- **A numeric token, version, abbreviation, combining-mark boundary, or ambiguous sequence stays spaced:** these cases remain conservative by design; the formatter does not guess.
+- **A vocabulary correction is missing:** verify the collection has valid nonempty fields, no canonical-caseless duplicate spoken phrases, and that the command flag has not consumed the source phrase first.
+- **The output changes on a second pipeline call:** vocabulary mappings are non-cascading within one call, but can cascade across calls. For example, `rust` → `ubc` and `ubc` → `UBC` yields `ubc` first and `UBC` on reapplication. The complete pipeline is therefore not universally idempotent.
+- **A byte offset appears different after formatting:** offsets are private to the pipeline and are not returned; do not reuse ranges from the vocabulary stage against final output.
+
+This is a partial implementation only. Automatic punctuation insertion, capitalization, Clean/Verbatim filler handling, ASR/settings/frontend integration, the complete golden corpus, and production prerequisites remain outstanding. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** See [`evidence/T-035-T-039-protected-punctuation-integration.md`](evidence/T-035-T-039-protected-punctuation-integration.md) for implementation and verification evidence.
