@@ -4,9 +4,10 @@
 //! endings, optionally recognize two explicit dictation commands, and apply
 //! validated vocabulary corrections in FR-07.3 order. A separate composed
 //! API also applies conservative punctuation spacing after vocabulary
-//! correction while protecting replacement bytes. These partial pipelines do
-//! not change capitalization or fillers, and have no storage, network, speech,
-//! UI, or global-state effects.
+//! correction while protecting replacement bytes. A further composition may
+//! remove supported line-leading fillers outside protected replacements.
+//! These partial pipelines do not change capitalization and have no storage,
+//! network, speech, UI, or global-state effects.
 
 use std::ops::Range;
 
@@ -127,9 +128,10 @@ pub fn normalize_punctuation_spacing(input: &str) -> String {
 /// contain exactly one ASCII space after the comma. This function does not
 /// normalize whitespace. It recognizes line starts after LF and CR characters
 /// while preserving those bytes and all unrelated UTF-8 text. It is a
-/// standalone partial FR-07.2 stage and is not part of the composed cleanup
-/// APIs. When later integrated, it must run after punctuation spacing and
-/// honor protected vocabulary replacement ranges.
+/// standalone partial FR-07.2 stage. The composed
+/// [`process_transcript_with_optional_fillers`] API uses the same recognition
+/// policy after punctuation spacing and protects vocabulary replacement
+/// ranges.
 ///
 /// With `enabled` set to `false`, the input is returned unchanged, which
 /// represents Verbatim mode or disabled filler removal. The function is
@@ -146,18 +148,13 @@ pub fn normalize_punctuation_spacing(input: &str) -> String {
 /// assert_eq!(remove_leading_isolated_fillers("um, uh, yes", true), "um, uh, yes");
 /// ```
 pub fn remove_leading_isolated_fillers(input: &str, enabled: bool) -> String {
-    if !enabled {
-        return input.to_owned();
-    }
-
-    let mut output = String::with_capacity(input.len());
-    for line in input.split_inclusive(['\n', '\r']) {
-        output.push_str(remove_line_leading_isolated_filler(line));
-    }
-    output
+    remove_leading_isolated_fillers_with_protection(input, &[], enabled).text
 }
 
-fn remove_line_leading_isolated_filler(line: &str) -> &str {
+/// Recognizes the existing conservative filler prefix and returns its local
+/// byte range. Both the standalone and protected-aware paths use this policy
+/// so integration cannot broaden recognition by accident.
+fn line_leading_isolated_filler_range(line: &str) -> Option<Range<usize>> {
     let prefix_length = if line
         .get(..4)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("um, "))
@@ -167,17 +164,17 @@ fn remove_line_leading_isolated_filler(line: &str) -> &str {
     {
         4
     } else {
-        return line;
+        return None;
     };
 
     let remaining = &line[prefix_length..];
     if !remaining.chars().next().is_some_and(char::is_alphabetic)
         || starts_with_supported_filler_comma(remaining)
     {
-        return line;
+        return None;
     }
 
-    remaining
+    Some(0..prefix_length)
 }
 
 fn starts_with_supported_filler_comma(text: &str) -> bool {
@@ -185,6 +182,65 @@ fn starts_with_supported_filler_comma(text: &str) -> bool {
         prefix[..2].eq_ignore_ascii_case(b"um") && prefix[2] == b','
             || prefix[..2].eq_ignore_ascii_case(b"uh") && prefix[2] == b','
     })
+}
+
+/// Text and adjusted replacement provenance after optional filler deletion.
+///
+/// Ranges are private and always index `text`; deletions that precede a
+/// replacement shift its offsets, while intersecting candidates are retained.
+#[derive(Debug)]
+struct ProtectedFillerOutput {
+    text: String,
+    protected_ranges: Vec<Range<usize>>,
+}
+
+fn remove_leading_isolated_fillers_with_protection(
+    input: &str,
+    protected_ranges: &[Range<usize>],
+    enabled: bool,
+) -> ProtectedFillerOutput {
+    if !enabled {
+        return ProtectedFillerOutput {
+            text: input.to_owned(),
+            protected_ranges: protected_ranges.to_vec(),
+        };
+    }
+
+    let mut output = String::with_capacity(input.len());
+    let mut removed_ranges = Vec::new();
+    let mut protected_range_index = 0;
+    let mut line_start = 0;
+
+    for line in input.split_inclusive(['\n', '\r']) {
+        if let Some(local_range) = line_leading_isolated_filler_range(line) {
+            let candidate = (line_start + local_range.start)..(line_start + local_range.end);
+            if protected_range_intersects(
+                protected_ranges,
+                &mut protected_range_index,
+                candidate.clone(),
+            ) {
+                // Do not partially trim a candidate if any of its bytes came
+                // from a written replacement.
+                output.push_str(line);
+            } else {
+                output.push_str(&line[..local_range.start]);
+                output.push_str(&line[local_range.end..]);
+                removed_ranges.push(candidate);
+            }
+        } else {
+            output.push_str(line);
+        }
+
+        line_start += line.len();
+    }
+
+    let adjusted_protected_ranges =
+        adjust_protected_ranges_after_deletions(protected_ranges, &removed_ranges);
+
+    ProtectedFillerOutput {
+        text: output,
+        protected_ranges: adjusted_protected_ranges,
+    }
 }
 
 /// Punctuation output and its adjusted internal provenance ranges.
@@ -578,17 +634,90 @@ pub fn normalize_whitespace_commands_vocabulary_and_punctuation(
     entries: &[VocabularyEntryRef<'_>],
     commands_enabled: bool,
 ) -> Result<String, VocabularyCollectionError> {
-    let normalized = normalize_transcript_whitespace(input);
-    let commanded = apply_dictation_commands(&normalized, commands_enabled);
-    let corrected = apply_vocabulary_post_corrections_with_spans(&commanded, entries)?;
-    let ProtectedPunctuationOutput {
-        text,
-        protected_ranges: _adjusted_internal_ranges,
-    } = normalize_punctuation_spacing_with_protection(&corrected.text, &corrected.protected_ranges);
+    let formatted = normalize_whitespace_commands_vocabulary_and_punctuation_with_spans(
+        input,
+        entries,
+        commands_enabled,
+    )?;
 
     // Updated provenance is private to this stage; callers receive final text
     // only, so intermediate byte offsets cannot escape as stale metadata.
+    Ok(formatted.text)
+}
+
+/// Runs the current cleanup order with conservative filler removal controlled
+/// independently from opt-in dictation-command recognition.
+///
+/// The stages are whitespace normalization, optional dictation commands,
+/// vocabulary post-correction, protected punctuation spacing, and optional
+/// protected-aware filler removal. A filler prefix is removed only when
+/// `fillers_enabled` is `true`; `false` preserves it exactly. Written
+/// vocabulary replacements are never modified, including replacements that
+/// themselves begin with a filler-like phrase. The flag controls this stage
+/// only and does not select the full Clean/Verbatim settings policy.
+///
+/// This function returns final text only; intermediate byte provenance stays
+/// private because later stages can shift offsets. A single call is
+/// deterministic, but repeated calls are not universally idempotent when a
+/// vocabulary replacement matches another entry on a later call.
+///
+/// # Errors
+///
+/// Returns [`VocabularyCollectionError`] when the collection exceeds its
+/// existing size limit, contains an invalid entry, or has duplicate spoken
+/// phrases under the existing Unicode 18 canonical-caseless matching policy.
+///
+/// # Examples
+///
+/// ```
+/// use outflow_core::text_cleanup::process_transcript_with_optional_fillers;
+/// use outflow_core::vocabulary::VocabularyEntryRef;
+///
+/// let vocabulary = [VocabularyEntryRef { spoken: "rust", written: "Rust" }];
+/// let output = process_transcript_with_optional_fillers(
+///     "um, rust .",
+///     &vocabulary,
+///     false,
+///     true,
+/// )?;
+/// assert_eq!(output, "Rust.");
+/// # Ok::<(), outflow_core::vocabulary::VocabularyCollectionError>(())
+/// ```
+pub fn process_transcript_with_optional_fillers(
+    input: &str,
+    entries: &[VocabularyEntryRef<'_>],
+    commands_enabled: bool,
+    fillers_enabled: bool,
+) -> Result<String, VocabularyCollectionError> {
+    let formatted = normalize_whitespace_commands_vocabulary_and_punctuation_with_spans(
+        input,
+        entries,
+        commands_enabled,
+    )?;
+    let ProtectedFillerOutput {
+        text,
+        protected_ranges: _adjusted_internal_ranges,
+    } = remove_leading_isolated_fillers_with_protection(
+        &formatted.text,
+        &formatted.protected_ranges,
+        fillers_enabled,
+    );
+
     Ok(text)
+}
+
+fn normalize_whitespace_commands_vocabulary_and_punctuation_with_spans(
+    input: &str,
+    entries: &[VocabularyEntryRef<'_>],
+    commands_enabled: bool,
+) -> Result<ProtectedPunctuationOutput, VocabularyCollectionError> {
+    let normalized = normalize_transcript_whitespace(input);
+    let commanded = apply_dictation_commands(&normalized, commands_enabled);
+    let corrected = apply_vocabulary_post_corrections_with_spans(&commanded, entries)?;
+    Ok(normalize_punctuation_spacing_with_protection(
+        &corrected.text,
+        &corrected.protected_ranges,
+    ))
 }
 
 /// Normalizes transcript whitespace and applies vocabulary corrections with
@@ -610,7 +739,10 @@ mod tests {
         normalize_punctuation_spacing_with_protection, normalize_transcript_whitespace,
         normalize_whitespace_and_apply_vocabulary,
         normalize_whitespace_commands_and_apply_vocabulary,
-        normalize_whitespace_commands_vocabulary_and_punctuation, remove_leading_isolated_fillers,
+        normalize_whitespace_commands_vocabulary_and_punctuation,
+        normalize_whitespace_commands_vocabulary_and_punctuation_with_spans,
+        process_transcript_with_optional_fillers, remove_leading_isolated_fillers,
+        remove_leading_isolated_fillers_with_protection,
     };
     use crate::vocabulary::{
         MAX_VOCABULARY_ENTRIES, VocabularyCollectionError, VocabularyEntryRef, VocabularyField,
@@ -1893,5 +2025,263 @@ mod tests {
         assert_eq!(first, "ubc,");
         assert_eq!(second, "UBC,");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn optional_filler_pipeline_handles_empty_and_enabled_disabled_modes() {
+        let entries = vocabulary_refs(&[("rust", "Rust"), ("ubc", "UBC")]);
+
+        assert_eq!(
+            process_transcript_with_optional_fillers("", &[], false, true),
+            Ok(String::new())
+        );
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, rust at ubc.", &entries, false, true),
+            Ok("Rust at UBC.".to_owned())
+        );
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, rust at ubc.", &entries, false, false),
+            Ok("um, Rust at UBC.".to_owned())
+        );
+
+        let single = vocabulary_refs(&[("rust", "Rust")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, rust.", &single, false, true),
+            Ok("Rust.".to_owned())
+        );
+    }
+
+    #[test]
+    fn optional_filler_pipeline_preserves_protected_filler_like_replacements() {
+        let one_line = vocabulary_refs(&[("rust", "um, keep this")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("rust", &one_line, false, true),
+            Ok("um, keep this".to_owned())
+        );
+
+        let followed_by_ordinary_filler = "um, keep this\nordinary text";
+        let entries = vocabulary_refs(&[("rust", "um, keep this")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers(
+                "rust\nuh, ordinary text",
+                &entries,
+                false,
+                true,
+            ),
+            Ok(followed_by_ordinary_filler.to_owned())
+        );
+
+        let multi_line = vocabulary_refs(&[("rust", "first line\num, protected second line")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("rust", &multi_line, false, true),
+            Ok("first line\num, protected second line".to_owned())
+        );
+
+        // The deletion candidate overlaps the protected `um` replacement, so
+        // the complete `um, ` prefix is retained rather than partially cut.
+        let overlapping = vocabulary_refs(&[("um", "um")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, yes", &overlapping, false, true),
+            Ok("um, yes".to_owned())
+        );
+    }
+
+    #[test]
+    fn optional_filler_pipeline_formats_punctuation_before_removal() {
+        let entries = vocabulary_refs(&[("rust", "Rust , Edition"), ("ubc", "UBC")]);
+
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, rust , at ubc .", &entries, false, true,),
+            Ok("Rust , Edition, at UBC.".to_owned())
+        );
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, rust , at ubc .", &entries, false, false,),
+            Ok("um, Rust , Edition, at UBC.".to_owned())
+        );
+    }
+
+    #[test]
+    fn optional_filler_pipeline_preserves_unicode_line_breaks_and_repeated_fillers() {
+        assert_eq!(
+            process_transcript_with_optional_fillers(
+                "um, café 😀\n\nuh, 東京\r\n",
+                &[],
+                false,
+                true,
+            ),
+            Ok("café 😀\n\n東京\n".to_owned())
+        );
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, uh, yes\nuh, uh, keep", &[], false, true),
+            Ok("um, uh, yes\nuh, uh, keep".to_owned())
+        );
+        assert_eq!(
+            process_transcript_with_optional_fillers(
+                "um, 2026\n\"uh, yes\"\nuh, cafe\u{301}",
+                &[],
+                false,
+                true,
+            ),
+            Ok("um, 2026\n\"uh, yes\"\ncafe\u{301}".to_owned())
+        );
+    }
+
+    #[test]
+    fn optional_filler_pipeline_runs_commands_before_vocabulary() {
+        let entries = vocabulary_refs(&[("new line", "Literal"), ("rust", "Rust")]);
+
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, yes new line rust", &entries, true, true,),
+            Ok("yes\nRust".to_owned())
+        );
+        assert_eq!(
+            process_transcript_with_optional_fillers(
+                "um, yes new line rust",
+                &entries,
+                false,
+                true,
+            ),
+            Ok("yes Literal Rust".to_owned())
+        );
+        assert_eq!(
+            process_transcript_with_optional_fillers(
+                "um, yes new line rust",
+                &entries,
+                true,
+                false,
+            ),
+            Ok("um, yes\nRust".to_owned())
+        );
+
+        let longest = vocabulary_refs(&[("new", "Short"), ("new york", "New York")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, new york", &longest, false, true,),
+            Ok("New York".to_owned())
+        );
+        let non_cascading = vocabulary_refs(&[("rust", "ubc"), ("ubc", "UBC")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("rust", &non_cascading, false, true),
+            Ok("ubc".to_owned())
+        );
+    }
+
+    #[test]
+    fn optional_filler_pipeline_reports_collection_errors_and_is_deterministic() {
+        let invalid = vocabulary_refs(&[("rust", " \t")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("rust", &invalid, false, true),
+            Err(VocabularyCollectionError::InvalidEntry {
+                index: 0,
+                source: VocabularyValidationError::Empty(VocabularyField::Written),
+            })
+        );
+
+        let duplicate = vocabulary_refs(&[("café", "Cafe"), ("cafe\u{301}", "Other")]);
+        assert_eq!(
+            process_transcript_with_optional_fillers("café", &duplicate, false, true),
+            Err(VocabularyCollectionError::DuplicateSpoken {
+                first_index: 0,
+                duplicate_index: 1,
+            })
+        );
+
+        let input = String::from("um, rust\nuh, ubc 😀");
+        let input_before = input.clone();
+        let vocabulary = vec![
+            (String::from("rust"), String::from("Rust")),
+            (String::from("ubc"), String::from("UBC")),
+        ];
+        let vocabulary_before = vocabulary.clone();
+        let entries = vocabulary
+            .iter()
+            .map(|(spoken, written)| VocabularyEntryRef { spoken, written })
+            .collect::<Vec<_>>();
+
+        let first = process_transcript_with_optional_fillers(&input, &entries, false, true);
+        let second = process_transcript_with_optional_fillers(&input, &entries, false, true);
+        assert_eq!(first, Ok("Rust\nUBC 😀".to_owned()));
+        assert_eq!(second, first);
+        assert_eq!(input, input_before);
+        assert_eq!(vocabulary, vocabulary_before);
+    }
+
+    #[test]
+    fn optional_filler_pipeline_keeps_existing_public_api_behavior() {
+        let entries = vocabulary_refs(&[("rust", "Rust")]);
+        assert_eq!(
+            normalize_whitespace_commands_vocabulary_and_punctuation("um, rust ,", &entries, false,),
+            Ok("um, Rust,".to_owned())
+        );
+        assert_eq!(remove_leading_isolated_fillers("um, Rust,", true), "Rust,");
+        assert_eq!(
+            process_transcript_with_optional_fillers("um, rust ,", &entries, false, true),
+            Ok("Rust,".to_owned())
+        );
+    }
+
+    #[test]
+    fn protected_filler_provenance_is_valid_adjusted_and_byte_preserved() {
+        let entries =
+            vocabulary_refs(&[("rust", "Rüst 😀"), ("ubc", "UBC"), ("cafe", "Cafe\u{301}")]);
+        let input = "um, rust\r\nuh, ubc\num, cafe";
+        let formatted = normalize_whitespace_commands_vocabulary_and_punctuation_with_spans(
+            input, &entries, false,
+        )
+        .expect("the test vocabulary is valid");
+        let before = formatted
+            .protected_ranges
+            .iter()
+            .map(|range| formatted.text[range.clone()].to_owned())
+            .collect::<Vec<_>>();
+        let after = remove_leading_isolated_fillers_with_protection(
+            &formatted.text,
+            &formatted.protected_ranges,
+            true,
+        );
+
+        assert_eq!(formatted.text, "um, Rüst 😀\nuh, UBC\num, Cafe\u{301}");
+        assert_eq!(after.text, "Rüst 😀\nUBC\nCafe\u{301}");
+        assert_eq!(before, ["Rüst 😀", "UBC", "Cafe\u{301}"]);
+        assert_eq!(after.protected_ranges.len(), before.len());
+        assert_eq!(
+            after
+                .protected_ranges
+                .iter()
+                .map(|range| range.start)
+                .collect::<Vec<_>>(),
+            [0, 11, 15],
+            "each preceding filler deletion must shift later UTF-8 byte ranges"
+        );
+
+        let assert_valid_ranges = |text: &str, ranges: &[std::ops::Range<usize>]| {
+            let mut previous_end = 0;
+            for range in ranges {
+                assert!(range.start <= range.end);
+                assert!(
+                    text.get(range.clone()).is_some(),
+                    "range must use UTF-8 boundaries"
+                );
+                assert!(
+                    range.start >= previous_end,
+                    "ranges must be ordered and non-overlapping"
+                );
+                previous_end = range.end;
+            }
+        };
+        assert_valid_ranges(&formatted.text, &formatted.protected_ranges);
+        assert_valid_ranges(&after.text, &after.protected_ranges);
+
+        for (index, (before_range, after_range)) in formatted
+            .protected_ranges
+            .iter()
+            .zip(&after.protected_ranges)
+            .enumerate()
+        {
+            assert_eq!(
+                &formatted.text[before_range.clone()],
+                &after.text[after_range.clone()],
+                "protected replacement {index} must remain byte-for-byte identical"
+            );
+        }
     }
 }
