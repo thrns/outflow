@@ -4,7 +4,7 @@ flows: [UF-05, UF-06]
 acceptance: [AC-08]
 owner: Codex coordinator
 base_commit: 28232eeb9fa7d9eecf7e2d4a72e6f66518d643c8
-result_commit: recorded as the implementation commit in the follow-up evidence commit
+result_commit: af7666064e2d1477cc758f6fc848131a826a7507
 platform: macOS 26.6.2 (25G83) arm64; rustc 1.99.1; physical RAM not measured for this task
 implementation: Pure collection-level correction in crates/core/src/vocabulary_post_correction.rs; runnable synthetic example in crates/core/examples/vocabulary_multi_post_correction.rs
 commands:
