@@ -79,6 +79,14 @@ This is a partial T-039 building block only. It does not add Moonshine keyterm h
 
 This is only a partial T-035 building block: punctuation cleanup, dictation commands, vocabulary ordering/integration, and the full golden corpus remain out of scope. T-023 is still unchecked, so this result does not complete the dependent production T-035. **T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact evidence is in [`evidence/T-035-whitespace-normalization.md`](../evidence/T-035-whitespace-normalization.md).
 
+### Native Rust text cleanup composition — partial T-035/T-039 evidence (2026-11-04)
+
+`outflow-core::text_cleanup::normalize_whitespace_and_apply_vocabulary` composes the existing transcript whitespace normalizer with the existing collection vocabulary post-corrector. Whitespace normalization runs first; the validated collection then uses the existing Unicode 18 canonical-caseless matcher, conservative boundaries, and longest-match precedence. Replacement text is copied exactly and is not scanned again in the same call. The function does not normalize replacement output again. Its rustdoc and a focused test explicitly show that this single-call non-cascading property does not guarantee idempotence when the complete pipeline is run repeatedly.
+
+Sixteen focused unit tests cover empty input and vocabulary, normalization before single- and multiword correction, multiple entries, CRLF and standalone carriage returns, paragraph breaks, punctuation/numbers, composed and decomposed accents, emoji/Japanese text, longest-match precedence, non-cascading behavior, exact replacement spacing/newlines, invalid and duplicate mappings, the 500-entry limit, input/entry immutability, deterministic repeated calls, and the repeated-application limitation. The synthetic `text_cleanup_composition` example prints debug-formatted input/output and compares its result and unrelated Unicode against exact expected strings.
+
+This remains a partial development slice. Dictation-command recognition, punctuation/capitalization cleanup, Clean/Verbatim filler policy, Moonshine keyterm hints, persistence, and ASR/frontend integration remain out of scope. T-023 and the prerequisites for full T-035/T-039 are unresolved. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands and observed results are recorded in [`evidence/T-035-T-039-text-cleanup-composition.md`](../evidence/T-035-T-039-text-cleanup-composition.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

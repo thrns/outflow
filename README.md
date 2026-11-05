@@ -234,12 +234,14 @@ crates/
 │   ├── Cargo.toml
 │   ├── src/
 │   │   ├── lib.rs
+│   │   ├── text_cleanup.rs
 │   │   ├── vocabulary.rs
 │   │   ├── vocabulary_matching.rs
 │   │   ├── vocabulary_migration.rs
 │   │   └── vocabulary_post_correction.rs
 │   └── examples/
 │       ├── foundation.rs
+│       ├── text_cleanup_composition.rs
 │       ├── vocabulary_matching_benchmark.rs
 │       ├── vocabulary_validation.rs
 │       ├── vocabulary_migration_check.rs
@@ -256,7 +258,7 @@ crates/
     └── examples/reset_settings.rs
 ```
 
-The `outflow-core` library provides vocabulary validation, Unicode comparison, migration inspection, single-entry and multi-entry post-correction functions, plus a development-only status function. Run its foundation example from the project root:
+The `outflow-core` library provides vocabulary validation, Unicode comparison, migration inspection, whitespace normalization, a partial whitespace-and-vocabulary composition function, single-entry and multi-entry post-correction functions, plus a development-only status function. Run its foundation example from the project root:
 
 ```sh
 cargo run -p outflow-core --example foundation
@@ -378,6 +380,54 @@ Troubleshooting and limitations:
 - **Unicode boundary behavior:** the existing conservative classifier is not a full Unicode word-break implementation. It avoids adding a separate word-break dependency and may treat scripts or uncommon format marks differently from a complete segmentation standard.
 
 This remains a partial T-039 building block. It does not implement Moonshine keyterm hints, the full punctuation/filler cleanup pipeline, settings persistence, or ASR/frontend integration. T-035, T-038, T-039, AC-07, AC-08, and all release gates remain open.
+
+### Native Rust whitespace and vocabulary composition
+
+`outflow-core::text_cleanup::normalize_whitespace_and_apply_vocabulary` composes the existing whitespace normalizer and validated multi-entry vocabulary corrector. It normalizes ASCII spaces, tabs, CRLF, and standalone carriage returns first, then validates the complete vocabulary collection and applies Unicode 18 canonical-caseless matching with the existing word boundaries and longest-match precedence. Paragraph breaks and unrelated text remain intact. Written replacement values are copied exactly, including repeated spaces and line breaks; the output is not normalized again.
+
+This is deliberately a partial pipeline. FR-07.3 places dictation-command recognition between whitespace normalization and vocabulary correction when that stage is implemented. Replacements do not cascade within one call, but the whole function is not universally idempotent across repeated calls. For example, `rust` → `ubc` and `ubc` → `UBC` produce `ubc` on the first call and `UBC` if the pipeline is applied again to that result. Mapping values are not changed to force idempotence.
+
+Setup: install the repository's stable Rust toolchain with `rustfmt` and `clippy`, then run the commands below from the repository root. The example uses only synthetic in-memory text and vocabulary; it needs no microphone, model, browser, or service.
+
+Run the composition example:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example text_cleanup_composition --locked
+```
+
+Expected output:
+
+```text
+Input: "  I visited   north PARKADE.\r\n\r\n\tI use rust\t at  ubc.  \r\nThe cafe\u{301} serves 東京 tea 😀."
+Output: "I visited North Parkade.\n\nI use Rust at UBC.\nThe cafe\u{301} serves 東京 tea 😀."
+Output matches expected: true
+Unrelated Unicode preserved: true
+```
+
+The debug output displays the decomposed accent in `cafe\u{301}` as a Rust escape. The runnable example compares the exact output string and exits unsuccessfully if either the result or unrelated Unicode preservation differs.
+
+Run the core tests or all requested workspace checks from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+```
+
+Troubleshooting and limitations:
+
+- **Stable toolchain or component missing:** install the stable Rust toolchain with `rustfmt` and `clippy`, then rerun from the repository root.
+- **Vocabulary rejected:** the existing validator permits at most 500 entries, limits each field to 128 Unicode scalar values, and rejects empty/whitespace-only values and duplicate spoken phrases under Unicode 18 canonical-caseless matching.
+- **A normalized multiword phrase does not match:** transcript ASCII spaces and tabs are collapsed before matching. Configure the spoken phrase with its intended single spaces; vocabulary fields themselves are not rewritten.
+- **Non-ASCII spacing remains:** the whitespace stage deliberately changes only ASCII spaces/tabs and line endings. Other Unicode whitespace and characters are preserved.
+- **Replacement spacing looks unusual:** written values are inserted exactly, so repeated spaces and embedded line breaks are intentional and are not normalized afterward.
+- **A second pipeline call changes a result:** this is expected for maps whose written value matches another spoken phrase. Non-cascading behavior applies within one call only.
+
+The API does not implement punctuation or capitalization correction, dictation commands, Clean/Verbatim filler handling, Moonshine integration, persistence, or React/Tauri wiring. It does not complete T-035 or T-039: their prerequisites and broader production criteria remain unmet. T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
 
 ## Native Rust settings schema v1
 
