@@ -3159,3 +3159,44 @@ Troubleshooting:
 - **Temporary directory creation fails:** check that the operating-system temporary directory is writable; the example creates and removes a uniquely named directory there and never targets the user's real settings.
 
 This partial implementation does not complete T-038 or AC-08. Boundary-aware replacement, production settings persistence integration, frontend/native settings integration, deletion/save/load acceptance, and the T-017/T-018 prerequisites remain open. T-017, T-018, T-038, T-039, and all release gates remain unchecked.
+
+## Native Rust whitespace normalization (partial T-035)
+
+`outflow_core::text_cleanup::normalize_transcript_whitespace(&str) -> String` is a pure, deterministic first stage for future transcript cleanup. It converts CRLF and standalone CR to `\n`, collapses internal runs of ASCII spaces and tabs to one space, and trims those characters from each line. It preserves the number and positions of newlines, including leading/trailing newlines and blank paragraphs. Punctuation, words, capitalization, numbers, emoji, combining marks, and other Unicode text are copied unchanged; non-ASCII whitespace is not normalized. The implementation scans once and adds no dependencies.
+
+Run the synthetic example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example text_whitespace_normalization --locked
+```
+
+Expected output (Rust debug formatting makes CRLF and tabs visible):
+
+```text
+Before: "  I visited   north parkade.\r\n\r\n\tI use rust\t at  ubc.  "
+After: "I visited north parkade.\n\nI use rust at ubc."
+Idempotent: true
+```
+
+The example asserts the exact output and idempotence, exiting unsuccessfully if either check fails. The test module has 32 table fixtures; every fixture checks exact output, idempotence, and that its original input remains unchanged. Four focused tests additionally check newline placement/count, ASCII-only trimming, character preservation, and the empty-input result.
+
+Run the requested Rust verification from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+```
+
+Troubleshooting:
+
+- **CR or CRLF remains visible in debug output:** confirm the function is called on the returned string; it canonicalizes those line endings to `\n`.
+- **A blank line disappeared:** this function retains newline characters; check that a caller does not split, filter, or trim lines afterward.
+- **A non-breaking/em space remains:** only ASCII space and tab are normalized by design.
+- **Punctuation or capitalization changed:** that behavior is outside this API; check that another cleanup stage is not being applied by the caller.
+- **Cargo reports a locked dependency or toolchain issue:** run the commands at the repository root with the stable toolchain and verify the tracked `Cargo.lock`; this change does not add or update dependencies.
+
+This is only the whitespace stage; it is not connected to vocabulary correction, punctuation, capitalization, filler removal, dictation commands, or the application. T-023 remains an unmet prerequisite, and production T-035/T-036, T-038/T-039, AC-07/AC-08, and all release gates remain unchecked. See [`evidence/T-035-whitespace-normalization.md`](evidence/T-035-whitespace-normalization.md) for exact environment, commands, results, and scope.

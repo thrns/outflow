@@ -73,6 +73,12 @@ On macOS 26.6.2 arm64 with Rust 1.99.1, the requested example, format check, wor
 
 This is a partial T-039 building block only. It does not add Moonshine keyterm hints, punctuation/filler cleanup, persistent settings, or ASR/frontend integration. **T-035, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact verification commands and observed example output are recorded in [`evidence/T-039-multi-entry-vocabulary-post-correction.md`](../evidence/T-039-multi-entry-vocabulary-post-correction.md).
 
+### Native Rust whitespace normalization — partial T-035 evidence (2026-11-04)
+
+`outflow_core::text_cleanup::normalize_transcript_whitespace` is a standalone pure Rust stage for canonicalizing CRLF/CR line endings and horizontal ASCII spacing. It preserves newlines, non-ASCII whitespace, and all other text. The synthetic example prints debug-formatted input/output and asserts both its exact expected string and idempotence. Thirty-two table fixtures check output, input immutability, and idempotence; four additional focused tests cover newline count/placement, ASCII-only trimming, Unicode and punctuation preservation, and empty text. No dependency or frontend/native integration changed.
+
+This is only a partial T-035 building block: punctuation cleanup, dictation commands, vocabulary ordering/integration, and the full golden corpus remain out of scope. T-023 is still unchecked, so this result does not complete the dependent production T-035. **T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact evidence is in [`evidence/T-035-whitespace-normalization.md`](../evidence/T-035-whitespace-normalization.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid
