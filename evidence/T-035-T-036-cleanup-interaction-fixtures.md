@@ -7,7 +7,7 @@ flows: [UF-05]
 acceptance: [AC-07]
 owner: Codex, codex/task-036-cleanup-interaction-fixtures
 base_commit: c124fc0c882ef1638310493f74b1ab70eb2e7919
-result_commit: pending until the task commit is created
+result_commit: a4336e156eac1819b89f9aff52f9ddcdf9c7aa6c (fixture, runner, and documentation result; this evidence commit records the SHA)
 platform: macOS 26.6.2 (25G83), arm64, Apple M3 Pro, 18 GB RAM; Rust 1.99.1; Cargo 1.99.1
 implementation: Added 24 explicit current-behavior fixtures, updated the corpus count to 72, and documented partial progress. No production source, settings schema, dependency, or lockfile changed.
 doc_updates: README.md cleanup corpus section; docs/TASKS.md partial progress; evidence/T-035-T-036-cleanup-interaction-fixtures.md
