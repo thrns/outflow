@@ -1408,5 +1408,271 @@
       { "spoken": "ubc", "written": "UBC" }
     ],
     "expected": "review Rust, now\nfinish UBC."
+  },
+  {
+    "id": "whitespace-empty-lines-at-both-transcript-edges",
+    "category": "whitespace",
+    "input": "\n\n  opening  \n\nclosing \t\n\n",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "\n\nopening\n\nclosing\n\n"
+  },
+  {
+    "id": "whitespace-multiple-horizontal-runs-around-punctuation",
+    "category": "whitespace",
+    "input": "Name\t\t ,  item  \t !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Name, item!"
+  },
+  {
+    "id": "whitespace-ascii-around-lf-and-crlf-boundaries",
+    "category": "whitespace",
+    "input": "left \t\n \t\r\n \t\r\n right",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "left\n\n\nright"
+  },
+  {
+    "id": "whitespace-nonascii-whitespace-only-line-is-preserved",
+    "category": "whitespace",
+    "input": "top\n\u2003\u00a0\nbottom",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "top\n\u2003\u00a0\nbottom"
+  },
+  {
+    "id": "whitespace-ascii-run-next-to-combining-marks",
+    "category": "whitespace",
+    "input": "  cafe\u0301 \t\u0308 followed  ",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "cafe\u0301 \u0308 followed"
+  },
+  {
+    "id": "whitespace-unicode-emoji-and-three-consecutive-blank-lines",
+    "category": "whitespace",
+    "input": " \t東京 😀 \n\n\n café \t ",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "東京 😀\n\n\ncafé"
+  },
+  {
+    "id": "fillers-line-leading-supported-prefix-before-alphabetic-word",
+    "category": "fillers",
+    "input": "uh, Begin with confidence",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Begin with confidence"
+  },
+  {
+    "id": "fillers-filler-like-token-without-comma-remains",
+    "category": "fillers",
+    "input": "um perhaps we should leave",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um perhaps we should leave"
+  },
+  {
+    "id": "fillers-punctuated-continuation-is-not-a-filler-match",
+    "category": "fillers",
+    "input": "uh, ! Try again",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "uh, ! Try again"
+  },
+  {
+    "id": "fillers-repeated-prefixes-with-mixed-ascii-capitalization-remain",
+    "category": "fillers",
+    "input": "uM, uH, stay\nUh, UM, wait",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "uM, uH, stay\nUh, UM, wait"
+  },
+  {
+    "id": "fillers-quoted-line-leading-phrase-remains",
+    "category": "fillers",
+    "input": "\"uh, quoted words\"",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "\"uh, quoted words\""
+  },
+  {
+    "id": "fillers-protected-replacement-and-independent-line-prefix",
+    "category": "fillers",
+    "input": "line marker\nuh, ordinary line",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "line marker", "written": "um, keep exactly" }
+    ],
+    "expected": "um, keep exactly\nordinary line"
+  },
+  {
+    "id": "vocabulary-phrase-beside-ascii-punctuation",
+    "category": "vocabulary",
+    "input": "(north star), then north star!",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "north star", "written": "North Star" }
+    ],
+    "expected": "(North Star), then North Star!"
+  },
+  {
+    "id": "vocabulary-unicode-punctuation-canonical-caseless-match",
+    "category": "vocabulary",
+    "input": "«Cre\u0300me bru\u0302le\u0301e»—crème brûlée。",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "crème brûlée", "written": "Crème Brûlée" }
+    ],
+    "expected": "«Crème Brûlée»—Crème Brûlée。"
+  },
+  {
+    "id": "vocabulary-embedded-alphabetic-substring-does-not-match",
+    "category": "vocabulary",
+    "input": "aglowing glow",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "glow", "written": "Glow" }
+    ],
+    "expected": "aglowing Glow"
+  },
+  {
+    "id": "vocabulary-combining-mark-continuation-blocks-partial-match",
+    "category": "vocabulary",
+    "input": "orbit\u0301 later",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "orbit", "written": "Orbit" }
+    ],
+    "expected": "orbit\u0301 later"
+  },
+  {
+    "id": "vocabulary-longest-overlapping-spoken-phrase-wins",
+    "category": "vocabulary",
+    "input": "old harbor lights",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "harbor", "written": "Harbor" },
+      { "spoken": "old harbor", "written": "Old Harbor" }
+    ],
+    "expected": "Old Harbor lights"
+  },
+  {
+    "id": "vocabulary-written-phrase-is-not-cascaded-in-same-call",
+    "category": "vocabulary",
+    "input": "mint code",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "mint code", "written": "silver key" },
+      { "spoken": "silver key", "written": "Silver Key" }
+    ],
+    "expected": "silver key"
+  },
+  {
+    "id": "safety-numeric-period-stays-spaced-while-eligible-spacing-corrects",
+    "category": "safety",
+    "input": "Ref 2026 . then proceed , carefully !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Ref 2026 . then proceed, carefully!"
+  },
+  {
+    "id": "safety-accented-proper-noun-beside-vocabulary-correction",
+    "category": "safety",
+    "input": "Élodie met lunar station , after lunch .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "lunar station", "written": "Lunar Station" }
+    ],
+    "expected": "Élodie met Lunar Station, after lunch."
+  },
+  {
+    "id": "safety-enabled-new-line-then-removable-filler",
+    "category": "safety",
+    "input": "begin new line uh, keep moving",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "begin\nkeep moving"
+  },
+  {
+    "id": "safety-disabled-command-remains-available-to-vocabulary",
+    "category": "safety",
+    "input": "say new line softly",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "new line", "written": "line break" }
+    ],
+    "expected": "say line break softly"
+  },
+  {
+    "id": "safety-protected-replacements-across-punctuation-and-paragraph",
+    "category": "safety",
+    "input": "alpha mark ,\n\nbeta mark . ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "alpha mark", "written": "Alpha, Mark" },
+      { "spoken": "beta mark", "written": "Beta! Mark" }
+    ],
+    "expected": "Alpha, Mark,\n\nBeta! Mark. ready!"
+  },
+  {
+    "id": "safety-whitespace-command-vocabulary-punctuation-filler-composition",
+    "category": "safety",
+    "input": " \tuh, start   new line   comet station \t, then   new paragraph  \r\num, finish mark   !  ",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [
+      { "spoken": "comet station", "written": "Comet Station" },
+      { "spoken": "finish mark", "written": "Finish Mark" }
+    ],
+    "expected": "start\nComet Station, then\n\n\nFinish Mark!"
   }
 ]
