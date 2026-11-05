@@ -145,6 +145,12 @@ Fifteen focused `cleanup_policy` tests pass, including all four combinations, de
 
 This is only a partial T-036 building block. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.**
 
+### Clean/Verbatim mode contract characterization — partial T-036 evidence (2026-11-05)
+
+Added `docs/CLEANUP_MODE_POLICY.md` to separate confirmed FR-07 requirements and current behavior from unresolved Verbatim semantics. It presents three alternatives and a recommendation explicitly marked **PROPOSED — NOT APPROVED**; the PRD and production APIs are unchanged. The new `cleanup_mode_contract` example prints and asserts all four mode/filler combinations for the synthetic `um, rust new line at ubc .` input. It also shows that disabling commands preserves literal `new line` while vocabulary and punctuation stages still run. Nine integration tests lock the public adapter contract across modes, Unicode and paragraph cases, protected replacements, errors, immutability, determinism, and schema-v1 JSON.
+
+This remains a characterization only. The three policy questions—formatting stages in Verbatim, vocabulary correction in Verbatim, and behavior of explicitly enabled dictation commands—still require a maintainer decision before complete Verbatim semantics are implemented. No production cleanup behavior, settings fields, defaults, or serialization changed. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact verification commands, observed output, and results are recorded in [`evidence/T-036-cleanup-mode-contract.md`](../evidence/T-036-cleanup-mode-contract.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

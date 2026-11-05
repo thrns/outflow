@@ -3631,3 +3631,49 @@ Troubleshooting and remaining limits:
 - **Application behavior is expected to follow these settings:** the adapter is a pure crate API and is not wired to React, Tauri, Moonshine, or the microphone. T-017/T-018 prerequisites, broader cleanup policy, the complete T-036 golden set, AC-07/AC-08, app integration, platform coverage, and all release gates remain open.
 
 This is partial T-036 evidence only. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** See [`evidence/T-036-cleanup-preference-adapter.md`](evidence/T-036-cleanup-preference-adapter.md) for the actual verification results.
+
+### Clean/Verbatim contract example — current behavior only
+
+[`crates/settings/examples/cleanup_mode_contract.rs`](crates/settings/examples/cleanup_mode_contract.rs) characterizes the current settings adapter for the synthetic input `  um, rust  new line  at ubc .` and vocabulary `rust → Rust`, `ubc → UBC`. It uses the existing Rust APIs and asserts every output. It does not approve complete Verbatim semantics or change production cleanup behavior. The unresolved policy alternatives and recommendation are in [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md), marked **PROPOSED — NOT APPROVED**.
+
+Run the executable and focused cross-crate regression tests from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-settings --example cleanup_mode_contract --locked
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_mode_contract --locked
+```
+
+Expected output:
+
+```text
+Input: "  um, rust  new line  at ubc ."
+Clean, remove_fillers=true: "Rust\nat UBC."
+Clean, remove_fillers=false: "um, Rust\nat UBC."
+Verbatim, remove_fillers=true: "um, Rust\nat UBC."
+Verbatim, remove_fillers=false: "um, Rust\nat UBC."
+Commands disabled (Verbatim): "um, Rust new line at UBC."
+```
+
+The commands-disabled line keeps the literal phrase `new line` while still correcting `rust`/`ubc` and removing the space before the final period. The focused integration test covers the public adapter contract, stage independence, formatting and Unicode preservation, typed vocabulary errors, immutability, determinism, and the existing schema-v1 JSON shape.
+
+Run the complete Rust verification from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+git diff --cached --check
+```
+
+Troubleshooting:
+
+- **The command phrase remains literal:** the example passes `commands_enabled: false` for that final case. Set the independent command option to `true` to recognize the supported phrase.
+- **A leading filler remains:** current deletion requires Clean mode and `remove_fillers: true`; Verbatim always retains supported fillers.
+- **Vocabulary or punctuation changes in Verbatim:** that is current adapter behavior. The complete Verbatim policy has not been approved; see [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md).
+- **A filler-like replacement changes:** vocabulary replacement spans are protected from later formatting and filler deletion; rerun the focused contract test and inspect the exact written replacement.
+- **Cargo reports a toolchain or lockfile mismatch:** run from the repository root with the pinned `rust-toolchain.toml` and keep `--locked`; this task adds no dependency or lockfile change.
+
+This is partial T-036 characterization only. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands and results are in [`evidence/T-036-cleanup-mode-contract.md`](evidence/T-036-cleanup-mode-contract.md).
