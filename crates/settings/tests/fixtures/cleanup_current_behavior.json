@@ -884,5 +884,264 @@
       { "spoken": "ubc", "written": "UBC , University" }
     ],
     "expected": "Rust , Edition.\nUBC , University;\ndone."
+  },
+  {
+    "id": "multiline-whitespace-preserves-consecutive-paragraph-breaks",
+    "category": "whitespace",
+    "input": " \tFirst\t  line  \r\n \t\r\n \tSecond\t line \t\n\n  Third \t ",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "First line\n\nSecond line\n\nThird"
+  },
+  {
+    "id": "multiline-crlf-and-standalone-cr-normalize-together",
+    "category": "whitespace",
+    "input": "One\r\nTwo\rThree\r\nFour",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "One\nTwo\nThree\nFour"
+  },
+  {
+    "id": "multiline-normalized-new-line-command",
+    "category": "commands",
+    "input": "Start\t\t new   line \t continue",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Start\ncontinue"
+  },
+  {
+    "id": "multiline-new-paragraph-command-retains-existing-breaks",
+    "category": "commands",
+    "input": "Top\n  new paragraph \t\nBottom",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Top\n\n\n\nBottom"
+  },
+  {
+    "id": "command-like-phrase-next-to-punctuation-remains-literal",
+    "category": "commands",
+    "input": "Please say, new line; then stop.",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Please say, new line; then stop."
+  },
+  {
+    "id": "commands-disabled-multiline-keeps-both-command-phrases",
+    "category": "commands",
+    "input": "Intro\r\nUse new line and new paragraph here\nDone",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Intro\nUse new line and new paragraph here\nDone"
+  },
+  {
+    "id": "punctuation-multiple-eligible-spacing-corrections",
+    "category": "punctuation",
+    "input": "Alpha , beta ! gamma ? delta ; epsilon : zeta",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Alpha, beta! gamma? delta; epsilon: zeta"
+  },
+  {
+    "id": "punctuation-ellipsis-and-repeated-marks-stay-ambiguous",
+    "category": "punctuation",
+    "input": "Wait . . . really ? ! …",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Wait . . . really ? ! …"
+  },
+  {
+    "id": "punctuation-version-decimal-and-year-boundaries",
+    "category": "punctuation",
+    "input": "Build v2 . 8 . 1 and 3 . 14 are valid , while year 2026 .",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Build v2 . 8 . 1 and 3 . 14 are valid, while year 2026 ."
+  },
+  {
+    "id": "punctuation-alphanumeric-identifier-digit-boundary",
+    "category": "punctuation",
+    "input": "Identifier A7B , ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Identifier A7B , ready!"
+  },
+  {
+    "id": "punctuation-unicode-alphabetic-predecessors",
+    "category": "punctuation",
+    "input": "東京 , café !",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "東京, café!"
+  },
+  {
+    "id": "punctuation-spacing-before-existing-line-breaks",
+    "category": "punctuation",
+    "input": "Alpha ,\n\nBeta !\nGamma",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Alpha,\n\nBeta!\nGamma"
+  },
+  {
+    "id": "clean-multiline-removes-both-supported-line-leading-fillers",
+    "category": "fillers",
+    "input": "um, first line\nuh, second line",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "first line\nsecond line"
+  },
+  {
+    "id": "clean-disabled-filler-removal-keeps-fillers-after-vocabulary",
+    "category": "modes",
+    "input": "um, rust , ready\nuh, ubc . now",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "um, Rust, ready\nuh, UBC. now"
+  },
+  {
+    "id": "verbatim-enabled-filler-setting-preserves-multiline-fillers",
+    "category": "modes",
+    "input": "uh, outflow , okay\num, finish !",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "outflow", "written": "Outflow" }
+    ],
+    "expected": "uh, Outflow, okay\num, finish!"
+  },
+  {
+    "id": "clean-filler-before-nonalphabetic-character-is-kept",
+    "category": "fillers",
+    "input": "um, 3 items are ready",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, 3 items are ready"
+  },
+  {
+    "id": "verbatim-disabled-filler-removal-preserves-repeated-line-leading-fillers",
+    "category": "fillers",
+    "input": "um, uh, maybe\nuh, um, later",
+    "mode": "verbatim",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "um, uh, maybe\nuh, um, later"
+  },
+  {
+    "id": "clean-command-paragraph-break-then-removes-filler",
+    "category": "commands",
+    "input": "Start new paragraph um, continue",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "Start\n\ncontinue"
+  },
+  {
+    "id": "unicode-vocabulary-canonical-equivalent-spoken-match",
+    "category": "unicode",
+    "input": "Cafe\u0301 society !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "café society", "written": "Café Society" }
+    ],
+    "expected": "Café Society!"
+  },
+  {
+    "id": "unicode-emoji-surrounds-vocabulary-replacement",
+    "category": "vocabulary",
+    "input": "😀 rust! 🚀",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" }
+    ],
+    "expected": "😀 Rust! 🚀"
+  },
+  {
+    "id": "vocabulary-written-punctuation-and-whitespace-stay-exact",
+    "category": "safety",
+    "input": "rust, now",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "  Rust , Edition  " }
+    ],
+    "expected": "  Rust , Edition  , now"
+  },
+  {
+    "id": "vocabulary-replacements-remain-separated-by-paragraph-break",
+    "category": "vocabulary",
+    "input": "rust\n\nubc",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "rust", "written": "Rust" },
+      { "spoken": "ubc", "written": "UBC" }
+    ],
+    "expected": "Rust\n\nUBC"
+  },
+  {
+    "id": "vocabulary-multiline-filler-like-replacement-stays-protected",
+    "category": "safety",
+    "input": "outflow",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "outflow", "written": "北区\num, Parkade\nuh, Annex" }
+    ],
+    "expected": "北区\num, Parkade\nuh, Annex"
+  },
+  {
+    "id": "vocabulary-longest-match-next-to-punctuation",
+    "category": "vocabulary",
+    "input": "new york city , ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      { "spoken": "new york", "written": "NY" },
+      { "spoken": "new york city", "written": "NYC" }
+    ],
+    "expected": "NYC, ready!"
   }
 ]

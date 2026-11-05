@@ -175,6 +175,12 @@ Added optional test-only `protected_tokens` metadata to the existing 72-fixture 
 
 This is test infrastructure only. It does not provide universal preservation guarantees or complete T-035/T-036 or AC-07. The 72 cases remain below AC-07's ≥200-case requirement and do not establish its ≥99% exact-output threshold, production integration, or final acceptance. The Verbatim recommendation remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact annotated tokens, commands, environment, results, branch, and limitations are recorded in [`evidence/T-035-T-036-protected-token-golden-checks.md`](../evidence/T-035-T-036-protected-token-golden-checks.md).
 
+### Cleanup multiline, mode-boundary, and Unicode fixture expansion — partial T-035/T-036 progress (2026-11-05)
+
+Expanded the current-behavior characterization corpus from 72 to 96 by appending 24 explicitly reviewed synthetic cases in four groups: multiline whitespace/commands; punctuation and numeric boundaries; Clean/Verbatim filler boundaries; and Unicode/protected vocabulary interactions. The original 72 fixture objects remain unchanged, including the 16 numeric/proper-noun annotations across 12 fixtures. The existing five synthetic negative protection checks, strict UTF-8 range checks, exact-byte validation, and eight-plus-eight annotation-count assertions are retained. No production cleanup behavior, settings schema/defaults, dependency, or Verbatim policy changed.
+
+The focused 96-fixture test and Clean/Verbatim contract test characterize current behavior only. Notable cases preserve every normalized line break, including the additional breaks around a `new paragraph` command; punctuation spacing after `2026` remains `2026 .`; and canonical-equivalent vocabulary matching replaces only the full configured spoken span while preserving unmatched source text. The corpus remains below AC-07's ≥200-case requirement and does not establish its ≥99% exact-output threshold, universal numeric/proper-noun protection, production integration, or release readiness. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact fixture IDs, the base-object comparison method, commands, environment, results, and limitations are recorded in [`evidence/T-035-T-036-cleanup-96-fixtures.md`](../evidence/T-035-T-036-cleanup-96-fixtures.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid
