@@ -6,7 +6,7 @@ owner: Codex coordinator
 base_commit: 28232eeb9fa7d9eecf7e2d4a72e6f66518d643c8
 result_commit: af7666064e2d1477cc758f6fc848131a826a7507
 platform: macOS 26.6.2 (25G83) arm64; rustc 1.99.1; physical RAM not measured for this task
-implementation: Pure collection-level correction in crates/core/src/vocabulary_post_correction.rs; runnable synthetic example in crates/core/examples/vocabulary_multi_post_correction.rs
+implementation: Pure collection-level correction in crates/core/src/vocabulary_post_correction.rs; module summary in crates/core/src/lib.rs; runnable synthetic example in crates/core/examples/vocabulary_multi_post_correction.rs
 commands:
   - {command: 'RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_multi_post_correction --locked', result: PASS, notes: 'Observed output exactly matched the three requested mappings; unrelated decomposed accent, Japanese text, and emoji remained unchanged; synthetic non-cascading example returned ubc.'}
   - {command: 'RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check', result: PASS, notes: 'No formatting changes required.'}
@@ -16,7 +16,7 @@ commands:
   - {command: 'RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked', result: PASS, notes: 'Workspace build completed.'}
   - {command: 'git diff --check', result: PASS, notes: 'No whitespace errors after README, task ledger, source, example, and evidence edits.'}
 metrics: NOT_MEASURED; no recognition, latency, memory, installed-size, battery, or release measurements were in scope
-doc_updates: README.md multi-entry behavior/example/testing/troubleshooting; docs/TASKS.md partial T-039 record; this evidence file
+doc_updates: README.md multi-entry behavior/example/testing/troubleshooting; docs/TASKS.md partial T-039 record; crates/core/src/lib.rs module summary; this evidence file
 risks:
   - Existing word-boundary classification is conservative and is not a full Unicode word-break implementation.
   - The function is not connected to Moonshine keyterm hints, the complete cleanup pipeline, settings persistence, or the frontend.
