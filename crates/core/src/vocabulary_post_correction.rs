@@ -1,4 +1,4 @@
-//! Pure, single-entry vocabulary replacement for C-06.
+//! Pure vocabulary replacement for C-06.
 //!
 //! The input is scanned only at UTF-8 character boundaries. Candidate spans
 //! use the same Unicode 18 canonical-caseless key as vocabulary validation,
@@ -14,7 +14,12 @@
 
 use icu_normalizer::properties::CanonicalCombiningClassMapBorrowed;
 
-use crate::vocabulary::{VocabularyValidationError, validate_vocabulary_entry};
+use std::collections::HashMap;
+
+use crate::vocabulary::{
+    VocabularyCollectionError, VocabularyEntryRef, VocabularyValidationError,
+    validate_vocabulary_collection, validate_vocabulary_entry,
+};
 use crate::vocabulary_matching::{CURRENT_VOCABULARY_MATCHING_VERSION, comparison_key};
 
 const COMBINING_CLASS_MAP: CanonicalCombiningClassMapBorrowed<'static> =
@@ -58,9 +63,93 @@ pub fn apply_vocabulary_post_correction(
 ) -> Result<String, VocabularyValidationError> {
     validate_vocabulary_entry(spoken, written)?;
 
-    let version = CURRENT_VOCABULARY_MATCHING_VERSION;
-    let spoken_key = comparison_key(spoken, version);
-    let spoken_key_scalars = spoken_key.chars().count();
+    let mappings = [PreparedMapping {
+        spoken_key: comparison_key(spoken, CURRENT_VOCABULARY_MATCHING_VERSION),
+        written,
+    }];
+
+    Ok(apply_prepared_mappings(text, &mappings))
+}
+
+/// Applies a complete vocabulary collection to the original text in one pass.
+///
+/// The entire collection is validated before the text is scanned. Entries use
+/// the same Unicode 18 D145 comparison keys and conservative word boundaries
+/// as [`apply_vocabulary_post_correction`]. Scanning proceeds left to right;
+/// at each original-text position the longest matching span wins, with entry
+/// order as a deterministic tie-breaker. Replacements never overlap, and
+/// inserted text is not scanned again. The written value is copied exactly;
+/// every unmatched byte in `text` remains unchanged.
+///
+/// An empty collection returns an owned copy of `text`. Collections may
+/// contain up to 500 entries, each using the existing 128-scalar field limit.
+/// Spoken phrases that share a canonical-caseless key are rejected before
+/// scanning.
+///
+/// # Errors
+///
+/// Returns [`VocabularyCollectionError`] when there are more than 500
+/// entries, any spoken or written field fails the existing vocabulary field
+/// validation, or spoken phrases conflict under Unicode 18 canonical-caseless
+/// matching. Error values identify indices and validation reasons without
+/// exposing vocabulary text.
+///
+/// # Examples
+///
+/// ```
+/// use outflow_core::vocabulary::{VocabularyEntryRef, VocabularyCollectionError};
+/// use outflow_core::vocabulary_post_correction::apply_vocabulary_post_corrections;
+///
+/// let entries = [
+///     VocabularyEntryRef { spoken: "rust", written: "Rust" },
+///     VocabularyEntryRef { spoken: "ubc", written: "UBC" },
+/// ];
+/// let corrected = apply_vocabulary_post_corrections("rust at ubc", &entries)?;
+/// assert_eq!(corrected, "Rust at UBC");
+/// # Ok::<(), VocabularyCollectionError>(())
+/// ```
+pub fn apply_vocabulary_post_corrections(
+    text: &str,
+    entries: &[VocabularyEntryRef<'_>],
+) -> Result<String, VocabularyCollectionError> {
+    validate_vocabulary_collection(entries)?;
+
+    if entries.is_empty() {
+        return Ok(text.to_owned());
+    }
+
+    let mappings = entries
+        .iter()
+        .map(|entry| PreparedMapping {
+            spoken_key: comparison_key(entry.spoken, CURRENT_VOCABULARY_MATCHING_VERSION),
+            written: entry.written,
+        })
+        .collect::<Vec<_>>();
+
+    Ok(apply_prepared_mappings(text, &mappings))
+}
+
+struct PreparedMapping<'a> {
+    spoken_key: String,
+    written: &'a str,
+}
+
+fn apply_prepared_mappings(text: &str, mappings: &[PreparedMapping<'_>]) -> String {
+    if mappings.is_empty() {
+        return text.to_owned();
+    }
+
+    let mut mapping_index_by_key = HashMap::<String, usize>::with_capacity(mappings.len());
+    let mut maximum_key_scalars = 0;
+    for (index, mapping) in mappings.iter().enumerate() {
+        maximum_key_scalars = maximum_key_scalars.max(mapping.spoken_key.chars().count());
+        // Keep the earliest entry if keys tie. Validated collections reject
+        // such duplicates, but retaining this rule makes the scanner's final
+        // tie-break deterministic if its input contract is reused internally.
+        mapping_index_by_key
+            .entry(mapping.spoken_key.clone())
+            .or_insert(index);
+    }
 
     let mut boundaries = text
         .char_indices()
@@ -80,28 +169,40 @@ pub fn apply_vocabulary_post_correction(
         }
 
         let mut end_index = start_index + 1;
-        let mut matched_end = None;
+        let mut longest_match: Option<(usize, usize, usize)> = None;
         while end_index < boundaries.len() {
             let end = boundaries[end_index];
-            let candidate_key = comparison_key(&text[start..end], version);
+            let candidate_key =
+                comparison_key(&text[start..end], CURRENT_VOCABULARY_MATCHING_VERSION);
 
-            if candidate_key == spoken_key && !has_word_character_after(text, end) {
-                matched_end = Some((end_index, end));
-                break;
+            if !has_word_character_after(text, end)
+                && let Some(&mapping_index) = mapping_index_by_key.get(candidate_key.as_str())
+            {
+                let should_replace =
+                    longest_match.is_none_or(|(_, matched_end, matched_mapping_index)| {
+                        let candidate_span_length = end - start;
+                        let matched_span_length = matched_end - start;
+                        candidate_span_length > matched_span_length
+                            || (candidate_span_length == matched_span_length
+                                && mapping_index < matched_mapping_index)
+                    });
+                if should_replace {
+                    longest_match = Some((end_index, end, mapping_index));
+                }
             }
 
             // Canonical decomposition and full case folding never remove
-            // scalars, so once this candidate exceeds the mapping key length,
-            // extending the span cannot produce an equal key.
-            if candidate_key.chars().count() > spoken_key_scalars {
+            // scalars, so extending a candidate beyond every mapping key
+            // cannot produce an equal key.
+            if candidate_key.chars().count() > maximum_key_scalars {
                 break;
             }
             end_index += 1;
         }
 
-        if let Some((matched_end_index, end)) = matched_end {
+        if let Some((matched_end_index, end, mapping_index)) = longest_match {
             output.push_str(&text[copied_until..start]);
-            output.push_str(written);
+            output.push_str(mappings[mapping_index].written);
             copied_until = end;
             start_index = matched_end_index;
         } else {
@@ -110,7 +211,7 @@ pub fn apply_vocabulary_post_correction(
     }
 
     output.push_str(&text[copied_until..]);
-    Ok(output)
+    output
 }
 
 fn has_word_character_before(text: &str, index: usize) -> bool {
@@ -189,8 +290,23 @@ fn is_invisible_format_control(character: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::apply_vocabulary_post_correction;
-    use crate::vocabulary::{VocabularyField, VocabularyValidationError};
+    use super::{apply_vocabulary_post_correction, apply_vocabulary_post_corrections};
+    use crate::vocabulary::{
+        MAX_VOCABULARY_ENTRIES, VocabularyCollectionError, VocabularyEntryRef, VocabularyField,
+        VocabularyValidationError,
+    };
+
+    fn correct_many(
+        text: &str,
+        entries: &[(&str, &str)],
+    ) -> Result<String, VocabularyCollectionError> {
+        let entries = entries
+            .iter()
+            .map(|&(spoken, written)| VocabularyEntryRef { spoken, written })
+            .collect::<Vec<_>>();
+
+        apply_vocabulary_post_corrections(text, &entries)
+    }
 
     fn correct(text: &str, spoken: &str, written: &str) -> String {
         apply_vocabulary_post_correction(text, spoken, written)
@@ -346,5 +462,228 @@ mod tests {
                 Ok(expected.clone())
             );
         }
+    }
+
+    #[test]
+    fn empty_vocabulary_returns_the_original_text() {
+        let input = "  cafe\u{301}\n東京 😀  ";
+
+        assert_eq!(correct_many(input, &[]), Ok(input.to_owned()));
+    }
+
+    #[test]
+    fn applies_one_mapping_from_a_collection() {
+        assert_eq!(
+            correct_many("rust works", &[("rust", "Rust")]),
+            Ok("Rust works".into())
+        );
+    }
+
+    #[test]
+    fn applies_multiple_independent_mappings_in_one_call() {
+        assert_eq!(
+            correct_many(
+                "rust at ubc beside north parkade",
+                &[
+                    ("north parkade", "North Parkade"),
+                    ("rust", "Rust"),
+                    ("ubc", "UBC")
+                ],
+            ),
+            Ok("Rust at UBC beside North Parkade".into())
+        );
+    }
+
+    #[test]
+    fn replaces_repeated_occurrences_for_each_mapping() {
+        assert_eq!(
+            correct_many("rust, RUST, then rust!", &[("rust", "Rust")]),
+            Ok("Rust, Rust, then Rust!".into())
+        );
+    }
+
+    #[test]
+    fn matches_multiword_expressions_and_preserves_their_separators() {
+        assert_eq!(
+            correct_many(
+                "  north PARKADE\nthen north parkade  ",
+                &[("north parkade", "North Parkade")],
+            ),
+            Ok("  North Parkade\nthen North Parkade  ".into())
+        );
+    }
+
+    #[test]
+    fn resolves_overlapping_phrases_from_the_leftmost_original_position() {
+        assert_eq!(
+            correct_many(
+                "new york city / york city",
+                &[("new york city", "NYC"), ("york city", "York City")],
+            ),
+            Ok("NYC / York City".into())
+        );
+    }
+
+    #[test]
+    fn longest_matching_phrase_wins_even_when_a_shorter_entry_comes_first() {
+        assert_eq!(
+            correct_many(
+                "new york today",
+                &[("new", "New"), ("new york", "New York")],
+            ),
+            Ok("New York today".into())
+        );
+    }
+
+    #[test]
+    fn inserted_replacement_text_is_not_processed_again() {
+        assert_eq!(
+            correct_many("rust", &[("rust", "ubc"), ("ubc", "UBC")]),
+            Ok("ubc".into())
+        );
+    }
+
+    #[test]
+    fn uses_unicode_full_case_folding_and_canonical_equivalence() {
+        assert_eq!(
+            correct_many(
+                "STRASSE and cafe\u{301}",
+                &[("straße", "Straße"), ("café", "Café")],
+            ),
+            Ok("Straße and Café".into())
+        );
+    }
+
+    #[test]
+    fn combining_marks_protect_complete_word_boundaries() {
+        let input = "cafe\u{301} x\u{301}rust";
+
+        assert_eq!(
+            correct_many(input, &[("cafe", "Café"), ("rust", "Rust")]),
+            Ok(input.into())
+        );
+    }
+
+    #[test]
+    fn preserves_emoji_japanese_and_unrelated_unicode_byte_for_byte() {
+        let input = "😀 rust 東京 — cafe\u{301} 🎉";
+        let expected = "😀 Rust 東京 — cafe\u{301} 🎉";
+
+        assert_eq!(
+            correct_many(input, &[("rust", "Rust")]),
+            Ok(expected.into())
+        );
+    }
+
+    #[test]
+    fn rejects_canonically_duplicate_spoken_phrases() {
+        assert_eq!(
+            correct_many("text", &[("Straße", "First"), ("STRASSE", "Second")]),
+            Err(VocabularyCollectionError::DuplicateSpoken {
+                first_index: 0,
+                duplicate_index: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn validates_the_whole_collection_before_scanning_text() {
+        assert_eq!(
+            correct_many("rust", &[("rust", "Rust"), ("PRIVATE SPOKEN", " \t")]),
+            Err(VocabularyCollectionError::InvalidEntry {
+                index: 1,
+                source: VocabularyValidationError::Empty(VocabularyField::Written),
+            })
+        );
+    }
+
+    #[test]
+    fn enforces_field_limits_and_the_500_entry_collection_limit() {
+        assert_eq!(
+            correct_many("text", &[(" \t", "Written")]),
+            Err(VocabularyCollectionError::InvalidEntry {
+                index: 0,
+                source: VocabularyValidationError::Empty(VocabularyField::Spoken),
+            })
+        );
+
+        assert_eq!(
+            correct_many("text", &[("spoken", &"w".repeat(129))]),
+            Err(VocabularyCollectionError::InvalidEntry {
+                index: 0,
+                source: VocabularyValidationError::TooLong(VocabularyField::Written),
+            })
+        );
+
+        let spoken_phrases = (0..=MAX_VOCABULARY_ENTRIES)
+            .map(|index| format!("term-{index}"))
+            .collect::<Vec<_>>();
+        let entries = spoken_phrases
+            .iter()
+            .map(|spoken| VocabularyEntryRef {
+                spoken,
+                written: "replacement",
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            apply_vocabulary_post_corrections("term-0", &entries),
+            Err(VocabularyCollectionError::TooManyEntries {
+                count: MAX_VOCABULARY_ENTRIES + 1,
+                maximum: MAX_VOCABULARY_ENTRIES,
+            })
+        );
+    }
+
+    #[test]
+    fn accepts_the_maximum_500_entries() {
+        let spoken_phrases = (0..MAX_VOCABULARY_ENTRIES)
+            .map(|index| format!("term-{index}"))
+            .collect::<Vec<_>>();
+        let entries = spoken_phrases
+            .iter()
+            .map(|spoken| VocabularyEntryRef {
+                spoken,
+                written: "replacement",
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            apply_vocabulary_post_corrections("TERM-499", &entries),
+            Ok("replacement".into())
+        );
+    }
+
+    #[test]
+    fn redacts_vocabulary_text_from_collection_errors() {
+        let secret_spoken = "PRIVATE-SPOKEN-SENTINEL";
+        let secret_written = "PRIVATE-WRITTEN-SENTINEL".repeat(12);
+        let result = correct_many("text", &[(secret_spoken, &secret_written)]);
+        let error = result.expect_err("overlong replacement must be rejected");
+        let error_text = error.to_string();
+        let error_debug = format!("{error:?}");
+
+        assert!(!error_text.contains(secret_spoken));
+        assert!(!error_text.contains(&secret_written));
+        assert!(!error_debug.contains(secret_spoken));
+        assert!(!error_debug.contains(&secret_written));
+    }
+
+    #[test]
+    fn multi_entry_calls_are_deterministic_and_do_not_mutate_input() {
+        let input = String::from("STRASSE; north PARKADE; rust; cafe\u{301} — 東京 😀");
+        let snapshot = input.clone();
+        let entries = [
+            ("straße", "Straße"),
+            ("north parkade", "North Parkade"),
+            ("rust", "Rust"),
+            ("café", "Café"),
+        ];
+        let expected = correct_many(&input, &entries).expect("test mappings should be valid");
+
+        for _ in 0..20 {
+            assert_eq!(correct_many(&input, &entries), Ok(expected.clone()));
+        }
+        assert_eq!(input, snapshot);
     }
 }

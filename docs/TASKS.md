@@ -67,6 +67,12 @@ This is one building block only. It does not implement multiple-entry precedence
 
 On macOS 26.6.2 arm64 with Rust 1.99.1, the requested example, format check, workspace check, all 384 workspace tests (including doctests), Clippy with warnings denied, workspace build, and `git diff --check` passed. No frontend source or dependency changed, so frontend checks were not rerun. Performance, recognition, and release metrics were not measured.
 
+### Native Rust multi-entry vocabulary post-correction — partial T-039 evidence (2026-11-04)
+
+`outflow-core::vocabulary_post_correction::apply_vocabulary_post_corrections` now validates a complete zero-to-500-entry collection before scanning the original text. It reuses Unicode 18 D145 canonical-caseless comparison and the existing conservative word-boundary policy. The scanner advances left to right, selects the longest valid original span at each start, and uses entry order as the stable tie-break. It skips overlaps, never scans inserted replacement text, copies each written value exactly, and preserves unmatched bytes. Seventeen focused tests cover empty/one/multiple mappings, repetition, multiword and overlapping phrases, longest precedence, non-cascading output, Unicode folding/canonical equivalence, combining-mark protection, unrelated Unicode, duplicate and invalid entries, the 500-entry limit, redacted errors, input immutability, and repeatability. The synthetic three-mapping example checks the requested output and separately demonstrates a non-cascading replacement.
+
+This is a partial T-039 building block only. It does not add Moonshine keyterm hints, punctuation/filler cleanup, persistent settings, or ASR/frontend integration. **T-035, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact verification commands and observed example output are recorded in [`evidence/T-039-multi-entry-vocabulary-post-correction.md`](../evidence/T-039-multi-entry-vocabulary-post-correction.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

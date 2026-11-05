@@ -243,7 +243,8 @@ crates/
 │       ├── vocabulary_matching_benchmark.rs
 │       ├── vocabulary_validation.rs
 │       ├── vocabulary_migration_check.rs
-│       └── vocabulary_post_correction.rs
+│       ├── vocabulary_post_correction.rs
+│       └── vocabulary_multi_post_correction.rs
 └── settings/
     ├── Cargo.toml
     ├── src/lib.rs
@@ -255,7 +256,7 @@ crates/
     └── examples/reset_settings.rs
 ```
 
-The `outflow-core` library provides vocabulary validation, Unicode comparison, migration inspection, and single-entry post-correction functions, plus a development-only status function. Run its foundation example from the project root:
+The `outflow-core` library provides vocabulary validation, Unicode comparison, migration inspection, single-entry and multi-entry post-correction functions, plus a development-only status function. Run its foundation example from the project root:
 
 ```sh
 cargo run -p outflow-core --example foundation
@@ -283,7 +284,7 @@ These are development checks only; the examples are not application runtime feat
 
 `outflow-core::vocabulary_post_correction::apply_vocabulary_post_correction` applies one spoken-to-written mapping per call. It reuses the existing field validation and Unicode 18 canonical-caseless comparison policy. Matches must occupy complete words or phrases; unmatched input bytes, punctuation, whitespace, line breaks, capitalization, and Unicode remain as supplied. Invalid empty, whitespace-only, or over-128-scalar mappings return a typed validation error.
 
-The function is deterministic and standalone. It does not access speech recognition, Moonshine, settings, files, the network, or the UI. Multiple vocabulary entries, keyterm hints, and integration into the full cleanup pipeline are outside this step.
+The function is deterministic and standalone. It does not access speech recognition, Moonshine, settings, files, the network, or the UI. The multi-entry API below applies a complete validated collection in one original-text pass; keyterm hints and integration into the full cleanup pipeline remain outside this step.
 
 Setup: install the repository's stable Rust toolchain with `rustfmt` and `clippy`, then run the commands below from the repository root. The example needs no microphone, speech model, browser, or service.
 
@@ -326,6 +327,57 @@ Troubleshooting:
 - **The example output differs:** confirm that the repository's locked dependencies are available and rerun with `--locked`; this example uses fixed synthetic strings and does not need a microphone, model, or network service.
 
 This is a partial development building block only. It does not complete T-035, T-038, T-039, AC-07, AC-08, or any release gate.
+
+### Native Rust multi-entry vocabulary post-correction
+
+`outflow-core::vocabulary_post_correction::apply_vocabulary_post_corrections` validates a collection of zero to 500 `VocabularyEntryRef` mappings before scanning the input. It reuses the existing 128-Unicode-scalar field validation, rejects canonical-caseless duplicate spoken phrases, and compares text with the pinned Unicode 18 D145 policy. The scan moves left to right through the original input. At the same start position the longest matching original-text span wins; remaining ties use vocabulary entry order. Matches cannot overlap, and replacement text is never scanned again during that call. Replacements are copied exactly and all unmatched text remains byte-for-byte unchanged.
+
+Run the synthetic three-mapping example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_multi_post_correction --locked
+```
+
+Expected output:
+
+```text
+Input:
+I visited north PARKADE.
+I use rust at ubc.
+The café serves 東京 tea 😀.
+Output:
+I visited North Parkade.
+I use Rust at UBC.
+The café serves 東京 tea 😀.
+Unrelated Unicode preserved: true
+Non-cascading input: rust
+Non-cascading output: ubc
+```
+
+The final two lines use separate synthetic mappings `rust` → `ubc` and `ubc` → `UBC`; the first replacement remains `ubc` because inserted text is not processed again. The accent in `café` is a decomposed `e` plus combining acute accent and is preserved, along with Japanese text and emoji.
+
+Run the workspace verification from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_multi_post_correction --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+```
+
+Troubleshooting and limitations:
+
+- **Collection rejected:** use no more than 500 entries. Each spoken and written value must contain non-whitespace text and fit within 128 Unicode scalar values. Errors identify the failing index and reason without printing vocabulary text.
+- **Duplicate spoken phrase rejected:** spoken keys use Unicode 18 canonical-caseless matching, so case-folded and canonically equivalent spellings conflict even when their bytes differ.
+- **A phrase did not match:** matching is exact apart from canonical-caseless comparison. It does not trim or collapse spaces; a doubled space in the input does not match a single space in the configured phrase. Complete-word boundaries also reject matches adjacent to letters, numbers, combining marks, and covered joiners/extenders.
+- **An overlap resolved unexpectedly:** the leftmost original-text start is handled first, and the longest valid span at that start wins. Later overlapping spans are skipped; replacement text is not searched again.
+- **A terminal renders the accent differently:** the example uses a decomposed accent. Tests check the exact string value so visual terminal normalization does not change the evidence.
+- **Unicode boundary behavior:** the existing conservative classifier is not a full Unicode word-break implementation. It avoids adding a separate word-break dependency and may treat scripts or uncommon format marks differently from a complete segmentation standard.
+
+This remains a partial T-039 building block. It does not implement Moonshine keyterm hints, the full punctuation/filler cleanup pipeline, settings persistence, or ASR/frontend integration. T-035, T-038, T-039, AC-07, AC-08, and all release gates remain open.
 
 ## Native Rust settings schema v1
 
