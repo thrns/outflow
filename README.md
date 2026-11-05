@@ -3680,7 +3680,7 @@ This is partial T-036 characterization only. **T-017, T-018, T-023, T-035, T-036
 
 ## Cleanup golden corpus — current-behavior baseline
 
-The synthetic golden fixtures are stored in [`crates/settings/tests/fixtures/cleanup_current_behavior.json`](crates/settings/tests/fixtures/cleanup_current_behavior.json). Each JSON object has required fields `id`, `category`, `input`, `mode`, `remove_fillers`, `commands_enabled`, `vocabulary`, and `expected`. `category` is one of `whitespace`, `commands`, `vocabulary`, `punctuation`, `fillers`, `modes`, `unicode`, or `safety`. `mode` is `clean` or `verbatim`. Each vocabulary item contains `spoken` and `written`. Unknown fields are rejected at both fixture and vocabulary-item level.
+The synthetic golden fixtures are stored in [`crates/settings/tests/fixtures/cleanup_current_behavior.json`](crates/settings/tests/fixtures/cleanup_current_behavior.json). Each JSON object has eight required fields: `id`, `category`, `input`, `mode`, `remove_fillers`, `commands_enabled`, `vocabulary`, and `expected`. The optional test-only `protected_tokens` field adds manually reviewed preservation assertions without adding fixtures or changing the required schema. Unannotated fixtures remain valid. Unknown fields are rejected at fixture, vocabulary-item, and protected-token levels.
 
 Example fixture object:
 
@@ -3697,6 +3697,25 @@ Example fixture object:
 }
 ```
 
+An annotated fixture can add selected protected tokens:
+
+```json
+{
+  "protected_tokens": [
+    {
+      "kind": "proper_noun",
+      "text": "Élodie",
+      "input_bytes": [0, 7],
+      "output_bytes": [0, 7]
+    }
+  ]
+}
+```
+
+`kind` is `number` or `proper_noun`. Both ranges are zero-based, half-open UTF-8 byte ranges `[start, end)`: the start byte is included and the end byte is excluded. They refer to separate strings, so punctuation cleanup can make the input and expected-output offsets differ. The checker applies the declared output range to both the independent `expected` string and the actual cleanup output. It uses the range directly and does not search for the token.
+
+To annotate a token, choose one exact occurrence from an existing fixture, copy its exact spelling and capitalization into `text`, and manually count UTF-8 bytes from the start of `input` and `expected`. For example, the year `2026` in `numeric-comma-grouping-and-year-preserved` uses `kind: number` and `[31, 35]` for both ranges. Check both ranges against their own strings; a multibyte character occupies more than one byte. Use distinct, non-overlapping ranges for multiple annotations in a fixture. Do not annotate text intentionally rewritten by a configured vocabulary entry; vocabulary-written replacements have separate provenance tests. The metadata is test-only and does not alter persisted settings or production cleanup behavior.
+
 To add a fixture, append a synthetic case with a unique descriptive ID and an allowed category. Review the existing Rust stage order and behavior, then write the complete expected string explicitly. Do not produce or regenerate expectations by running cleanup and copying its output. Keep punctuation and Unicode code points exactly as reviewed. If current behavior or the unresolved Verbatim policy changes, review each affected expectation as a deliberate baseline change.
 
 Run the focused corpus test and its expected visible summary from the repository root:
@@ -3712,8 +3731,12 @@ After all 72 cases pass, the test prints:
 ```text
 Cleanup golden corpus: 72 fixtures passed
 Categories covered: 8
+Protected numeric tokens: 8 (0 altered)
+Protected proper nouns: 8 (0 altered)
 Current behavior baseline: true
 ```
+
+The current annotations are selected examples, not a universal guarantee that every number or proper noun will be preserved in arbitrary speech. They are additional checks on top of full exact-output comparisons; they do not expand the 72-case corpus or complete AC-07.
 
 Run the focused corpus and Clean/Verbatim contract tests, then the requested workspace checks from the repository root:
 
@@ -3734,6 +3757,9 @@ Troubleshooting:
 
 - **JSON or schema error:** check commas and quoting, keep the top-level value an array, include every required field, use an allowed category and mode, and remove unknown fields. Each vocabulary object needs both `spoken` and `written`.
 - **Fixture vocabulary is rejected:** use nonempty valid spoken and written phrases and avoid duplicate spoken phrases under the existing matching policy.
+- **Protected range is out of bounds or selects the wrong text:** recount bytes from the beginning of the exact input or expected-output UTF-8 string. The end offset is exclusive; do not reuse an input range when cleanup changes the preceding byte count.
+- **Range splits a Unicode character:** UTF-8 ranges must begin and end at character boundaries. Count the encoded bytes, not displayed characters; for example, `É` uses two UTF-8 bytes.
+- **Protected token was altered or does not match its declared spelling:** compare the range-selected input, expected-output, and actual-output slices byte-for-byte. Preserve capitalization and Unicode composition exactly; do not normalize or copy a replacement produced by vocabulary mapping.
 - **Expected output mismatch:** inspect the named fixture ID and category against the current ordered stages. Correct the explicitly reviewed expected value only when evidence shows the baseline value is wrong; do not silently regenerate it from the implementation.
 - **A period after a year or other numeric token stays spaced:** the current rule trims punctuation spacing only when the preceding character is alphabetic and its adjacent alphanumeric token contains no number. The `numeric-comma-grouping-and-year-preserved` fixture records the observed `2026 .` output; preserve the numeric token and document any proposed behavior change separately.
 - **A policy change is proposed:** the corpus records current behavior. Review affected expectations alongside an approved product decision; the recommendation in [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md) remains **PROPOSED — NOT APPROVED**.

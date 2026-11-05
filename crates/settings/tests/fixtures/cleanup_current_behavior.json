@@ -128,7 +128,15 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "Version 3 . 14 is ready."
+    "expected": "Version 3 . 14 is ready.",
+    "protected_tokens": [
+      {
+        "kind": "number",
+        "text": "3 . 14",
+        "input_bytes": [8, 14],
+        "output_bytes": [8, 14]
+      }
+    ]
   },
   {
     "id": "ambiguous-punctuation-before-quote",
@@ -218,7 +226,15 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "Dr. Élodie met NASA."
+    "expected": "Dr. Élodie met NASA.",
+    "protected_tokens": [
+      {
+        "kind": "proper_noun",
+        "text": "Élodie",
+        "input_bytes": [5, 12],
+        "output_bytes": [4, 11]
+      }
+    ]
   },
   {
     "id": "sentence-internal-filler-preserved",
@@ -268,7 +284,21 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "The 1,234,567 units shipped in 2026 ."
+    "expected": "The 1,234,567 units shipped in 2026 .",
+    "protected_tokens": [
+      {
+        "kind": "number",
+        "text": "1,234,567",
+        "input_bytes": [4, 13],
+        "output_bytes": [4, 13]
+      },
+      {
+        "kind": "number",
+        "text": "2026",
+        "input_bytes": [31, 35],
+        "output_bytes": [31, 35]
+      }
+    ]
   },
   {
     "id": "numeric-version-like-string-preserved",
@@ -278,7 +308,15 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "Build v2 . 8 . 1 is stable."
+    "expected": "Build v2 . 8 . 1 is stable.",
+    "protected_tokens": [
+      {
+        "kind": "number",
+        "text": "v2 . 8 . 1",
+        "input_bytes": [6, 16],
+        "output_bytes": [6, 16]
+      }
+    ]
   },
   {
     "id": "numeric-alphanumeric-identifiers-preserved",
@@ -288,7 +326,21 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "IDs A7B-42 and ZX9 are ready."
+    "expected": "IDs A7B-42 and ZX9 are ready.",
+    "protected_tokens": [
+      {
+        "kind": "number",
+        "text": "A7B-42",
+        "input_bytes": [4, 10],
+        "output_bytes": [4, 10]
+      },
+      {
+        "kind": "number",
+        "text": "ZX9",
+        "input_bytes": [15, 18],
+        "output_bytes": [15, 18]
+      }
+    ]
   },
   {
     "id": "numeric-multiple-tokens-preserved-in-sentence",
@@ -298,7 +350,21 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "At 9 . 30 on 2026-11-05, room 204 is ready."
+    "expected": "At 9 . 30 on 2026-11-05, room 204 is ready.",
+    "protected_tokens": [
+      {
+        "kind": "number",
+        "text": "9 . 30",
+        "input_bytes": [3, 9],
+        "output_bytes": [3, 9]
+      },
+      {
+        "kind": "number",
+        "text": "2026-11-05",
+        "input_bytes": [13, 23],
+        "output_bytes": [13, 23]
+      }
+    ]
   },
   {
     "id": "numeric-content-with-eligible-surrounding-punctuation",
@@ -318,7 +384,15 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "Élodie said hello."
+    "expected": "Élodie said hello.",
+    "protected_tokens": [
+      {
+        "kind": "proper_noun",
+        "text": "Élodie",
+        "input_bytes": [0, 7],
+        "output_bytes": [0, 7]
+      }
+    ]
   },
   {
     "id": "proper-noun-multiword-place-preserved",
@@ -328,7 +402,15 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "I visited North Parkade yesterday."
+    "expected": "I visited North Parkade yesterday.",
+    "protected_tokens": [
+      {
+        "kind": "proper_noun",
+        "text": "North Parkade",
+        "input_bytes": [10, 23],
+        "output_bytes": [10, 23]
+      }
+    ]
   },
   {
     "id": "proper-noun-uppercase-acronym-preserved",
@@ -338,7 +420,15 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "NASA sent Artemis to Mars."
+    "expected": "NASA sent Artemis to Mars.",
+    "protected_tokens": [
+      {
+        "kind": "proper_noun",
+        "text": "NASA",
+        "input_bytes": [0, 4],
+        "output_bytes": [0, 4]
+      }
+    ]
   },
   {
     "id": "proper-noun-abbreviation-period-spacing-corrected",
@@ -358,7 +448,21 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "Maya met NASA in Montréal."
+    "expected": "Maya met NASA in Montréal.",
+    "protected_tokens": [
+      {
+        "kind": "proper_noun",
+        "text": "Maya",
+        "input_bytes": [0, 4],
+        "output_bytes": [0, 4]
+      },
+      {
+        "kind": "proper_noun",
+        "text": "Montréal",
+        "input_bytes": [17, 26],
+        "output_bytes": [17, 26]
+      }
+    ]
   },
   {
     "id": "proper-nouns-beside-eligible-punctuation-spacing",
@@ -368,7 +472,15 @@
     "remove_fillers": false,
     "commands_enabled": false,
     "vocabulary": [],
-    "expected": "Visit UBC, Vancouver."
+    "expected": "Visit UBC, Vancouver.",
+    "protected_tokens": [
+      {
+        "kind": "proper_noun",
+        "text": "UBC",
+        "input_bytes": [6, 9],
+        "output_bytes": [6, 9]
+      }
+    ]
   },
   {
     "id": "unicode-precomposed-accent-preserved",
@@ -382,6 +494,14 @@
   },
   {
     "id": "unicode-decomposed-accent-preserved",
+    "protected_tokens": [
+      {
+        "kind": "proper_noun",
+        "text": "Zoë",
+        "input_bytes": [14, 18],
+        "output_bytes": [14, 18]
+      }
+    ],
     "category": "unicode",
     "input": "Cafe\u0301 joined Zoë .",
     "mode": "clean",
