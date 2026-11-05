@@ -3293,3 +3293,45 @@ Troubleshooting:
 - **Ordinary speech becomes a line break:** exact phrases can be literal spoken content. This initial feature is opt-in and uses exact phrase matching, not a semantic intent classifier.
 
 This is only the whitespace, command, and existing vocabulary slice. Punctuation/capitalization cleanup, Clean/Verbatim filler handling, ASR/settings integration, and the full T-035 golden corpus are not implemented. T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked. See [`evidence/T-035-dictation-commands.md`](evidence/T-035-dictation-commands.md) for exact environment, commands, results, and limitations.
+
+## Native Rust punctuation spacing (partial T-035)
+
+The standalone `outflow_core::text_cleanup::normalize_punctuation_spacing(input)` function removes ASCII spaces and tabs before `, . ! ? ; :` only when the previous non-whitespace character is alphabetic, the mark is followed by whitespace or the end of input, and the adjacent alphanumeric token contains no number. It leaves ambiguous spaced punctuation and quote sequences unchanged. It preserves all punctuation, words, capitalization, numeric content, Unicode, emoji, and line/paragraph breaks. It does not add punctuation or spacing after punctuation and does not perform complete punctuation restoration.
+
+This stage is intentionally not connected to the existing cleanup composition. Future integration must run punctuation spacing after vocabulary correction and add explicit tests for its effect on written replacements.
+
+Run the synthetic example from the repository root after installing the Rust toolchain described under [Prerequisites](#prerequisites):
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example text_punctuation_spacing --locked
+```
+
+The example prints input and output with Rust debug formatting, checks the exact expected result, and checks idempotence. Its output is:
+
+```text
+Before: "Hello , world !\nI visited north parkade .\nThe café , 東京 tea 😀 .\nVersion 3 . 14 remains unchanged."
+After: "Hello, world!\nI visited north parkade.\nThe café, 東京 tea 😀 .\nVersion 3 . 14 remains unchanged."
+```
+
+Run the focused fixtures and workspace checks from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core punctuation_spacing --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+```
+
+Troubleshooting:
+
+- **A space remains before punctuation:** only ASCII spaces and tabs are candidates. The function also preserves spacing before marks preceded by a number, emoji, combining mark, or non-alphabetic character.
+- **A decimal, date, or version remains spaced:** numeric-adjacent punctuation is intentionally protected.
+- **A spaced punctuation or quote sequence remains unchanged:** ambiguous sequences are preserved rather than guessed.
+- **The space before a period after emoji remains:** emoji are not alphabetic, so that case is outside the rule.
+- **The example output changes after editing:** inspect that only the six supported marks are normalized; punctuation insertion, capitalization, and post-punctuation spacing are not implemented here.
+- **Cargo reports a toolchain or lock issue:** run from the repository root with the stable toolchain and tracked lockfile; this stage adds no dependency.
+
+This is another partial T-035 building block. It does not change the existing whitespace/command/vocabulary APIs or pipeline, and does not complete T-035, T-036, T-038, T-039, AC-07, AC-08, or any release gate. See [`evidence/T-035-punctuation-spacing.md`](evidence/T-035-punctuation-spacing.md) for exact implementation, verification, and limitations.

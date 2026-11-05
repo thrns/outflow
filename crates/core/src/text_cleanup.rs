@@ -76,6 +76,131 @@ pub fn normalize_transcript_whitespace(input: &str) -> String {
     output
 }
 
+/// Removes obvious ASCII spaces and tabs before supported punctuation marks.
+///
+/// The supported marks are `, . ! ? ; :`. A horizontal ASCII whitespace run
+/// is removed only when the preceding non-whitespace character is Unicode
+/// alphabetic, the mark is followed by whitespace or the end of input, and
+/// the adjacent alphanumeric token contains no numeric character. Spaced
+/// punctuation or quote sequences are left unchanged as ambiguous. The
+/// function preserves all words, marks, capitalization, numbers, Unicode
+/// characters, emoji, and existing line and paragraph breaks. It never adds
+/// or changes punctuation or inserts spacing after punctuation.
+///
+/// This intentionally narrow rule is a standalone partial FR-07.1 / FR-07.3
+/// stage; it is not complete punctuation restoration and is not yet part of
+/// [`normalize_whitespace_commands_and_apply_vocabulary`]. A future pipeline
+/// must run it after vocabulary correction and test the effect on written
+/// replacements before integration.
+///
+/// The scan is deterministic, idempotent, and linear-time. It reads but does
+/// not modify the input and uses no global state.
+///
+/// # Examples
+///
+/// ```
+/// use outflow_core::text_cleanup::normalize_punctuation_spacing;
+///
+/// assert_eq!(normalize_punctuation_spacing("Hello , world !"), "Hello, world!");
+/// assert_eq!(normalize_punctuation_spacing("Version 3 . 14"), "Version 3 . 14");
+/// ```
+pub fn normalize_punctuation_spacing(input: &str) -> String {
+    let characters: Vec<char> = input.chars().collect();
+    let mut output = String::with_capacity(input.len());
+    let mut index = 0;
+
+    while index < characters.len() {
+        if is_horizontal_ascii_whitespace(characters[index]) {
+            let whitespace_start = index;
+            while characters
+                .get(index)
+                .is_some_and(|character| is_horizontal_ascii_whitespace(*character))
+            {
+                index += 1;
+            }
+
+            if !should_remove_punctuation_spacing(&characters, whitespace_start, index) {
+                output.extend(characters[whitespace_start..index].iter().copied());
+            }
+        } else {
+            output.push(characters[index]);
+            index += 1;
+        }
+    }
+
+    output
+}
+
+fn should_remove_punctuation_spacing(
+    characters: &[char],
+    whitespace_start: usize,
+    mark_index: usize,
+) -> bool {
+    let Some(&mark) = characters.get(mark_index) else {
+        return false;
+    };
+    if !is_supported_punctuation(mark)
+        || !characters
+            .get(mark_index + 1)
+            .is_none_or(|character| character.is_whitespace())
+    {
+        return false;
+    }
+
+    let Some(preceding_index) = whitespace_start.checked_sub(1) else {
+        return false;
+    };
+    if !characters[preceding_index].is_alphabetic()
+        || adjacent_alphanumeric_token_contains_number(characters, preceding_index)
+        || is_ambiguous_punctuation_sequence(characters, mark_index)
+    {
+        return false;
+    }
+
+    true
+}
+
+fn adjacent_alphanumeric_token_contains_number(characters: &[char], end: usize) -> bool {
+    let mut start = end;
+    while start > 0 && characters[start - 1].is_alphanumeric() {
+        start -= 1;
+    }
+
+    characters[start..=end]
+        .iter()
+        .any(|character| character.is_numeric())
+}
+
+fn is_ambiguous_punctuation_sequence(characters: &[char], mark_index: usize) -> bool {
+    let mut following_index = mark_index + 1;
+    while characters
+        .get(following_index)
+        .is_some_and(|character| is_horizontal_ascii_whitespace(*character))
+    {
+        following_index += 1;
+    }
+
+    characters
+        .get(following_index)
+        .is_some_and(|character| is_ambiguous_punctuation_delimiter(*character))
+}
+
+fn is_horizontal_ascii_whitespace(character: char) -> bool {
+    matches!(character, ' ' | '\t')
+}
+
+fn is_supported_punctuation(character: char) -> bool {
+    matches!(character, ',' | '.' | '!' | '?' | ';' | ':')
+}
+
+fn is_ambiguous_punctuation_delimiter(character: char) -> bool {
+    character.is_ascii_punctuation()
+        || matches!(
+            character,
+            '…' | '“' | '”' | '‘' | '’' | '«' | '»' | '‹' | '›'
+        )
+}
+
 /// Converts recognized `new line` and `new paragraph` phrases into line breaks.
 ///
 /// Matching is ASCII case-insensitive. A phrase must use exactly one ASCII
@@ -237,7 +362,7 @@ pub fn normalize_whitespace_and_apply_vocabulary(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_dictation_commands, normalize_transcript_whitespace,
+        apply_dictation_commands, normalize_punctuation_spacing, normalize_transcript_whitespace,
         normalize_whitespace_and_apply_vocabulary,
         normalize_whitespace_commands_and_apply_vocabulary,
     };
@@ -251,6 +376,197 @@ mod tests {
             .iter()
             .map(|&(spoken, written)| VocabularyEntryRef { spoken, written })
             .collect()
+    }
+
+    #[test]
+    fn normalizes_punctuation_spacing_exact_output_fixtures() {
+        let fixtures = [
+            ("empty input", "", ""),
+            ("plain text", "hello world", "hello world"),
+            ("already correct", "Hello, world!", "Hello, world!"),
+            ("comma", "Hello ,", "Hello,"),
+            ("period", "Hello .", "Hello."),
+            ("exclamation", "Hello !", "Hello!"),
+            ("question", "Ready ?", "Ready?"),
+            ("semicolon", "Wait ;", "Wait;"),
+            ("colon", "Note :", "Note:"),
+            ("repeated spaces", "Hello   , world", "Hello, world"),
+            ("repeated tabs", "Hello\t\t!", "Hello!"),
+            ("mixed horizontal whitespace", "Hello \t ?", "Hello?"),
+            (
+                "multiple fixes",
+                "Hello , world ! Are you ready ?",
+                "Hello, world! Are you ready?",
+            ),
+            (
+                "supported punctuation stays unchanged",
+                "a,b.c!d?e;f:g",
+                "a,b.c!d?e;f:g",
+            ),
+            ("period ellipsis", "Hello... world", "Hello... world"),
+            (
+                "spaced ellipsis is ambiguous",
+                "Hello . . . world",
+                "Hello . . . world",
+            ),
+            (
+                "spaced punctuation pair",
+                "Hello , ; world",
+                "Hello , ; world",
+            ),
+            ("spaced question pair", "Hello ! ? world", "Hello ! ? world"),
+            ("decimal", "3 . 14", "3 . 14"),
+            ("year-like numbers", "2026 , 2027", "2026 , 2027"),
+            ("tabbed year-like numbers", "2026\t,\t2027", "2026\t,\t2027"),
+            ("date", "2026-11-04", "2026-11-04"),
+            ("spaced date", "2026 - 11 - 04", "2026 - 11 - 04"),
+            (
+                "version",
+                "Version 3 . 14 remains unchanged.",
+                "Version 3 . 14 remains unchanged.",
+            ),
+            ("version token", "v1 . 2", "v1 . 2"),
+            (
+                "number inside alphanumeric token",
+                "v1beta , release",
+                "v1beta , release",
+            ),
+            ("number in word token", "alpha2 , beta", "alpha2 , beta"),
+            ("numeric token punctuation", "1 . 2 . 3", "1 . 2 . 3"),
+            ("abbreviation punctuation", "e.g. , value", "e.g. , value"),
+            (
+                "abbreviation in sentence",
+                "Dr. Smith , said",
+                "Dr. Smith, said",
+            ),
+            (
+                "proper noun capitalization",
+                "North Parkade , UBC",
+                "North Parkade, UBC",
+            ),
+            (
+                "Unicode precomposed letters",
+                "café , 東京 !",
+                "café, 東京!",
+            ),
+            ("Japanese letters", "東京 , 世界 !", "東京, 世界!"),
+            ("Greek letters", "γειά , κόσμε !", "γειά, κόσμε!"),
+            (
+                "combining mark remains",
+                "cafe\u{301} , word",
+                "cafe\u{301} , word",
+            ),
+            (
+                "combining mark with punctuation",
+                "e\u{301} ,",
+                "e\u{301} ,",
+            ),
+            ("emoji before punctuation", "Hello 😀 ,", "Hello 😀 ,"),
+            ("emoji after punctuation", "Hello , 😀", "Hello, 😀"),
+            ("quote closes punctuation", "“Hello ,”", "“Hello ,”"),
+            ("spaced quote is ambiguous", "“Hello , ”", "“Hello , ”"),
+            ("quoted phrase comma", "“Hello , world”", "“Hello, world”"),
+            (
+                "parenthesis after mark is ambiguous",
+                "Hello , )",
+                "Hello , )",
+            ),
+            (
+                "space before punctuation and newline",
+                "Hello ,\nworld !",
+                "Hello,\nworld!",
+            ),
+            (
+                "paragraph break retained",
+                "Hello ,\n\nworld .",
+                "Hello,\n\nworld.",
+            ),
+            (
+                "multiple paragraph breaks retained",
+                "first ,\n\n\nlast !",
+                "first,\n\n\nlast!",
+            ),
+            ("CRLF retained", "Hello ,\r\nworld !", "Hello,\r\nworld!"),
+            (
+                "newline before mark blocks edit",
+                "Hello \n, world",
+                "Hello \n, world",
+            ),
+            (
+                "spaces after mark are preserved",
+                "Hello ,  world",
+                "Hello,  world",
+            ),
+            (
+                "unrelated leading and trailing spaces",
+                "  Hello ,  ",
+                "  Hello,  ",
+            ),
+            (
+                "unrelated tabs are preserved",
+                "\tHello ,\tworld",
+                "\tHello,\tworld",
+            ),
+            (
+                "nonbreaking space is preserved",
+                "Hello\u{a0} , world",
+                "Hello\u{a0} , world",
+            ),
+            (
+                "em space is preserved",
+                "Hello \u{2003}, world",
+                "Hello \u{2003}, world",
+            ),
+            (
+                "non-ASCII whitespace before mark",
+                "Hello\u{a0},",
+                "Hello\u{a0},",
+            ),
+            ("punctuation followed by mark", "Hello ,\t?", "Hello ,\t?"),
+            ("punctuation followed by period", "Hello , .", "Hello , ."),
+            ("punctuation followed by quote", "Hello , \"", "Hello , \""),
+            ("newline separates punctuation", "Hello ,\n?", "Hello,\n?"),
+            (
+                "unsupported dash unchanged",
+                "Hello - world",
+                "Hello - world",
+            ),
+            ("punctuation only", ", . ! ? ; :", ", . ! ? ; :"),
+            ("punctuation at start", " , hello", " , hello"),
+            ("punctuation adjacent to number", "abc 2 ,", "abc 2 ,"),
+            (
+                "combining text elsewhere stays exact",
+                "e\u{301} 😀  東京 ,",
+                "e\u{301} 😀  東京,",
+            ),
+        ];
+
+        assert_eq!(fixtures.len(), 62);
+        for (name, input, expected) in fixtures {
+            let actual = normalize_punctuation_spacing(input);
+            assert_eq!(actual, expected, "fixture: {name}");
+            assert_eq!(
+                normalize_punctuation_spacing(&actual),
+                actual,
+                "idempotence fixture: {name}"
+            );
+            assert_eq!(
+                normalize_punctuation_spacing(input),
+                actual,
+                "determinism fixture: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn punctuation_spacing_does_not_modify_original_input() {
+        let original = String::from("Hello , café 😀\nVersion 3 . 14");
+        let snapshot = original.clone();
+
+        let output = normalize_punctuation_spacing(&original);
+
+        assert_eq!(output, "Hello, café 😀\nVersion 3 . 14");
+        assert_eq!(original, snapshot);
     }
 
     #[test]

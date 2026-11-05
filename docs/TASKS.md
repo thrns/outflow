@@ -97,6 +97,14 @@ On macOS Darwin 25.6.0 arm64 with Rust 1.99.1, the example, formatting check, wo
 
 This is a partial T-035 building block only. Exact command and workspace validation results, observed example output, environment, and remaining limitations are recorded in [`evidence/T-035-dictation-commands.md`](../evidence/T-035-dictation-commands.md). T-023 remains unmet, and punctuation/capitalization cleanup, Clean/Verbatim filler policy, full golden-corpus acceptance, and application integration remain open. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.**
 
+### Native Rust punctuation spacing — partial T-035 evidence (2026-11-04)
+
+`outflow_core::text_cleanup::normalize_punctuation_spacing` is a standalone deterministic stage that removes ASCII spaces/tabs before the six supported punctuation marks only when the prior non-whitespace character is alphabetic, the mark is followed by whitespace or input end, and the adjacent alphanumeric token contains no numeric character. It preserves ambiguous punctuation/quote sequences, punctuation marks, words, numbers, Unicode, emoji, and line breaks. It does not insert punctuation, add post-punctuation spacing, or implement complete punctuation restoration. The stage is not integrated into the existing whitespace/command/vocabulary composition.
+
+The exact-output table has 62 fixtures covering all six marks, already-correct text, repeated spaces/tabs, multiple edits, numeric/date/version protection, abbreviations and ellipses, quoted/ambiguous punctuation, line and paragraph breaks, Unicode letters and combining marks, Japanese, emoji, untouched whitespace, idempotence, deterministic calls, and original-input preservation. The synthetic example asserts the requested four-line output and idempotence.
+
+This remains a partial T-035 building block. Punctuation spacing is not yet ordered after vocabulary correction in the existing pipeline; written-replacement interactions need explicit tests and policy review before integration. **T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands and results are recorded in [`evidence/T-035-punctuation-spacing.md`](../evidence/T-035-punctuation-spacing.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid
