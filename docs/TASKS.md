@@ -59,6 +59,14 @@ This is a partial implementation only. CRUD does not persist production settings
 
 The implementation and example are in `crates/settings/src/vocabulary_crud.rs` and `crates/settings/examples/vocabulary_crud.rs`. Final Rust verification passed: formatting check, workspace check, all 367 workspace tests, Clippy with warnings denied, and workspace build. Frontend verification passed with typecheck, 160 tests across 11 files, lint, and production build; no frontend source changed. The current macOS inventory is documented as an 18 GB development machine, not the required physical 4 GB release reference. No app performance or release metric was measured.
 
+### Native Rust vocabulary post-correction — partial T-039 evidence (2026-11-04)
+
+`outflow-core::vocabulary_post_correction::apply_vocabulary_post_correction` now validates one spoken/written mapping with the existing vocabulary validator, then replaces complete case-insensitive phrase occurrences using the existing Unicode 18 canonical-caseless comparison key. It preserves replacement spelling exactly and copies all unmatched input bytes unchanged. Matching stays inside the pure Rust core and requires no added dependency, browser, Moonshine, settings, filesystem, or network access. Sixteen focused unit tests cover phrase and repeated replacement, punctuation and whitespace, larger-word rejection, contractions, accented and canonically equivalent text, combining-mark boundaries (including the `cafe` + combining-accent regression), non-ASCII letters, emoji, invalid mappings, input immutability, and determinism. A synthetic example demonstrates correction while retaining decomposed-accent text, Japanese text, and emoji.
+
+This is one building block only. It does not implement multiple-entry precedence, keyterm hints, the complete cleanup pipeline, or settings/ASR integration. **T-039 remains unchecked** because its listed prerequisites and full requirements are not met. T-035, T-038, T-039, AC-07, AC-08, and all release gates remain incomplete. Exact evidence is in [`evidence/T-039-native-vocabulary-post-correction.md`](../evidence/T-039-native-vocabulary-post-correction.md).
+
+On macOS 26.6.2 arm64 with Rust 1.99.1, the requested example, format check, workspace check, all 384 workspace tests (including doctests), Clippy with warnings denied, workspace build, and `git diff --check` passed. No frontend source or dependency changed, so frontend checks were not rerun. Performance, recognition, and release metrics were not measured.
+
 ## 1. Milestone map / critical path
 
 ```mermaid

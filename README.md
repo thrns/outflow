@@ -224,7 +224,7 @@ Troubleshooting:
 
 ## Rust workspace foundation
 
-The Cargo workspace is separate from the React/Vite app. `outflow-core` remains dependency-free; `outflow-settings` uses pinned Serde and `serde_json` dependencies for schema v1 JSON:
+The Cargo workspace is separate from the React/Vite app. `outflow-core` uses pinned ICU4X dependencies for Unicode 18 vocabulary matching; `outflow-settings` uses pinned Serde and `serde_json` dependencies for schema v1 JSON:
 
 ```text
 Cargo.toml
@@ -232,8 +232,18 @@ rust-toolchain.toml
 crates/
 ├── core/
 │   ├── Cargo.toml
-│   ├── src/lib.rs
-│   └── examples/foundation.rs
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── vocabulary.rs
+│   │   ├── vocabulary_matching.rs
+│   │   ├── vocabulary_migration.rs
+│   │   └── vocabulary_post_correction.rs
+│   └── examples/
+│       ├── foundation.rs
+│       ├── vocabulary_matching_benchmark.rs
+│       ├── vocabulary_validation.rs
+│       ├── vocabulary_migration_check.rs
+│       └── vocabulary_post_correction.rs
 └── settings/
     ├── Cargo.toml
     ├── src/lib.rs
@@ -245,7 +255,7 @@ crates/
     └── examples/reset_settings.rs
 ```
 
-The `outflow-core` library currently provides a development-only status function. Run its example from the project root:
+The `outflow-core` library provides vocabulary validation, Unicode comparison, migration inspection, and single-entry post-correction functions, plus a development-only status function. Run its foundation example from the project root:
 
 ```sh
 cargo run -p outflow-core --example foundation
@@ -268,6 +278,54 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
 
 These are development checks only; the examples are not application runtime features. No Tauri windows, automatic settings recovery, microphone capture, or dictation behavior is part of this Rust foundation.
+
+### Native vocabulary post-correction
+
+`outflow-core::vocabulary_post_correction::apply_vocabulary_post_correction` applies one spoken-to-written mapping per call. It reuses the existing field validation and Unicode 18 canonical-caseless comparison policy. Matches must occupy complete words or phrases; unmatched input bytes, punctuation, whitespace, line breaks, capitalization, and Unicode remain as supplied. Invalid empty, whitespace-only, or over-128-scalar mappings return a typed validation error.
+
+The function is deterministic and standalone. It does not access speech recognition, Moonshine, settings, files, the network, or the UI. Multiple vocabulary entries, keyterm hints, and integration into the full cleanup pipeline are outside this step.
+
+Setup: install the repository's stable Rust toolchain with `rustfmt` and `clippy`, then run the commands below from the repository root. The example needs no microphone, speech model, browser, or service.
+
+Run the synthetic example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -p outflow-core --example vocabulary_post_correction --locked
+```
+
+Expected output:
+
+```text
+Input: I visited north PARKADE today.
+The café serves 東京 tea 😀.
+Output: I visited North Parkade today.
+The café serves 東京 tea 😀.
+Unrelated Unicode preserved: true
+```
+
+The accent in `café` is represented by `e` followed by a combining acute accent; the example keeps it byte-for-byte while correcting only the synthetic `north parkade` phrase.
+
+Run the core tests or all workspace checks from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core --locked
+RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings
+RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked
+git diff --check
+```
+
+Troubleshooting:
+
+- **`rustup` cannot find the stable toolchain or a component:** install the stable Rust toolchain with `rustfmt` and `clippy`, then rerun from the repository root.
+- **A validation error is returned:** spoken and written phrases must each be nonempty, contain non-whitespace content, and be no longer than 128 Unicode scalar values. The error identifies the field and reason without echoing phrase content.
+- **A larger word is left unchanged:** this is intentional boundary protection. The function will not replace `rust` in `crust`, `rusty`, or a phrase adjacent to letters, numbers, combining marks, or common word joiners.
+- **Accented text looks unchanged in a terminal:** composed and decomposed accents may render identically. The tests also verify exact Rust string values, including the combining-accent regression.
+- **The example output differs:** confirm that the repository's locked dependencies are available and rerun with `--locked`; this example uses fixed synthetic strings and does not need a microphone, model, or network service.
+
+This is a partial development building block only. It does not complete T-035, T-038, T-039, AC-07, AC-08, or any release gate.
 
 ## Native Rust settings schema v1
 

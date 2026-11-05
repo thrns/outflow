@@ -10,6 +10,8 @@ pub mod vocabulary;
 pub mod vocabulary_matching;
 /// Read-only compatibility inspection before adopting a newer vocabulary policy.
 pub mod vocabulary_migration;
+/// Pure, boundary-aware correction for one vocabulary mapping.
+pub mod vocabulary_post_correction;
 
 /// Returns a development-only status message for the foundation smoke test.
 pub const fn foundation_status() -> &'static str {
