@@ -14,7 +14,7 @@ commands:
   - {command: 'RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked', result: PASS, notes: '425 tests passed: 147 core unit, 113 settings unit, 160 settings integration, and 5 doctests; zero failures.'}
   - {command: 'RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --locked -- -D warnings', result: PASS, notes: 'No warnings.'}
   - {command: 'RUSTUP_TOOLCHAIN=stable cargo build --workspace --locked', result: PASS, notes: 'Workspace build completed.'}
-  - {command: 'git diff --check', result: PASS, notes: 'No whitespace errors in the final unstaged documentation/evidence changes.'}
+  - {command: 'git diff --check', result: PASS, notes: 'No whitespace errors in the then-unstaged README.md and docs/TASKS.md changes.'}
   - {command: 'git diff --cached --check', result: PASS, notes: 'No whitespace errors in the staged task documentation/evidence commit.'}
 metrics: NOT_MEASURED; no recognition, latency, memory, installed-size, battery, or release measurements were in scope
 doc_updates: README.md setup/example/checks/troubleshooting/limitations; docs/TASKS.md partial T-035/T-039 note; this evidence record
