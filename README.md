@@ -3008,3 +3008,44 @@ RUSTUP_TOOLCHAIN=stable cargo test \
 ~~~
 
 **Task 54 verifies pre-commit cancellation and in-memory recovery only; persistent filesystem rollback is NOT TESTED.** Existing atomic-writer tests do not establish schema-v2 migration rollback. Future migration work still needs real write, disk-full, permission, pre/post-replacement, interruption recovery, last-known-good preservation, permissions, Windows replacement/ACL, Linux filesystem, and unsupported-downgrade checks. T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete. See [the migration contract](docs/VOCABULARY_MATCHING_MIGRATION.md#pre-commit-review-cancellation-and-retry-task-54) and [Task 54 evidence](evidence/rust-vocabulary-cancellation-task-54.md).
+
+## Native in-memory Rust vocabulary CRUD (partial T-038)
+
+`outflow-settings` now exposes `add_vocabulary_entry`, `edit_vocabulary_entry`, and `delete_vocabulary_entry` for an in-memory `Vec<VocabularyEntry>`. Add and edit reuse `outflow-core`'s current 500-entry, 128-Unicode-scalar, and Unicode 18 canonical-caseless spoken-phrase validation. Stable IDs must be unique; edit preserves the selected ID and its position, and delete removes by ID while preserving the remaining order. Each operation validates a temporary candidate before replacing the caller's vector, so failures leave the full collection unchanged. Typed errors identify duplicate IDs, duplicate spoken phrases, invalid fields, missing IDs, and a full collection without including vocabulary values or IDs.
+
+This is native CRUD logic only. It does not write settings or connect the browser preview to Rust. Schema-v1 serialization, loading, matching behavior, and persistence are unchanged. The example optionally exercises the existing atomic writer and loader in a fresh temporary directory using synthetic values; this is a demonstration of those existing APIs, not production CRUD persistence. The current writer reports unsupported on platforms without its owner-only atomic replacement implementation.
+
+Run the synthetic Add → Edit → Delete example from the repository root:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo run -q -p outflow-settings --example vocabulary_crud --locked
+```
+
+Expected output on a platform supported by the existing atomic writer:
+
+```text
+Add: success (entries: 1)
+Edit: success (entries: 1)
+Temporary save/reload: success (entries: 1)
+Delete: success (entries: 0)
+```
+
+Run the focused and complete Rust test suites with:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings vocabulary_crud --locked
+RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
+```
+
+The synthetic tests cover Add/Edit/Delete, stable ID and position preservation, missing and duplicate IDs, Unicode 18 `straße`/`STRASSE` and composed/decomposed collisions, Unicode and emoji, scalar/collection limits, atomic rejection, and content-free errors. No new dependency is required. The full implementation handoff and exact verification results are recorded in [`evidence/rust-vocabulary-crud-task-38.md`](evidence/rust-vocabulary-crud-task-38.md).
+
+Troubleshooting:
+
+- **`CollectionFull`:** remove an existing entry before adding another; the limit is 500.
+- **`InvalidEntry`:** inspect the reported field and reason; each spoken and written value must contain non-whitespace text and no more than 128 Unicode scalar values.
+- **`DuplicateSpoken`:** the phrase conflicts under Unicode 18 canonical-caseless matching. Error text contains only collection indices.
+- **`MissingId`:** pass the stable ID already present in the in-memory collection. The error does not echo IDs.
+- **Temporary save/reload unavailable:** the example still demonstrates in-memory CRUD, while the existing writer does not provide its owner-only replacement guarantee on that platform. This API does not add another persistence path.
+- **Temporary directory creation fails:** check that the operating-system temporary directory is writable; the example creates and removes a uniquely named directory there and never targets the user's real settings.
+
+This partial implementation does not complete T-038 or AC-08. Boundary-aware replacement, production settings persistence integration, frontend/native settings integration, deletion/save/load acceptance, and the T-017/T-018 prerequisites remain open. T-017, T-018, T-038, T-039, and all release gates remain unchecked.

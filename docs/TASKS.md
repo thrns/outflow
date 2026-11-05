@@ -51,6 +51,14 @@ Browser verification: `npm run dev` — PASS; Vite 8.3.5 served `http://localhos
 
 Environment: macOS Darwin 25.6.0 arm64, Node.js v22.23.3, npm 10.9.9. Commands/results: `npm run typecheck` — PASS; `npm run test -- --run` — PASS, 11 files and 160 tests; `npm run lint` — PASS; `npm run build` — PASS, Vite built 29 modules (CSS 16.33 kB, JavaScript 247.07 kB); `git diff --check` — PASS. The edit-list test file also passed independently: 22/22. The Impeccable detector returned no findings for the changed interface files.
 
+### Native Rust vocabulary CRUD — partial T-038 evidence (2026-11-04)
+
+`outflow-settings` now exposes in-memory Add/Edit/Delete functions for stable-ID vocabulary entries. Candidate collections reuse `outflow-core::vocabulary::validate_vocabulary_collection`, including the 500-entry cap, 128-Unicode-scalar fields, and Unicode 18 canonical-caseless duplicate checks. Rejections are typed, content-free, and leave the original vector unchanged. Edit retains ID and position; Delete uses a unique stable ID. Fourteen focused tests cover these behaviors and redacted errors. The synthetic `vocabulary_crud` example also demonstrated Add → Edit → isolated temporary-file save/reload through the existing atomic writer → Delete.
+
+This is a partial implementation only. CRUD does not persist production settings, migrate settings, connect React to Rust, implement boundary-aware correction, or change schema-v1 validation and matching. The save/reload line is an example of existing settings APIs and uses a fresh temporary directory; it does not add persistence to CRUD. **T-038 remains unchecked** because its complete requirements and T-017/T-018 prerequisites are not met. T-017, T-018, T-039, AC-08, and every release gate also remain open. Exact commands, output, platform limits, and results are in [`evidence/rust-vocabulary-crud-task-38.md`](../evidence/rust-vocabulary-crud-task-38.md).
+
+The implementation and example are in `crates/settings/src/vocabulary_crud.rs` and `crates/settings/examples/vocabulary_crud.rs`. Final Rust verification passed: formatting check, workspace check, all 367 workspace tests, Clippy with warnings denied, and workspace build. Frontend verification passed with typecheck, 160 tests across 11 files, lint, and production build; no frontend source changed. The current macOS inventory is documented as an 18 GB development machine, not the required physical 4 GB release reference. No app performance or release metric was measured.
+
 ## 1. Milestone map / critical path
 
 ```mermaid
