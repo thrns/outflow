@@ -2216,5 +2216,114 @@
       { "spoken": "alpha phrase", "written": "Alpha , Mark" }
     ],
     "expected": "start\n\nAlpha , Mark, keeps um text\nfinish!"
+  },
+  {
+    "id": "whitespace-multiline-leading-blank-lines-and-unicode-space",
+    "category": "whitespace",
+    "input": "\n\n \tMira\t Q\u2003東京 \n",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "\n\nMira Q\u2003東京\n"
+  },
+  {
+    "id": "commands-paragraph-between-existing-lines-and-unicode-text",
+    "category": "commands",
+    "input": "café\nnew paragraph\n東京",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": true,
+    "vocabulary": [],
+    "expected": "café\n\n\n\n東京"
+  },
+  {
+    "id": "vocabulary-overlapping-phrases-with-protected-punctuation",
+    "category": "vocabulary",
+    "input": "acme lab , ready !",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      {
+        "spoken": "acme",
+        "written": "Short Match"
+      },
+      {
+        "spoken": "acme lab",
+        "written": "Acme , Lab"
+      }
+    ],
+    "expected": "Acme , Lab, ready!"
+  },
+  {
+    "id": "punctuation-numeric-token-and-curly-quote-ambiguity",
+    "category": "punctuation",
+    "input": "Hello , version 3 . 14 said “really ?!”",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [],
+    "expected": "Hello, version 3 . 14 said “really ?!”"
+  },
+  {
+    "id": "fillers-clean-mode-removes-prefix-in-paired-comparison",
+    "category": "fillers",
+    "input": "um, glorp , works !",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      {
+        "spoken": "glorp",
+        "written": "Glorp"
+      }
+    ],
+    "expected": "Glorp, works!"
+  },
+  {
+    "id": "modes-verbatim-preserves-prefix-in-paired-comparison",
+    "category": "modes",
+    "input": "um, glorp , works !",
+    "mode": "verbatim",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      {
+        "spoken": "glorp",
+        "written": "Glorp"
+      }
+    ],
+    "expected": "um, Glorp, works!"
+  },
+  {
+    "id": "unicode-combining-boundary-and-japanese-punctuation",
+    "category": "unicode",
+    "input": "café東京、café。",
+    "mode": "clean",
+    "remove_fillers": false,
+    "commands_enabled": false,
+    "vocabulary": [
+      {
+        "spoken": "café",
+        "written": "Café"
+      }
+    ],
+    "expected": "café東京、Café。"
+  },
+  {
+    "id": "safety-multiline-protected-replacement-beside-number-and-name",
+    "category": "safety",
+    "input": "uh, Élodie has 3 . 14 !\nbrand phrase , keep 5 . 0",
+    "mode": "clean",
+    "remove_fillers": true,
+    "commands_enabled": false,
+    "vocabulary": [
+      {
+        "spoken": "brand phrase",
+        "written": "North , um, Wing"
+      }
+    ],
+    "expected": "Élodie has 3 . 14 !\nNorth , um, Wing, keep 5 . 0"
   }
 ]

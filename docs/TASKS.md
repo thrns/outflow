@@ -209,6 +209,14 @@ The focused 192-fixture test prints all cases passed, eight categories, eight pr
 
 This remains partial task evidence only. AC-07 still requires at least 200 acceptance fixtures (at least eight more than this characterization), ≥99% exact expected output, zero altered numeric/proper-noun tokens across its acceptance corpus, a demonstrated final Clean/Verbatim distinction, and production integration. This task does not complete T-035/T-036 or any release gate. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.**
 
+### Cleanup 200-fixture count milestone — partial T-035/T-036 progress (2026-11-05)
+
+Expanded the current-behavior characterization from 192 to exactly 200 fixtures by appending one case in each existing category: `whitespace-multiline-leading-blank-lines-and-unicode-space`, `commands-paragraph-between-existing-lines-and-unicode-text`, `vocabulary-overlapping-phrases-with-protected-punctuation`, `punctuation-numeric-token-and-curly-quote-ambiguity`, `fillers-clean-mode-removes-prefix-in-paired-comparison`, `modes-verbatim-preserves-prefix-in-paired-comparison`, `unicode-combining-boundary-and-japanese-punctuation`, and `safety-multiline-protected-replacement-beside-number-and-name`. The paired Clean/Verbatim cases intentionally share the same input, vocabulary, filler setting, and command setting; the only duplicate new input is that pair.
+
+The focused 200-fixture test passes with all eight categories, all four mode/filler combinations, both command settings, the original eight protected numeric and eight proper-noun annotations unchanged, and all existing strict schema, determinism, immutability, UTF-8 range, and five rejection assertions. A one-off `git show` plus Python `json.loads` comparison against base commit `ba1a7d1fb4491e628ac1950c19b78083aefa0735` confirms the original 192 parsed objects are unchanged and in order; exactly eight fixtures were appended. AC-07 acceptance is explicitly **NOT EVALUATED**: the 200 outputs characterize the current baseline only, and the approved final acceptance set and ≥99% exact-output threshold remain open. The existing 16 selected protected annotations are not a universal guarantee. The Clean/Verbatim policy remains **PROPOSED — NOT APPROVED**. No production cleanup/settings behavior, persisted schema/defaults, dependencies, or lockfiles changed.
+
+This is a numerical corpus milestone only. T-035 prerequisites, idempotence, and production integration remain open; T-036 final semantics and integration remain open. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact comparison output, test environment, commands, results, and AC-07 status are recorded in [`evidence/T-035-T-036-cleanup-200-fixture-milestone.md`](../evidence/T-035-T-036-cleanup-200-fixture-milestone.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

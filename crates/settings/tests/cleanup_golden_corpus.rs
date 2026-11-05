@@ -1,6 +1,6 @@
 //! Current-behavior characterization for the native Rust cleanup pipeline.
 //!
-//! These 192 synthetic cases form an independently reviewed current-behavior
+//! These 200 synthetic cases form an independently reviewed current-behavior
 //! characterization, not the approved final AC-07 acceptance corpus or an
 //! approval of complete Verbatim semantics. Keep fixture expectations
 //! explicit when behavior changes.
@@ -271,8 +271,8 @@ fn validate_protected_tokens(
 fn assert_fixture_schema_ids_categories_and_mode_flags(values: &[Value]) {
     assert_eq!(
         values.len(),
-        192,
-        "the cleanup current-behavior corpus must contain exactly 192 fixtures"
+        200,
+        "the cleanup current-behavior corpus must contain exactly 200 fixtures"
     );
 
     let mut ids = HashSet::new();
@@ -576,7 +576,7 @@ fn current_behavior_fixtures_match_exactly_and_are_deterministic() {
     );
 
     println!(
-        "Cleanup golden corpus: {} fixtures passed\nCategories covered: {}\nProtected numeric tokens: {} (0 altered)\nProtected proper nouns: {} (0 altered)\nCurrent behavior baseline: true",
+        "Cleanup golden corpus: {} fixtures passed\nCategories covered: {}\nProtected numeric tokens: {} (0 altered)\nProtected proper nouns: {} (0 altered)\nCurrent behavior baseline: true\nAC-07 acceptance: NOT EVALUATED",
         values.len(),
         FixtureCategory::ALL.len(),
         protected_numbers,

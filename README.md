@@ -3724,7 +3724,7 @@ Run the focused corpus test and its expected visible summary from the repository
 RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings --test cleanup_golden_corpus --locked -- --nocapture
 ```
 
-The current-behavior baseline contains 192 explicitly reviewed synthetic fixtures. The earlier expansion from 96 to 120 added four groups of six:
+The current-behavior baseline contains exactly 200 explicitly authored synthetic fixtures. The earlier expansion from 96 to 120 added four groups of six:
 
 1. **Whitespace boundaries:** ASCII spaces/tabs-only input; outer whitespace around a sentence; mixed LF, CRLF, and standalone CR; spaced blank lines; Unicode text with ASCII separators; and whitespace around emoji beside a paragraph break. The current implementation trims leading/trailing ASCII spaces and tabs on each line, collapses interior runs to one ASCII space, maps each CR/CRLF/LF break to LF without changing the number or placement of breaks, and copies non-ASCII whitespace unchanged.
 2. **Clean/Verbatim and filler boundaries:** mixed-case supported prefixes with removal on and off; Verbatim filler preservation; Verbatim vocabulary and punctuation processing; repeated fillers after a command-generated break; and a protected filler-like vocabulary line followed by a removable ordinary filler on another line. Filler recognition remains limited to line-leading ASCII `um, ` and `uh, ` prefixes followed by an alphabetic character; repeated supported fillers are retained. The adapter applies the same non-filler stages in Verbatim, while deletion remains Clean-only and controlled by `remove_fillers`.
@@ -3758,17 +3758,43 @@ The 168-to-192 expansion appends 24 cases in four ordered groups of six:
 
 A one-off comparison against base commit `71be6c46888e6e1ec68373104567e652ba87222c` confirms that the first 168 parsed fixture objects are unchanged and in order, including all 16 original protected-token annotations across the same 12 fixtures (eight numeric and eight proper-noun tokens). Exactly 24 unannotated fixtures were appended. All IDs and new inputs are unique; all eight categories, four mode/filler combinations, and both command settings remain covered. Two expectations were corrected after source review: a numeric-bearing scientific-notation-like token retains the space before `!`, and consecutive `new line`, `new paragraph`, `new line` commands emit four additive line breaks. No production cleanup/settings behavior, settings schema/defaults, dependency, lockfile, or policy changed.
 
-After all 192 cases pass, the test prints:
+The 192-to-200 milestone appends exactly one fixture in each existing category:
+
+1. **Whitespace:** leading blank lines, ASCII horizontal whitespace, an em space, and a trailing line break, with the exact three normalized breaks preserved.
+2. **Commands:** an enabled `new paragraph` between existing source line breaks and Unicode words; the two source breaks plus two generated breaks remain additive.
+3. **Vocabulary:** overlapping `acme` / `acme lab` phrases select the longer match, preserve its intentional `Acme , Lab` spacing, and clean eligible punctuation outside the replacement.
+4. **Punctuation:** an eligible comma is tightened while `3 . 14` and the ambiguous curly-quoted `?!”` sequence stay unchanged.
+5. **Fillers and modes:** a paired Clean/Verbatim comparison uses identical input (`um, glorp , works !`), vocabulary, filler flag, and command flag. Clean removes the supported prefix; Verbatim preserves it while current vocabulary and punctuation stages still run.
+6. **Unicode:** a decomposed accent is matched under the current Unicode 18 policy only at a complete boundary; a following Japanese word blocks a partial match, while Japanese punctuation separates the later complete occurrence.
+7. **Safety:** multiline Clean input keeps an accented name and digit-bearing numeric punctuation intact, preserves a written `North , um, Wing` replacement byte-for-byte, removes a supported unprotected line-leading filler, and cleans eligible punctuation outside the replacement.
+
+A one-off parsed-object comparison against base commit `ba1a7d1fb4491e628ac1950c19b78083aefa0735` confirms that the first 192 fixture objects are unchanged in order, including all 16 original protected-token annotations across 12 fixtures. Exactly eight cases were appended, one per category; the Clean/Verbatim pair is the only repeated input among the additions. All 200 IDs are unique, the new inputs are absent from the earlier corpus, and all four mode/filler combinations and both command settings remain covered. The policy remains **PROPOSED — NOT APPROVED**.
+
+After all 200 cases pass, the test prints:
 
 ```text
-Cleanup golden corpus: 192 fixtures passed
+Cleanup golden corpus: 200 fixtures passed
 Categories covered: 8
 Protected numeric tokens: 8 (0 altered)
 Protected proper nouns: 8 (0 altered)
 Current behavior baseline: true
+AC-07 acceptance: NOT EVALUATED
 ```
 
-The current annotations are selected examples, not a universal guarantee that every number or proper noun will be preserved in arbitrary speech. They are additional checks on top of full exact-output comparisons; they do not increase the fixture count or complete AC-07.
+The current annotations are selected examples, not a universal guarantee that every number or proper noun will be preserved in arbitrary speech. They are additional checks on top of full exact-output comparisons and do not expand beyond the same 16 selected tokens.
+
+AC-07 status after this numerical milestone:
+
+| Requirement | Status after this task |
+|---|---|
+| At least 200 current-behavior fixtures | Met numerically, if all 200 pass |
+| Exact outputs on those 200 fixtures | Verified for the characterization baseline only |
+| Approved final acceptance corpus | Not established |
+| ≥99% exact output against final acceptance expectations | Not evaluated |
+| Numeric/proper-noun preservation | Verified for the existing 16 selected annotations only |
+| Final Clean/Verbatim semantics | Not approved |
+| Production ASR/application integration | Not completed |
+| AC-07 overall | Open |
 
 Run the focused corpus and Clean/Verbatim contract tests, then the requested workspace checks from the repository root:
 
@@ -3806,4 +3832,4 @@ Troubleshooting:
 - **Punctuation beside a number stays spaced:** the current rule trims punctuation spacing only when the preceding character is alphabetic and its adjacent alphanumeric token contains no number. Existing fixtures record `2026 .`; the new protected Unicode replacement also records `0 ,` after its numeric written suffix. Preserve these outputs and document any proposed behavior change separately.
 - **A policy change is proposed:** the corpus records current behavior. Review affected expectations alongside an approved product decision; the recommendation in [docs/CLEANUP_MODE_POLICY.md](docs/CLEANUP_MODE_POLICY.md) remains **PROPOSED — NOT APPROVED**.
 
-These 192 cases remain a current-behavior characterization only; they do not complete T-035/T-036 or AC-07. AC-07 still requires at least 200 acceptance fixtures (at least eight more than this characterization corpus), a ≥99% exact expected-output result, zero altered numeric tokens/proper nouns across its protected fixture corpus, a demonstrated Clean/Verbatim distinction, and required production integration. T-035 prerequisites and its full deterministic/idempotence and production acceptance criteria also remain open; this count alone does not complete it. Passing these cases does not prove universal protection of numeric tokens or proper nouns. `2026 .`, `6.02e23 !`, and replacement-adjacent numeric punctuation remain spaced under the existing conservative guards. Command-generated breaks preserve source breaks, and protected replacements preserve intentional whitespace. The Clean/Verbatim proposal remains **PROPOSED — NOT APPROVED**. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
+These 200 cases remain a current-behavior characterization only; their exact-output passes do not establish an approved acceptance corpus or prove the ≥99% production threshold. They do not complete T-035/T-036 or AC-07: T-035 prerequisites, full idempotence requirements, final Clean/Verbatim semantics, the acceptance fixture set, and production ASR/application integration remain open. The 16 protected annotations are selected examples, not a universal preservation guarantee. Numeric-adjacent punctuation such as `2026 .`, `6.02e23 !`, and replacement-adjacent numeric punctuation remains spaced under existing conservative guards. Command-generated breaks preserve source breaks, and protected replacements preserve intentional whitespace. The Clean/Verbatim proposal remains **PROPOSED — NOT APPROVED**. T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.
