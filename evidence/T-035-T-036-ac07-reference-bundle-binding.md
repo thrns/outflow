@@ -7,7 +7,7 @@ flows: [UF-05]
 acceptance: [AC-07]
 owner: codex/ac07-reference-bundle-binding
 base_commit: 35f833324c1094939d41e348de8a078c55a2fadb
-result_commit: pending; record implementation commit in evidence follow-up
+result_commit: e97e02717f98faafe64f2414f2420f13342835f0
 platform: macOS 26.6.2 (25G83), Darwin arm64; Python 3.13.13; Rust 1.99.1 stable
 implementation: Standalone standard-library validator binds exact case IDs and UTF-8 SHA-256 input/expected content to existing manifest hashes; synthetic bundle only.
 metrics: NOT_MEASURED; no production cleanup, recognition, quality, performance, or release measurements
@@ -90,7 +90,7 @@ current-behavior characterization only.
 
 ## Next handoff
 
-Commit on `codex/ac07-reference-bundle-binding`, then update `result_commit` in
-a follow-up evidence commit with the implementation commit SHA. Push the task
-branch and verify the local HEAD, upstream reference, and remote SHA match.
-Preserve the unrelated untracked `....` and `scripts/__pycache__/` paths.
+The implementation commit is recorded above. This evidence update is a
+follow-up commit; push the task branch and verify the local HEAD, upstream
+reference, and remote SHA match. Preserve the unrelated untracked `....` and
+`scripts/__pycache__/` paths.
