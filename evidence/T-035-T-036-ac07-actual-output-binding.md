@@ -5,7 +5,7 @@ flows: [UF-05]
 acceptance: [AC-07]
 owner: codex/ac07-actual-output-binding
 base_commit: a8073acca85c4be634c787170571885fe4c7a88b
-result_commit: pending implementation commit
+result_commit: c8abb04b1a318583a66040db0b9fa65034719a45
 platform: macOS 26.6.2 (25G83), Darwin arm64; Python 3.13.13; Rust/Cargo 1.99.1 stable
 implementation: Standalone standard-library binder associates a separate synthetic actual-output bundle with verified AC-07 reference identity and case IDs
 metrics: NOT_MEASURED; no production cleanup, accuracy, protected-token scoring, performance, or release measurements
@@ -133,5 +133,7 @@ Branch: `codex/ac07-actual-output-binding`.
 
 Base commit: `a8073acca85c4be634c787170571885fe4c7a88b`.
 
-The implementation commit SHA and final evidence/branch SHA will be recorded
-in the closeout handoff after commit and push verification.
+Implementation commit: `c8abb04b1a318583a66040db0b9fa65034719a45`.
+
+This evidence record is a follow-up closeout change. The final evidence/branch
+SHA will be reported in the completion handoff after push verification.
