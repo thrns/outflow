@@ -64,7 +64,7 @@ AC-07 acceptance evidence.
 
 ## C. Shared evaluation coordinator
 
-The evaluation now has three distinct layers:
+The evaluation now has four distinct pieces:
 
 1. **Exact-output scorer:** checks corpus count and byte-for-byte exact-match
    percentage using the unchanged 200-case minimum and 99% threshold.
@@ -77,6 +77,10 @@ The evaluation now has three distinct layers:
    returned separately, and a case-count mismatch fails evaluation. Invalid
    records or reference annotations reject the whole evaluation; the
    coordinator does not return a partial result or an overall acceptance flag.
+4. **Corpus metadata manifest and validator:** [`docs/AC07_CORPUS_MANIFEST.md`](AC07_CORPUS_MANIFEST.md)
+   defines versioned corpus identity, case metadata, provenance declarations,
+   review tracking, coverage, and SHA-256 hash syntax. It tracks metadata only;
+   it does not supply case data or approve references.
 
 Run its 200-case synthetic demonstration from the repository root:
 
@@ -91,7 +95,33 @@ reads no cleanup fixtures, runs no Rust code, and writes no case contents to
 disk. Passing its two numerical gates verifies only the scorer wiring and
 synthetic arithmetic; it does not establish acceptance.
 
-## D. Actual acceptance evidence
+## D. Corpus metadata manifest
+
+The version 1 manifest records a corpus ID and revision, purpose, declared
+review status, case IDs, cleanup categories and settings, provenance
+references, reference review declarations, planned protected-token kinds, and
+input/expected SHA-256 digests. [`scripts/validate_cleanup_ac07_manifest.py`](../scripts/validate_cleanup_ac07_manifest.py)
+validates this structure and the digest format. The three-case synthetic demo
+is pending and is not acceptance data.
+
+The manifest establishes identity, provenance declarations, review tracking,
+coverage, and planned hash binding. It contains no input transcript, expected
+output, actual output, or full protected-token text. It does not supply the
+actual case data, and the current validator cannot demonstrate that its
+declared hashes correspond to independently approved reference bytes. The
+validator also cannot authenticate a `review_evidence_ref`; a `reviewed`
+declaration is not approval. Hashes are syntax-checked only until a separate
+case-data bundle is supplied and verified.
+
+Before a future evaluation passes shared records to both scorers, it must
+verify the separately supplied case-data hashes against the manifest, verify
+the approved references and their review evidence, verify production outputs,
+and confirm exact case-ID correspondence across manifest, data, and results.
+It must then pass those same verified case records through the shared
+coordinator. The manifest validator does not calculate exact-output accuracy
+or protected-token alteration counts.
+
+## E. Actual acceptance evidence
 
 Scoring a set of strings is only one part of AC-07. Before an acceptance result
 can be reported, the project still needs all of the following:
@@ -100,8 +130,10 @@ can be reported, the project still needs all of the following:
    expected output from approved requirements and policy, without deriving it
    by copying output from the implementation under evaluation.
 2. **An explicitly identified acceptance corpus.** Record its version,
-   provenance, coverage, and review status. It must include at least 200
-   eligible transformations and be the corpus designated for acceptance.
+   provenance, coverage, and review status in the metadata manifest, and
+   separately supply and verify the corresponding case data. It must include
+   at least 200 eligible transformations and be the corpus designated for
+   acceptance.
 3. **Actual production results.** Run the production Rust cleanup
    implementation on the identified corpus under the approved settings and
    modes. Preserve byte-for-byte output for scoring and retain only
@@ -135,7 +167,9 @@ protection.
    expected-output set and protected-token annotations.
 3. Run the production cleanup path against that exact corpus without changing
    expected strings after seeing the output.
-4. Run `evaluate_cleanup_ac07_cases()` against the same independently approved
+4. Verify the separate case-data hashes, approved references, production
+   outputs, and case-ID correspondence against the manifest. Then run
+   `evaluate_cleanup_ac07_cases()` against the same independently approved
    corpus and its corresponding production outputs. It sends the shared
    in-memory records through both unchanged scorers and reports their results
    separately.
@@ -145,8 +179,8 @@ protection.
 
 This procedure is a proposal for future evaluation. The two scorers remain
 independent and neither alone establishes final acceptance. Passing both
-synthetic gates does not establish acceptance: a reviewed reference corpus,
-approved Clean/Verbatim semantics, production cleanup results, and integration
-evidence are still required. The coordinator does not approve Verbatim
-behavior, modify PRD thresholds, or make a current-behavior test pass into
-AC-07 acceptance.
+synthetic gates or validating manifest metadata does not establish acceptance:
+verified case data and hashes, approved references, approved Clean/Verbatim
+semantics, production cleanup results, and integration evidence are still
+required. The coordinator does not approve Verbatim behavior, modify PRD
+thresholds, or make a current-behavior test pass into AC-07 acceptance.

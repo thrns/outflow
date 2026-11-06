@@ -235,6 +235,14 @@ Added `scripts/score_cleanup_protected_ac07.py`, a standard-library in-memory ev
 
 This remains evaluation infrastructure only. The demo and unit tests establish scorer behavior, not corpus-wide protection or AC-07 acceptance. Actual output shifts before a token may conservatively count as alterations because offsets are not searched or adjusted. No production cleanup, Rust runner, fixtures, schema/defaults, dependencies, PRD thresholds, or proposed Clean/Verbatim policy changed. The policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands, results, environment, and limitations are recorded in [`evidence/T-035-T-036-ac07-protected-scoring-foundation.md`](../evidence/T-035-T-036-ac07-protected-scoring-foundation.md).
 
+### AC-07 corpus metadata manifest — partial T-035/T-036 evaluation-infrastructure progress (2026-11-05)
+
+Defined a strict version 1 metadata-only corpus manifest and standard-library validator. The schema records corpus identity/revision, purpose, declared review state and evidence reference, unique case IDs, the eight existing categories, mode/settings, SHA-256 syntax, provenance references, per-reference review declarations, and planned numeric/proper-noun protection kinds. Duplicate JSON object keys, unknown/missing fields, invalid types/values, and contradictory synthetic-demo review claims are rejected. The frozen result reports content-free corpus, coverage, mode, protection-kind, and pending-reference counts.
+
+Added a three-case synthetic draft with genuine SHA-256 digests checked against explicit synthetic source strings in tests. The demo reads only that metadata file, validates before printing, and explicitly reports hash syntax only, pending review, no corpus approval, and `AC-07 acceptance: NOT EVALUATED`. Updated the evaluation plan to distinguish the exact-output scorer, protected-token evaluator, shared in-memory coordinator, and manifest/validator. The manifest establishes identity and review/provenance declarations only; no case data is supplied, review evidence is not authenticated, and digest-to-reference correspondence remains unverified.
+
+This is metadata validation only. It does not create or approve acceptance references, execute production cleanup, score exact output or protected-token alterations, change the 200-case/99% thresholds, or complete T-035/T-036 or AC-07. The 200 characterization fixtures remain unchanged and are not acceptance data. The Clean/Verbatim policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands, outcomes, branch/commit, environment, and limitations are recorded in [`evidence/T-035-T-036-ac07-corpus-manifest-foundation.md`](../evidence/T-035-T-036-ac07-corpus-manifest-foundation.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

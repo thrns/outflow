@@ -4044,3 +4044,61 @@ an independently reviewed reference corpus, approved Clean/Verbatim semantics,
 production cleanup results, and integration evidence. The existing 200
 characterization fixtures are not designated as acceptance data, and the PRD
 thresholds remain unchanged.
+
+## AC-07 corpus metadata manifest
+
+The versioned metadata-only manifest records a corpus identity and revision,
+case IDs, the eight cleanup fixture categories, modes and settings, provenance
+references, review declarations, planned protected-token kinds, and lowercase
+SHA-256 digests for future input and expected-reference bytes. The manifest
+does not contain transcripts or outputs. The standard-library validator checks
+the schema and digest format; it does not load case data, authenticate review
+evidence, or establish corpus approval or AC-07 acceptance. See the
+[manifest contract](docs/AC07_CORPUS_MANIFEST.md).
+
+Run the synthetic draft demonstration and focused tests from the repository
+root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_cleanup_ac07_manifest.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_cleanup_ac07_manifest -v
+```
+
+Expected demo output:
+
+```text
+AC-07 corpus manifest: SYNTHETIC DRAFT
+Schema version: 1
+Cases indexed: 3
+Unique case IDs: PASS
+Categories represented: 3/8
+Clean and Verbatim represented: PASS
+Content hashes: FORMAT VALIDATED ONLY
+Reference review: PENDING
+Corpus approval: NOT ESTABLISHED
+AC-07 acceptance: NOT EVALUATED
+```
+
+Each digest must be exactly 64 lowercase hexadecimal characters. The synthetic
+draft's digests are checked in tests against explicitly constructed synthetic
+source strings; those strings are not stored in the metadata file. Until a
+separate case-data bundle is supplied and verified, this validates hash syntax
+only. A future evaluation must verify hashes, approved references, production
+outputs, and exact case-ID correspondence before it sends the same records to
+both AC-07 scorers.
+
+Troubleshooting:
+
+- **Malformed hash:** compute SHA-256 over the exact UTF-8 bytes intended for
+  the separately supplied case data; encode it as 64 lowercase hex digits.
+- **Duplicate JSON key or field:** keep one instance of each required key and
+  remove all unknown keys. Both root and case objects use strict schemas.
+- **Reviewed candidate is rejected:** include a nonempty `review_evidence_ref`
+  when declaring the candidate reviewed. The validator checks only that the
+  reference is present; a separate reviewer must verify it.
+- **Demo says hashes were format-validated only:** this is expected. No case
+  data is supplied to the manifest validator, so it cannot confirm digest-to-
+  content correspondence.
+- **Demo says corpus approval is not established:** this is expected for the
+  pending synthetic draft. Metadata validation never designates or approves
+  acceptance data.

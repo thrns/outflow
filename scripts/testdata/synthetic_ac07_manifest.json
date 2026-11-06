@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "corpus_id": "ac07-synthetic-manifest-demo",
+  "revision": "draft-001",
+  "purpose": "synthetic_demo",
+  "review_status": "pending",
+  "review_evidence_ref": null,
+  "cases": [
+    {
+      "id": "demo-001",
+      "category": "safety",
+      "mode": "clean",
+      "remove_fillers": true,
+      "commands_enabled": false,
+      "input_sha256": "6762ad536aa8877a429a7cca2b52f9916dca909fef144e977d09573cbfb205bc",
+      "expected_sha256": "53e9674e0bd869a89e90f5085e7001b188addb9a286b586733e8b9b8384b0729",
+      "provenance_ref": "synthetic-example:demo-001",
+      "reference_review_status": "pending",
+      "protected_kinds": ["number"]
+    },
+    {
+      "id": "demo-002",
+      "category": "modes",
+      "mode": "verbatim",
+      "remove_fillers": false,
+      "commands_enabled": true,
+      "input_sha256": "60a3e029b0fb39240d3d27fb922e2585260edd6c3b1cbf4a49cefab77fcad164",
+      "expected_sha256": "b9c2dbf3b76d627ee7242bad320824800ad50879eb46f587699d4c0ff4f69414",
+      "provenance_ref": "synthetic-example:demo-002",
+      "reference_review_status": "pending",
+      "protected_kinds": []
+    },
+    {
+      "id": "demo-003",
+      "category": "unicode",
+      "mode": "clean",
+      "remove_fillers": false,
+      "commands_enabled": false,
+      "input_sha256": "7de3043e678295efb4463d90eb554fef90723c87e04d63c7a6542cb473c69320",
+      "expected_sha256": "c90b533f2f4ce850c46acbe3b043a11905c67d1a4a67cb0102353c86e13d8ffd",
+      "provenance_ref": "synthetic-example:demo-003",
+      "reference_review_status": "pending",
+      "protected_kinds": ["proper_noun"]
+    }
+  ]
+}
