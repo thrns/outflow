@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "corpus_id": "ac07-synthetic-manifest-demo",
+  "revision": "draft-001",
+  "cases": [
+    {
+      "id": "demo-001",
+      "input": "AC-07 synthetic input bytes for demo-001",
+      "expected": "AC-07 synthetic expected bytes for demo-001"
+    },
+    {
+      "id": "demo-002",
+      "input": "AC-07 synthetic input bytes for demo-002",
+      "expected": "AC-07 synthetic expected bytes for demo-002"
+    },
+    {
+      "id": "demo-003",
+      "input": "AC-07 synthetic input bytes for demo-003",
+      "expected": "AC-07 synthetic expected bytes for demo-003"
+    }
+  ]
+}

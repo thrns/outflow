@@ -243,6 +243,12 @@ Added a three-case synthetic draft with genuine SHA-256 digests checked against 
 
 This is metadata validation only. It does not create or approve acceptance references, execute production cleanup, score exact output or protected-token alterations, change the 200-case/99% thresholds, or complete T-035/T-036 or AC-07. The 200 characterization fixtures remain unchanged and are not acceptance data. The Clean/Verbatim policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and all release gates remain unchecked.** Exact commands, outcomes, branch/commit, environment, and limitations are recorded in [`evidence/T-035-T-036-ac07-corpus-manifest-foundation.md`](../evidence/T-035-T-036-ac07-corpus-manifest-foundation.md).
 
+### AC-07 synthetic reference-bundle binding — partial T-035/T-036 evaluation-infrastructure progress (2026-11-05)
+
+Added a standard-library validator and separate three-case synthetic reference bundle. It validates the existing manifest first, then checks strict bundle fields, corpus/revision identity, exact case-ID correspondence, and SHA-256 over exact UTF-8 input and expected strings. Reordered cases are supported by ID; altered, missing, duplicate, or extra references fail closed. The demo prints content-free counts and explicitly reports pending review, unestablished corpus approval, and unevaluated AC-07.
+
+This is reference-integrity infrastructure only. It does not run cleanup, use the 200 characterization fixtures as acceptance data, score outputs, or verify that expected strings are correct. The hashes are checked against the manifest without repair. The Clean/Verbatim policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands, demo output, tests, environment, and limitations are recorded in [`evidence/T-035-T-036-ac07-reference-bundle-binding.md`](../evidence/T-035-T-036-ac07-reference-bundle-binding.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid

@@ -77,10 +77,13 @@ The evaluation now has four distinct pieces:
    returned separately, and a case-count mismatch fails evaluation. Invalid
    records or reference annotations reject the whole evaluation; the
    coordinator does not return a partial result or an overall acceptance flag.
-4. **Corpus metadata manifest and validator:** [`docs/AC07_CORPUS_MANIFEST.md`](AC07_CORPUS_MANIFEST.md)
-   defines versioned corpus identity, case metadata, provenance declarations,
-   review tracking, coverage, and SHA-256 hash syntax. It tracks metadata only;
-   it does not supply case data or approve references.
+4. **Corpus metadata manifest, reference bundle, and binding validator:**
+   [`docs/AC07_CORPUS_MANIFEST.md`](AC07_CORPUS_MANIFEST.md) defines versioned
+   corpus identity, case metadata, provenance declarations, review tracking,
+   coverage, and SHA-256 hash syntax. The separate bundle supplies decoded
+   input and expected strings; the binding validator checks exact IDs and
+   content hashes against the manifest without printing the strings. Neither
+   artifact nor validator approves references.
 
 Run its 200-case synthetic demonstration from the repository root:
 
@@ -106,20 +109,33 @@ is pending and is not acceptance data.
 
 The manifest establishes identity, provenance declarations, review tracking,
 coverage, and planned hash binding. It contains no input transcript, expected
-output, actual output, or full protected-token text. It does not supply the
-actual case data, and the current validator cannot demonstrate that its
-declared hashes correspond to independently approved reference bytes. The
-validator also cannot authenticate a `review_evidence_ref`; a `reviewed`
-declaration is not approval. Hashes are syntax-checked only until a separate
-case-data bundle is supplied and verified.
+output, actual output, or full protected-token text. The separate reference
+bundle contains only the input and expected strings needed to verify that the
+manifest's pre-existing hashes match actual UTF-8 content. A successful
+binding proves correspondence to the declared manifest; it does **not** prove
+expected outputs are correct or independently approved. The validator cannot
+authenticate a `review_evidence_ref`; a `reviewed` declaration is not
+approval. The checked-in three-case bundle is synthetic only.
 
 Before a future evaluation passes shared records to both scorers, it must
-verify the separately supplied case-data hashes against the manifest, verify
-the approved references and their review evidence, verify production outputs,
-and confirm exact case-ID correspondence across manifest, data, and results.
-It must then pass those same verified case records through the shared
-coordinator. The manifest validator does not calculate exact-output accuracy
-or protected-token alteration counts.
+complete this verification sequence:
+
+1. Validate manifest metadata and digest syntax with
+   [`scripts/validate_cleanup_ac07_manifest.py`](../scripts/validate_cleanup_ac07_manifest.py).
+2. Validate the separately supplied reference-bundle structure, including
+   strict fields, version, strings, unique IDs, and duplicate JSON key checks.
+3. Verify exact corpus ID, revision, and case-ID correspondence, then compare
+   SHA-256 of each exact UTF-8 input and expected string with the corresponding
+   manifest digests. A reordered bundle is valid when the exact IDs and content
+   match. Do not normalize or repair mismatches.
+4. Only after independent reference approval and production execution, assemble
+   shared evaluation records with the corresponding actual outputs and
+   protected-token annotations, then invoke the existing shared coordinator.
+
+The metadata validator checks hash syntax; the separate binding validator
+checks manifest-to-content correspondence. Neither validator calculates
+exact-output accuracy, counts protected-token alterations, authenticates
+review evidence, or establishes approval.
 
 ## E. Actual acceptance evidence
 
@@ -165,15 +181,18 @@ protection.
    authoritative requirements and tests together where needed.
 2. Have the corpus owner freeze and identify the independently reviewed
    expected-output set and protected-token annotations.
-3. Run the production cleanup path against that exact corpus without changing
-   expected strings after seeing the output.
-4. Verify the separate case-data hashes, approved references, production
-   outputs, and case-ID correspondence against the manifest. Then run
-   `evaluate_cleanup_ac07_cases()` against the same independently approved
-   corpus and its corresponding production outputs. It sends the shared
-   in-memory records through both unchanged scorers and reports their results
-   separately.
-5. Record both numerical gates, the mode distinction, production integration
+3. Validate manifest metadata, then validate the separate bundle structure and
+   bind its exact IDs and SHA-256 digests to the manifest as described above.
+   This proves declared hash correspondence only; independently review and
+   approve the expected references separately.
+4. Independently approve the expected references and their review evidence.
+5. Run production cleanup on the approved corpus without changing expected
+   strings after seeing the output, and preserve corresponding actual outputs.
+6. Only after both reference approval and production execution, assemble the
+   shared records and run `evaluate_cleanup_ac07_cases()` over the same corpus
+   and outputs. It sends the shared in-memory records through both unchanged
+   scorers and reports their results separately.
+7. Record both numerical gates, the mode distinction, production integration
    evidence, and limitations. Report AC-07 only after every formal acceptance
    condition is satisfied.
 

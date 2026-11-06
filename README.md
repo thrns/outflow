@@ -4081,11 +4081,11 @@ AC-07 acceptance: NOT EVALUATED
 
 Each digest must be exactly 64 lowercase hexadecimal characters. The synthetic
 draft's digests are checked in tests against explicitly constructed synthetic
-source strings; those strings are not stored in the metadata file. Until a
-separate case-data bundle is supplied and verified, this validates hash syntax
-only. A future evaluation must verify hashes, approved references, production
-outputs, and exact case-ID correspondence before it sends the same records to
-both AC-07 scorers.
+source strings; those strings are not stored in the metadata file. The
+metadata-only validator verifies hash syntax only. The separate synthetic
+bundle and binding validator below verify content-to-manifest correspondence.
+A future evaluation must also independently approve references and production
+outputs before it sends the same records to both AC-07 scorers.
 
 Troubleshooting:
 
@@ -4102,3 +4102,61 @@ Troubleshooting:
 - **Demo says corpus approval is not established:** this is expected for the
   pending synthetic draft. Metadata validation never designates or approves
   acceptance data.
+
+## AC-07 synthetic reference-bundle binding
+
+[`scripts/validate_cleanup_ac07_reference_bundle.py`](scripts/validate_cleanup_ac07_reference_bundle.py)
+checks that the separate reference bundle's corpus ID, revision, and exact
+case IDs match the manifest, then hashes each decoded input and expected string
+as exact UTF-8 with SHA-256. The bundle is matched by case ID, so its array may
+be reordered. No Unicode normalization, whitespace trimming, line-ending
+replacement, or hash repair occurs. Strict schemas reject missing/unknown
+fields, duplicate JSON keys and IDs, unsupported versions, and invalid
+strings. Errors and successful output do not expose case content.
+
+Run the synthetic demonstration and focused tests from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_cleanup_ac07_reference_bundle.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_cleanup_ac07_reference_bundle -v
+```
+
+Expected demo output:
+
+```text
+AC-07 reference-bundle binding: SYNTHETIC DEMO
+Corpus ID: ac07-synthetic-manifest-demo
+Revision: draft-001
+Manifest cases: 3
+Bundle cases: 3
+Case-ID correspondence: PASS
+Input SHA-256 hashes verified: 3/3
+Expected SHA-256 hashes verified: 3/3
+Reference review: PENDING
+Corpus approval: NOT ESTABLISHED
+AC-07 acceptance: NOT EVALUATED
+```
+
+The manifest's hashes are checked as declared; they are never recalculated or
+updated by the validator. Matching proves only that these exact bundle strings
+correspond to those manifest digests. It does not establish that expected
+outputs are correct or independently approved, and it does not run production
+cleanup or either scorer. The checked-in three-case bundle is synthetic test
+data, not acceptance data.
+
+Troubleshooting:
+
+- **Corpus ID or revision mismatch:** use the exact identity declared in the
+  manifest; the validator does not rewrite either value.
+- **Case IDs do not correspond:** include each manifest ID exactly once and no
+  additional IDs. Array order does not matter.
+- **Input or expected hash mismatch:** restore the exact intended string, or
+  author a separately reviewed manifest revision. Do not normalize, trim, or
+  automatically update the digest to make a bundle pass.
+- **Duplicate field or ID, missing field, or unsupported field:** keep one
+  instance of every required field and remove all unknown fields.
+- **Invalid UTF-8 string:** remove unpaired surrogate code points; the error
+  reports only the case position and field.
+- **Demo passes:** this is synthetic reference-integrity verification only.
+  Reference review remains pending, corpus approval is not established, and
+  AC-07 acceptance is not evaluated.

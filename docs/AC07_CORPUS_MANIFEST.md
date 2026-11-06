@@ -41,7 +41,49 @@ A `synthetic_demo` manifest must have `review_status: "pending"`, a null `review
 
 An `acceptance_candidate` may declare `pending` or `reviewed` status. A reviewed declaration requires a nonempty `review_evidence_ref`; that reference only points to separate evidence. **The validator cannot authenticate review evidence, determine whether the named review occurred, or approve a candidate.** It does not provide a formal approval or acceptance flag.
 
-The SHA-256 fields are intended to bind future case data to fixed input and expected-reference bytes. Digests operate on exact byte sequences; the synthetic test strings are UTF-8 encoded. A future case-data bundle must specify and verify the exact bytes being hashed. The checked-in demonstration contains only digests and synthetic provenance references. Until a separate case-data bundle is supplied, the validator verifies hash syntax only; it cannot establish that a digest corresponds to any case bytes or independently approved reference. Hash syntax validation is not a content-integrity check.
+The SHA-256 fields are intended to bind case data to fixed input and expected-reference bytes. Digests operate on exact byte sequences; the synthetic test strings are UTF-8 encoded. The metadata-only manifest validator checks hash syntax only; it cannot establish that a digest corresponds to case bytes or an independently approved reference. The separate development-only binding validator now checks the supplied synthetic bundle's content against the declared hashes. Hash syntax validation alone is not a content-integrity check.
+
+## Separate reference-bundle format and binding
+
+The development-only reference bundle is a separate JSON file with exactly
+these top-level fields: `schema_version` (integer `1`), `corpus_id`,
+`revision`, and a nonempty `cases` array. Each case has exactly `id`, `input`,
+and `expected`. Corpus ID, revision, and case IDs must be nonempty strings;
+input and expected must be strings, but may be empty. Unknown or missing
+fields, unsupported versions, duplicate object keys, duplicate case IDs,
+invalid UTF-8 strings, and malformed collections are rejected.
+
+```json
+{
+  "schema_version": 1,
+  "corpus_id": "ac07-synthetic-manifest-demo",
+  "revision": "draft-001",
+  "cases": [
+    {
+      "id": "demo-001",
+      "input": "exact input string",
+      "expected": "exact expected string"
+    }
+  ]
+}
+```
+
+The bundle's corpus ID and revision must exactly equal the manifest values.
+Case identity is matched by exact, case-sensitive ID, independent of array
+position. Every manifest ID must occur once in the bundle, with no additional
+IDs. For each matched case the binding validator hashes the exact UTF-8
+encoding of the decoded `input` and `expected` strings with SHA-256 and
+compares the results to that case's `input_sha256` and `expected_sha256` in
+the manifest. It does not normalize Unicode, alter line endings, trim
+whitespace, or repair hashes.
+
+The metadata validator's digest-format check establishes only that a digest
+looks like 64 lowercase hexadecimal characters. The separate binding check
+establishes that the supplied strings hash to the digests already declared by
+the manifest. Matching hashes prove correspondence to that declared manifest;
+they do **not** prove expected outputs are correct, independently reviewed, or
+approved. The checked-in three-case bundle is synthetic test data and cannot
+be used as AC-07 acceptance data.
 
 The manifest records planned categories, modes, settings, and declared protected kinds. It does not score exact outputs or count altered protected tokens; those remain the responsibility of the existing exact-output and protected-token evaluators.
 
@@ -59,3 +101,16 @@ The demo validates only [`scripts/testdata/synthetic_ac07_manifest.json`](../scr
 `validate_cleanup_manifest(data)` returns a frozen summary with identity, declared review state, indexed and unique case counts, category and mode counts, declared protection-kind counts, pending reference-review count, and a `syntactically_valid` result. Invalid manifests raise `CleanupManifestValidationError`; messages identify the field or case position and do not print case content.
 
 The optional `--manifest PATH` form validates a caller-supplied metadata-only file. It never treats a declared review status as approval and always reports `AC-07 acceptance: NOT EVALUATED`.
+
+The separate binding demonstration reads only the checked-in synthetic
+manifest and bundle:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_cleanup_ac07_reference_bundle.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_cleanup_ac07_reference_bundle -v
+```
+
+The binding summary prints verified counts only after every ID and digest
+matches. It reports reference review as pending, corpus approval as not
+established, and AC-07 acceptance as not evaluated. No input or expected
+content is printed.
