@@ -240,6 +240,31 @@ class MacMicProbePrivacyTests(unittest.TestCase):
         self.assertNotIn("[NSPasteboard generalPasteboard]", pasteboard_test)
         self.assertIn("releaseGlobally", pasteboard_test)
 
+    def test_isolated_pasteboard_round_trip_compares_exact_utf8_coverage_bytes(self) -> None:
+        pasteboard_test = (PROBE_ROOT / "tests" / "pasteboard_integration_test.mm").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("std::array<std::string_view, 8>", pasteboard_test)
+        for fixture in (
+            '"Plain ASCII text."',
+            "Whitespace with a tab",
+            '"Unicode: Café — naïve façade."',
+            '"Emoji: 😀📝"',
+            r'"Composed: \xC3\xA9"',
+            r'"Decomposed: e\xCC\x81"',
+            r'"LF\nCRLF\r\nCR\r"',
+            '"Line one.\\n\\n  Indented line \\nLast line.\\n"',
+        ):
+            with self.subTest(fixture=fixture):
+                self.assertIn(fixture, pasteboard_test)
+
+        self.assertIn("NSString* expected = string_from_utf8(text);", pasteboard_test)
+        self.assertIn("actual_utf8.length == text.size()", pasteboard_test)
+        self.assertIn("std::memcmp(actual_utf8.bytes, text.data(), text.size()) == 0", pasteboard_test)
+        self.assertNotIn("isEqualToString", pasteboard_test)
+        self.assertNotIn("[NSPasteboard generalPasteboard]", pasteboard_test)
+
     def test_launch_identity_diagnostics_exclude_session_content_and_model_paths(self) -> None:
         app = (PROBE_ROOT / "app.mm").read_text(encoding="utf-8")
         identity = (PROBE_ROOT / "verification_identity.hpp").read_text(encoding="utf-8")

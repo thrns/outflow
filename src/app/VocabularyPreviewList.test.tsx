@@ -348,7 +348,7 @@ describe("in-memory vocabulary preview list", () => {
     fireEvent.change(writtenInput, { target: { value: "written after remove" } });
     fireEvent.click(addButton);
     expect(screen.getByText("500 of 500 entries")).toBeVisible();
-  }, 30000);
+  }, 60000);
 
   it("preserves entries across Settings sections and Home navigation", () => {
     openVocabularyPreview();

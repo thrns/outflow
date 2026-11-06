@@ -2,6 +2,47 @@
 
 Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path loading and initialization, an explicitly confirmed reset, and an atomic JSON writer on Unix. The production Tauri shell and dictation flow, Windows owner-only ACL writing, and release packaging have not been implemented. A separate development-only native macOS microphone probe is documented below.
 
+## Current MVP baseline — 2026-11-06
+
+This checkout is not a shipping desktop app. `npm run dev` opens the browser-only Settings preview; it does not request microphone access or connect the React UI to Rust. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+
+### Run and validate the current preview
+
+```sh
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open the local URL printed by Vite. The Home view identifies itself as a **Development preview** and says **Native dictation is not connected**. No microphone prompt or recording control should appear.
+
+Run the repository checks from the project root:
+
+```sh
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+cargo fmt --all -- --check
+cargo check --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+bash -n scripts/build_macos_mic_probe.sh scripts/run_macos_mic_probe.sh scripts/test_macos_mic_probe.sh
+git diff --check
+```
+
+### Native macOS probe limits and recovery
+
+The probe build requires the already-authorized, clean Moonshine source at revision `234f60faa0eb388b01cdf7e60aca232af37aefda`, header version `30000`, Small Streaming architecture `4`, verified native runtime libraries, and all eight locally verified model files outside Git. The scripts do not download or change these artifacts. `scripts/test_macos_mic_probe.sh --real-fixture` also needs the locally licensed WAV fixture. If any artifact is missing or fails its identity check, classify native verification as **BLOCKED**.
+
+After checking the local artifacts, follow the [pinned macOS build and smoke steps](#pinned-macos-native-build-and-smoke-test), then `scripts/run_macos_mic_probe.sh --verification-id SYNTHETIC-01 --synthetic-copy-diagnostic` opens a model- and microphone-free test view with one fixed sample. It performs no clipboard write at launch. The visible Copy Result action is explicit and warns that it replaces the system clipboard. The automated AppKit integration test now checks exact UTF-8 bytes for eight fixed synthetic forms on a unique pasteboard; this does not verify a real transcript's transfer through TextEdit.
+
+The latest real-fixture observation still has a known unresolved boundary: the finalized session text matched the displayed AppKit result, AppKit reported a successful explicit copy, and the subsequent TextEdit document value did not compare equal. The cause is unknown; **AC-10 remains open**. Do not retry after a mismatch or inspect arbitrary clipboard/document contents. A controlled follow-up must use a new blank, unsaved plain-text document and a fixed synthetic sample, compare the complete value without normalization, and discard the document without saving. See [`evidence/mvp/mvp-01-feasibility-baseline.md`](evidence/mvp/mvp-01-feasibility-baseline.md) and the detailed Prompt 79K handoff below.
+
+- **The native build asks for `MOONSHINE_SOURCE_DIR` or another local artifact:** only use the already-verified local files; missing artifacts mean the native check is blocked. Do not download replacement model/runtime files.
+- **LaunchServices reports `kLSNoExecutableErr`:** use the authorized desktop launch context documented in the native probe steps; do not count a shell launch failure as clipboard evidence.
+- **AppKit reports copy success but TextEdit differs:** preserve the visible result, record only sanitized status, and stop. Do not retry, read the general pasteboard, or label it a writer defect without a controlled reproduction.
+
 ## Prerequisites
 
 - Node.js **22.12.0 or newer**. The Vite 8 and Vitest 5 requirements set this minimum. The suggested version is recorded in `.node-version`.
