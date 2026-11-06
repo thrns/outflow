@@ -255,3 +255,59 @@ verified case data and hashes, approved references, approved Clean/Verbatim
 semantics, production cleanup results, and integration evidence are still
 required. The coordinator does not approve Verbatim behavior, modify PRD
 thresholds, or make a current-behavior test pass into AC-07 acceptance.
+
+## Development-only verified-bundle scoring
+
+[`scripts/score_cleanup_ac07_bundles.py`](../scripts/score_cleanup_ac07_bundles.py)
+connects the existing validators to the existing shared coordinator. It first
+validates all four in-memory objects with
+`validate_cleanup_actual_outputs()`. Only after manifest, SHA-256 reference,
+protected-annotation, and actual-output validation succeeds does it assemble
+one record per case ID in manifest order and call
+`evaluate_cleanup_ac07_cases()`. Reference strings, actual strings, and token
+annotations are carried through unchanged; matching does not depend on bundle
+array position. Cases with an empty annotation list remain in both scores.
+
+```text
+Manifest
+   |
+   v
+SHA-256-verified references
+   |
+   v
+Validated protected annotations
+   |
+   v
+Associated actual outputs
+   |
+   v
+Shared exact-output and protected-token scoring
+```
+
+Run from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/score_cleanup_ac07_bundles.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_score_cleanup_ac07_bundles -v
+```
+
+The demonstration reads only the four checked-in synthetic JSON artifacts
+through the existing strict AC-07 JSON loader. It rejects duplicate JSON
+keys, malformed JSON, and nonstandard constants before scoring. The synthetic
+actual outputs remain unchanged and intentionally produce three mismatches,
+zero exact matches, a failing 200-case minimum, a failing 99% exact-output
+threshold, and one alteration in each synthetic protected-token category.
+The `demo-003` proper-noun annotation is only a contract example, not evidence
+of natural-language name preservation. These failing gates are expected; the
+program exits successfully because the artifacts were completely validated
+and scored. A score-gate failure does not indicate an integration-program
+failure.
+
+The printed result contains metadata, counts, and gate statuses only. It keeps
+`Production execution: NOT VERIFIED` for declared sources and reports
+`AC-07 acceptance: NOT EVALUATED`. Formal acceptance still requires an
+independently reviewed and approved acceptance corpus, at least 200 eligible
+transformations, approved Clean/Verbatim semantics, authenticated production
+outputs, production integration evidence, and passing formal exact-output and
+protected-token gates on that approved corpus. The PRD thresholds and the
+**PROPOSED — NOT APPROVED** Clean/Verbatim policy are unchanged.

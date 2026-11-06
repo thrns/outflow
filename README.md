@@ -4241,9 +4241,81 @@ AC-07 acceptance: NOT EVALUATED
 ```
 
 Output identity validation does not establish cleanup correctness. The
-existing shared coordinator may eventually score verified references against
-corresponding actual outputs after approved references, approved Clean/Verbatim
-semantics, authenticated production execution, and integration evidence are
-available. This task does not invoke it. The authoritative AC-07 thresholds
-and all task/release status remain unchanged; the Clean/Verbatim policy is
-still **PROPOSED — NOT APPROVED**.
+actual-output binder does not invoke the existing shared coordinator. The
+development-only integration described below now connects them for verified
+bundles, including synthetic bundles; a successful scoring call is not formal
+acceptance. Formal scoring still requires approved references and Clean/Verbatim
+semantics, authenticated production execution, and integration evidence. The
+authoritative AC-07 thresholds and all task/release status remain unchanged;
+the Clean/Verbatim policy is still **PROPOSED — NOT APPROVED**.
+
+## AC-07 synthetic verified-bundle scoring
+
+[`scripts/score_cleanup_ac07_bundles.py`](scripts/score_cleanup_ac07_bundles.py)
+connects the four-artifact validator to the existing shared exact-output and
+protected-token coordinator. `score_verified_cleanup_bundles()` validates the
+manifest, reference hashes, annotations, and actual outputs first; on success,
+it assembles records by exact case ID in manifest order and scores every case,
+including cases without annotations. It returns the existing immutable
+binding summary and coordinator result separately, plus the assembled case
+count. It does not calculate new thresholds or an overall acceptance flag.
+
+```text
+Manifest
+   |
+   v
+SHA-256-verified references
+   |
+   v
+Validated protected annotations
+   |
+   v
+Associated actual outputs
+   |
+   v
+Shared exact-output and protected-token scoring
+```
+
+Run the synthetic demo and focused tests from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/score_cleanup_ac07_bundles.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_score_cleanup_ac07_bundles -v
+```
+
+The demo uses the four checked-in artifacts unchanged and reuses the strict
+AC-07 JSON loader. It prints only metadata, counts, and statuses:
+
+```text
+AC-07 verified-bundle scoring: SYNTHETIC DEMO
+Corpus ID: ac07-synthetic-manifest-demo
+Revision: draft-001
+Run ID: synthetic-run-001
+Verified case associations: 3/3
+Exact matches: 0
+Mismatches: 3
+Exact-output rate: 0.00%
+Minimum corpus size: FAIL
+Exact-output threshold: FAIL
+Protected numeric tokens: 1 (1 altered)
+Protected proper nouns: 1 (1 altered)
+Protected-token gate: FAIL
+Output source: SYNTHETIC DEMO
+Production execution: NOT VERIFIED
+Reference review: PENDING
+Corpus approval: NOT ESTABLISHED
+AC-07 acceptance: NOT EVALUATED
+```
+
+These intentionally failing numerical and protection gates demonstrate that
+the scorers detect nonmatching outputs. The scorer-derived gate failures are
+expected, and the program exits successfully after validation and scoring.
+The synthetic proper-noun annotation is a contract example, not natural-
+language preservation evidence. Formal AC-07 acceptance still requires an
+independently reviewed and approved corpus with at least 200 eligible
+transformations, approved Clean/Verbatim semantics, authenticated production
+outputs, production integration evidence, and passing formal scoring and
+protection gates on that approved corpus. `AC-07 acceptance` remains
+`NOT EVALUATED`; `CLEANUP_MODE_POLICY.md` remains **PROPOSED — NOT APPROVED**,
+the PRD thresholds are unchanged, and all related task and release gates stay
+unchecked.

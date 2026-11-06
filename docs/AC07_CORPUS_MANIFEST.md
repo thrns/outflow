@@ -188,6 +188,57 @@ Clean/Verbatim semantics, authenticated production execution, and integration
 evidence. The authoritative case-count, exact-output, and protected-token
 thresholds remain in the PRD and are unchanged.
 
+## Development-only verified-bundle scoring
+
+The integration utility
+[`scripts/score_cleanup_ac07_bundles.py`](../scripts/score_cleanup_ac07_bundles.py)
+connects validation and scoring without changing any artifact or existing
+validator/scorer behavior. Its in-memory function first calls
+`validate_cleanup_actual_outputs()`. A validation error stops before the
+coordinator is invoked. On success, it associates each source by exact case ID,
+orders records by the manifest, and passes every case (including cases with
+no protected annotations) to `evaluate_cleanup_ac07_cases()`.
+
+```text
+Manifest
+   |
+   v
+SHA-256-verified references
+   |
+   v
+Validated protected annotations
+   |
+   v
+Associated actual outputs
+   |
+   v
+Shared exact-output and protected-token scoring
+```
+
+Run the development demonstration and tests:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/score_cleanup_ac07_bundles.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_score_cleanup_ac07_bundles -v
+```
+
+The demo reads only the four checked-in synthetic artifacts, using the
+existing strict loader so duplicate keys, malformed JSON, and unsupported
+constants are rejected. The data intentionally scores 0 exact matches and 3
+mismatches; the minimum-corpus, exact-output, and protected-token gates all
+fail. Its output is counts and statuses only. This failing synthetic score is
+expected and does not mean the integration program failed; `AC-07 acceptance`
+remains `NOT EVALUATED`. The synthetic `demo-003` proper-noun annotation is a
+schema/contract example only.
+
+Formal acceptance still requires an independently reviewed and approved
+acceptance corpus with at least 200 eligible transformations, approved
+Clean/Verbatim semantics, authenticated production outputs, production
+integration evidence, and passing formal exact-output and protected-token
+gates. Manifest declarations and this synthetic scoring demonstration do not
+satisfy those requirements. `CLEANUP_MODE_POLICY.md` remains
+**PROPOSED — NOT APPROVED** and PRD thresholds are unchanged.
+
 ## Validator and synthetic draft
 
 From the repository root:
