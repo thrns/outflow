@@ -88,9 +88,15 @@ customer transcript, production output, resource metric, or release gate was
 used or evaluated. Existing 200-case cleanup fixtures remain
 current-behavior characterization only.
 
-## Next handoff
+## Push verification and closeout
 
-The implementation commit is recorded above. This evidence update is a
-follow-up commit; push the task branch and verify the local HEAD, upstream
-reference, and remote SHA match. Preserve the unrelated untracked `....` and
-`scripts/__pycache__/` paths.
+Implementation commit: `e97e02717f98faafe64f2414f2420f13342835f0`.
+Evidence commit: `2124d7db608725932ac01ee3c80368ec5f54a265`.
+
+The task branch was pushed to `origin/codex/ac07-reference-bundle-binding`.
+After the evidence commit above, local HEAD, `@{u}`, and `git ls-remote`
+reported the same SHA: `2124d7db608725932ac01ee3c80368ec5f54a265`. The
+additional closeout change is evidence-only and does not alter the validated
+implementation. No implementation or acceptance status remains to be changed.
+The final branch SHA is reported in the completion message. The unrelated
+untracked `....` and `scripts/__pycache__/` paths remain preserved.
