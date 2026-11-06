@@ -18,6 +18,7 @@ if __package__:
         EVALUATION_VERSION,
         EXPECTED_ARCHITECTURE,
         EXPECTED_HEADER_VERSION,
+        MODEL_CANDIDATES,
         MODEL_CATALOG_PATH,
         REQUIRED_MODEL_ASSETS,
         RESULT_SCHEMA_VERSION,
@@ -39,6 +40,7 @@ else:
         EVALUATION_VERSION,
         EXPECTED_ARCHITECTURE,
         EXPECTED_HEADER_VERSION,
+        MODEL_CANDIDATES,
         MODEL_CATALOG_PATH,
         REQUIRED_MODEL_ASSETS,
         RESULT_SCHEMA_VERSION,
@@ -78,7 +80,7 @@ CORPUS_FIELDS = {
     "accent_variety_count", "proper_nouns_count", "technical_vocabulary_count",
     "numbers_count", "abbreviations_count", "silence_control_count",
     "provenance_verified_fixture_count", "human_verified_reference_count",
-    "requirements", "complete",
+    "requirements", "complete", "collection_status",
 }
 MACHINE_FIELDS = {
     "machine_label", "machine_identifier", "os", "os_release", "architecture",
@@ -202,29 +204,46 @@ def validate_measured_results(value: Any) -> dict[str, Any]:
         raise MeasuredResultsError("measurement timestamp must be UTC") from error
 
     source = value["source"]
+    source_fields = {
+        "source_revision", "c_api_header_version", "model_architecture", "candidate",
+        "source_contract_sha256",
+    }
+    if not isinstance(source, dict) or set(source) != source_fields:
+        raise MeasuredResultsError("pinned source identity is invalid")
+    candidate = source["candidate"]
+    selected_candidate = MODEL_CANDIDATES.get(candidate)
     if (
-        not isinstance(source, dict)
-        or set(source) != {"source_revision", "c_api_header_version", "model_architecture"}
-        or source["source_revision"] != SOURCE_REVISION
+        source["source_revision"] != SOURCE_REVISION
         or type(source["c_api_header_version"]) is not int
         or source["c_api_header_version"] != EXPECTED_HEADER_VERSION
+        or selected_candidate is None
         or type(source["model_architecture"]) is not int
-        or source["model_architecture"] != EXPECTED_ARCHITECTURE
+        or source["model_architecture"] != selected_candidate["architecture"]
+        or not _is_hash(source["source_contract_sha256"])
     ):
         raise MeasuredResultsError("pinned source identity is invalid")
 
     model = value["model"]
     model_fields = {
-        "catalog_path", "immutable_artifact_revision", "architecture", "c_api_header_version",
+        "candidate", "model_identity", "catalog_path", "immutable_artifact_revision",
+        "architecture", "source_contract_sha256", "c_api_header_version",
         "asset_sha256", "asset_bytes", "total_asset_bytes", "cold_process_load_ms",
         "warm_reload_samples_ms", "warm_reload_median_ms", "inference_process_load_ms",
         "redistribution_status", "license_review_status",
     }
     if not isinstance(model, dict) or set(model) != model_fields:
         raise MeasuredResultsError("model record shape is invalid")
-    if model["catalog_path"] != MODEL_CATALOG_PATH or model["immutable_artifact_revision"] is not None:
+    if (
+        model["candidate"] != candidate
+        or model["model_identity"] != selected_candidate["identity"]
+        or model["catalog_path"] != (
+            MODEL_CATALOG_PATH if candidate == "small" else "tiny-streaming-en/quantized_26_08_21"
+        )
+        or model["immutable_artifact_revision"] is not None
+        or model["source_contract_sha256"] != source["source_contract_sha256"]
+    ):
         raise MeasuredResultsError("model catalog and immutable revision fields are conflated")
-    if type(model["architecture"]) is not int or model["architecture"] != EXPECTED_ARCHITECTURE or type(model["c_api_header_version"]) is not int or model["c_api_header_version"] != EXPECTED_HEADER_VERSION:
+    if type(model["architecture"]) is not int or model["architecture"] != selected_candidate["architecture"] or type(model["c_api_header_version"]) is not int or model["c_api_header_version"] != EXPECTED_HEADER_VERSION:
         raise MeasuredResultsError("model ABI identity is invalid")
     hashes, sizes = model["asset_sha256"], model["asset_bytes"]
     if not isinstance(hashes, dict) or set(hashes) != REQUIRED_MODEL_ASSETS or not all(_is_hash(digest) for digest in hashes.values()):
@@ -407,6 +426,9 @@ def validate_measured_results(value: Any) -> dict[str, Any]:
     if not isinstance(corpus, dict) or set(corpus) != CORPUS_FIELDS:
         raise MeasuredResultsError("corpus summary shape is invalid")
     expected_corpus = assess_corpus_coverage(coverage_fixtures)
+    if corpus.get("collection_status") not in {"planned", "in_progress", "complete"}:
+        raise MeasuredResultsError("corpus collection status is invalid")
+    expected_corpus["collection_status"] = corpus["collection_status"]
     if corpus != expected_corpus:
         raise MeasuredResultsError("corpus coverage summary does not match fixture records")
 

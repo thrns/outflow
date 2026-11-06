@@ -3,7 +3,10 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -66,6 +69,7 @@ class ProcessTreeRssTests(unittest.TestCase):
         self.assertEqual(snapshot[42].identity, "linux-start-ticks:1234")
         self.assertEqual(snapshot[42].rss_bytes, 50 * 4096)
         self.assertEqual(snapshot[42].name, "worker (native)")
+        self.assertEqual(snapshot.backend, "linux-procfs-stat+statm")
 
     def test_parent_child_and_multiple_descendant_levels_sum_once(self) -> None:
         snapshot = {
@@ -191,6 +195,8 @@ class ProcessTreeRssTests(unittest.TestCase):
         )
 
         self.assertEqual(result["tree_peak_rss_bytes"], 3500)
+        self.assertEqual(result["measurement_backend"], "linux-procfs-stat+statm")
+        self.assertEqual(result["snapshot_completeness"], "complete")
         self.assertEqual(result["sample_count"], 2)
         self.assertEqual(
             {entry["pid"]: entry["peak_rss_bytes"] for entry in result["process_peak_rss"]},
@@ -225,6 +231,75 @@ class ProcessTreeRssTests(unittest.TestCase):
         child_records = [entry for entry in result["process_peak_rss"] if entry["pid"] == 2]
         self.assertEqual({entry["identity"] for entry in child_records}, {"child:old", "child:new"})
 
+    def test_synthetic_sampling_gap_is_explicit(self) -> None:
+        samples = [
+            make_sample({1: process(1, 0, 100)}, 1, timestamp_utc="t0", elapsed_ms=0),
+            make_sample({1: process(1, 0, 100)}, 1, timestamp_utc="t1", elapsed_ms=175),
+        ]
+        result = build_measurement(
+            samples,
+            root_pid=1,
+            root_identity="start:1",
+            interval_ms=100,
+            target_exit_code=0,
+            max_observed_gap_ms=175,
+            platform_name="linux",
+        )
+        self.assertEqual(result["sampling_gap_count"], 1)
+        self.assertEqual(result["sampling_gaps_ms"], [175])
+        self.assertEqual(result["measurement_gaps"], [{"after_sample": 1, "observed_interval_ms": 175}])
+
+    @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "supported native process-tree platforms only")
+    def test_real_local_parent_and_child_processes_are_attributed_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "measurement.json"
+            child_program = (
+                "import subprocess,sys,time; "
+                "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(0.9)']); "
+                "child.wait(); time.sleep(0.2)"
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).resolve().parents[1] / "measure_process_tree_rss.py"),
+                    "--interval-ms", "50", "--output", str(output), "--",
+                    sys.executable, "-c", child_program,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if completed.returncode != 0 and (
+                "permission denied" in completed.stderr
+                or "libproc is unavailable" in completed.stderr
+            ):
+                self.skipTest("host policy blocked target-scoped process-tree collection")
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            document = json.loads(output.read_text(encoding="utf-8"))
+        self.assertIn("macos-libproc" if sys.platform == "darwin" else "linux-procfs", document["measurement_backend"])
+        self.assertGreaterEqual(document["sample_count"], 2)
+        child_samples = []
+        for sample in document["samples"]:
+            pids = [record["pid"] for record in sample["processes"]]
+            self.assertEqual(len(pids), len(set(pids)))
+            self.assertEqual(sample["tree_rss_bytes"], sum(record["rss_bytes"] for record in sample["processes"]))
+            if len(pids) >= 2:
+                child_samples.append(sample)
+        self.assertTrue(child_samples, "the held-open child must appear in at least one sample")
+        root_pid = document["root"]["pid"]
+        self.assertIn(
+            root_pid,
+            {record["pid"] for record in child_samples[0]["processes"]},
+        )
+        self.assertTrue(
+            any(record["ppid"] == root_pid for record in child_samples[0]["processes"] if record["pid"] != root_pid)
+        )
+        if sys.platform == "darwin":
+            self.assertEqual(document["additional_macos_memory_metric"]["status"], "not_collected")
+        else:
+            self.assertIsNone(document["additional_macos_memory_metric"])
+
     def test_output_does_not_record_environment_or_command_arguments(self) -> None:
         with self.assertRaises(SystemExit) as raised:
             main(["--help"])
@@ -236,7 +311,10 @@ class ProcessTreeRssTests(unittest.TestCase):
             result = main(["--interval-ms", "20", "--", "/usr/bin/true"])
 
         self.assertEqual(result, 2)
-        self.assertIn("measurement failed", stderr.getvalue())
+        if sys.platform == "darwin":
+            self.assertIn("BLOCKED process-tree RSS measurement", stderr.getvalue())
+        else:
+            self.assertIn("FAILED process-tree RSS measurement", stderr.getvalue())
 
     def test_command_mode_passes_sampling_gap_into_sanitized_record(self) -> None:
         samples = [

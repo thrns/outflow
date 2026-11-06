@@ -242,7 +242,20 @@ static void write_json_string(const std::string& value) {
   std::cout << '"';
 }
 
-static int32_t load_transcriber(const char* model_directory) {
+static bool parse_model_architecture(const char* value, int32_t& architecture) {
+  if (value == nullptr || *value == '\0') return false;
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  if (end == value || *end != '\0' || parsed < 0 || parsed > INT32_MAX) return false;
+  if (parsed != MOONSHINE_MODEL_ARCH_SMALL_STREAMING &&
+      parsed != MOONSHINE_MODEL_ARCH_TINY_STREAMING) {
+    return false;
+  }
+  architecture = static_cast<int32_t>(parsed);
+  return true;
+}
+
+static int32_t load_transcriber(const char* model_directory, int32_t architecture) {
   // The pinned C API documents CPU as its default. Select it explicitly so
   // benchmark records prove the accelerator-free path was requested.
   const moonshine_option_t options[] = {
@@ -251,7 +264,7 @@ static int32_t load_transcriber(const char* model_directory) {
   };
   return moonshine_load_transcriber_from_files(
       model_directory,
-      MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
+      architecture,
       options,
       2,
       MOONSHINE_HEADER_VERSION);
@@ -323,8 +336,13 @@ static int run_runtime_identity(const char* executable_path) {
 }
 
 static int run_load_probe(int argc, char** argv) {
-  if (argc != 4) {
-    std::cerr << "load probe usage: moonshine_asr_batch --load-probe MODEL_DIR REPEATS\n";
+  if (argc != 4 && argc != 5) {
+    std::cerr << "load probe usage: moonshine_asr_batch --load-probe MODEL_DIR REPEATS [ARCHITECTURE]\n";
+    return 2;
+  }
+  int32_t architecture = MOONSHINE_MODEL_ARCH_SMALL_STREAMING;
+  if (argc == 5 && !parse_model_architecture(argv[4], architecture)) {
+    std::cerr << "load probe architecture must be Small Streaming (4) or Tiny Streaming (2)\n";
     return 2;
   }
   char* end = nullptr;
@@ -336,7 +354,7 @@ static int run_load_probe(int argc, char** argv) {
   std::vector<double> load_ms;
   for (long index = 0; index < repetitions; ++index) {
     const auto started = std::chrono::steady_clock::now();
-    const int32_t transcriber = load_transcriber(argv[2]);
+    const int32_t transcriber = load_transcriber(argv[2], architecture);
     const auto finished = std::chrono::steady_clock::now();
     if (transcriber < 0) {
       std::cerr << "Moonshine model load failed\n";
@@ -345,7 +363,9 @@ static int run_load_probe(int argc, char** argv) {
     load_ms.push_back(std::chrono::duration<double, std::milli>(finished - started).count());
     moonshine_free_transcriber(transcriber);
   }
-  std::cout << "{\"schema_version\":1,\"execution_provider\":\"CPUExecutionProvider\",\"model_load_ms\":[";
+  std::cout << "{\"schema_version\":1,\"execution_provider\":\"CPUExecutionProvider\",\"architecture\":"
+            << architecture << ",\"header_version\":" << MOONSHINE_HEADER_VERSION
+            << ",\"model_load_ms\":[";
   for (size_t index = 0; index < load_ms.size(); ++index) {
     if (index != 0) std::cout << ',';
     std::cout << std::fixed << std::setprecision(3) << load_ms[index];
@@ -359,13 +379,24 @@ int main(int argc, char** argv) {
     return run_runtime_identity(argv[0]);
   }
   if (argc >= 2 && std::string(argv[1]) == "--load-probe") return run_load_probe(argc, argv);
-  if (argc < 3) {
-    std::cerr << "usage: moonshine_asr_batch MODEL_DIR WAV_PATH...\n";
+  int32_t architecture = MOONSHINE_MODEL_ARCH_SMALL_STREAMING;
+  int first_wav = 2;
+  int model_directory_index = 1;
+  if (argc >= 2 && std::string(argv[1]) == "--model-arch") {
+    if (argc < 5 || !parse_model_architecture(argv[2], architecture)) {
+      std::cerr << "usage: moonshine_asr_batch --model-arch {2|4} MODEL_DIR WAV_PATH...\n";
+      return 2;
+    }
+    model_directory_index = 3;
+    first_wav = 4;
+  }
+  if (argc < first_wav + 1) {
+    std::cerr << "usage: moonshine_asr_batch [--model-arch {2|4}] MODEL_DIR WAV_PATH...\n";
     return 2;
   }
 
   const auto model_started = std::chrono::steady_clock::now();
-  const int32_t transcriber = load_transcriber(argv[1]);
+  const int32_t transcriber = load_transcriber(argv[model_directory_index], architecture);
   const auto model_finished = std::chrono::steady_clock::now();
   if (transcriber < 0) {
     std::cerr << "Moonshine model load failed\n";
@@ -375,8 +406,8 @@ int main(int argc, char** argv) {
                                    model_finished - model_started).count();
 
   std::vector<SessionResult> results;
-  results.reserve(static_cast<size_t>(argc - 2));
-  for (int index = 2; index < argc; ++index) {
+  results.reserve(static_cast<size_t>(argc - first_wav));
+  for (int index = first_wav; index < argc; ++index) {
     WavData wav;
     SessionResult result;
     if (!read_pcm16_mono_wav(argv[index], wav) || !run_session(transcriber, wav, result)) {
@@ -389,7 +420,7 @@ int main(int argc, char** argv) {
   moonshine_free_transcriber(transcriber);
 
   std::cout << "{\"schema_version\":1,\"execution_provider\":\"CPUExecutionProvider\",\"architecture\":"
-            << MOONSHINE_MODEL_ARCH_SMALL_STREAMING << ",\"header_version\":"
+            << architecture << ",\"header_version\":"
             << MOONSHINE_HEADER_VERSION << ",\"model_load_ms\":"
             << std::fixed << std::setprecision(3) << model_load_ms << ",\"outputs\":[";
   for (size_t index = 0; index < results.size(); ++index) {

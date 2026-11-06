@@ -73,8 +73,10 @@ clang++ \
   -framework AppKit -framework AVFoundation -framework AudioToolbox \
   -framework CoreAudio -framework Foundation \
   -o "$APP_CONTENTS/MacOS/OutflowMicProbe" || fail "native prototype compilation failed"
+chmod 0755 "$APP_CONTENTS/MacOS/OutflowMicProbe" || fail "native app executable permission could not be set"
 
 codesign --force --sign - "$APP_BUNDLE" >/dev/null || fail "local development app signing failed"
+codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null || fail "signed app bundle verification failed"
 python3 "$REPOSITORY_ROOT/scripts/verify_native_runtime.py" \
   --native-runner "$APP_CONTENTS/MacOS/OutflowMicProbe" \
   --moonshine-library "$MOONSHINE_LIBRARY" \

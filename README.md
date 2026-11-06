@@ -37,13 +37,38 @@ The probe build requires the already-authorized, clean Moonshine source at revis
 
 After checking the local artifacts, follow the [Prompt 79E native build and smoke steps](#prompt-79e--development-only-macos-microphone-probe), then the run script can launch a model- and microphone-free synthetic-copy view with a fixed sample. It performs no clipboard write at launch. Copy Result is explicit and warns that it replaces the system clipboard. The automated AppKit harness checks exact UTF-8 bytes for eight fixed synthetic forms on a unique pasteboard; it does not verify a real transcript's transfer through TextEdit.
 
-On the 2026-11-06 development host, the native probe built with the verified local runtime and the three-run fixture harness produced nonempty partial and final results. The normal native test script reached its final AppKit launch step but LaunchServices returned kLSNoExecutableErr for the temporary test app. The same isolated AppKit harness passed when launched in the desktop app context. See the [M1 feasibility handoff](evidence/mvp/mvp-01-feasibility-baseline.md) for exact statuses and measurements.
+On the 2026-11-06 development host, the native probe built with the verified local runtime and the three-run fixture harness produced nonempty partial and final results. The normal native test script reached its final AppKit launch step but LaunchServices returned `kLSNoExecutableErr` for the temporary test app even though its `CFBundleExecutable`, file mode, and code signature verified. The earlier feasibility handoff records a separate desktop-launched isolated AppKit pass. This milestone adds `scripts/run_macos_appkit_pasteboard_test.sh` as a repeatable standalone path to run from Terminal.app in the logged-in desktop session; the `.app` LaunchServices launch remains separately reported as blocked. See the [M1 feasibility handoff](evidence/mvp/mvp-01-feasibility-baseline.md) for historical statuses and measurements.
 
 The Prompt 79K real-result observation remains unresolved: the finalized session text matched the displayed AppKit result, AppKit reported an explicit copy success, and the subsequent TextEdit document value did not compare equal. The cause is unknown; AC-10 remains open. Do not retry after a mismatch or inspect arbitrary clipboard/document contents. A controlled follow-up must use a new blank, unsaved plain-text document and a fixed synthetic sample, compare the complete value without normalization, and discard the document without saving.
 
 - The native build asks for a local artifact: use only the already-verified files; missing artifacts mean the native check is blocked. Do not download replacement model/runtime files.
 - LaunchServices reports kLSNoExecutableErr: use the desktop app launch context for the isolated AppKit harness and consult the feasibility handoff; do not count a shell launch failure as clipboard evidence.
 - AppKit reports copy success but TextEdit differs: preserve the visible result, record only sanitized status, and stop. Do not retry, read the general pasteboard, or label it a writer defect without a controlled reproduction.
+
+
+### Milestone 2 native qualification tools
+
+The development benchmark defaults to Small (Moonshine architecture `4`); select Tiny explicitly with `--candidate tiny`. Tiny's eight-file streaming contract is parsed from the pinned Moonshine source, including its own file list, sizes, and vendor CRC32C metadata. The preparation tool hashes only files already on disk and never downloads. It writes local SHA-256 provenance with acquisition approval left `not-recorded`; Tiny inference requires the exact complete inventory plus separate approval evidence. Results retain the selected architecture, and the comparison tool blocks unless both candidates have measured results from the same complete approved corpus and comparable verified physical CPU hardware. A reviewable comparison never approves release.
+
+```sh
+python3 scripts/prepare_native_asr_candidate_manifest.py \
+  --candidate tiny \
+  --source-dir /Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f \
+  --asset-root /private/tmp/outflow-feasibility/models/tiny-streaming-en \
+  --output /private/tmp/outflow-tiny-candidate-manifest.json
+
+python3 scripts/compare_native_asr_candidates.py \
+  --small /path/to/measured-small.json \
+  --tiny /path/to/measured-tiny.json
+```
+
+On this host the Tiny asset directory is empty, so preparation exits `2` with a missing/incomplete artifact error. Do not substitute Small files or treat source metadata as verified Tiny weights. The frozen benchmark corpus also has zero ready fixtures, so it blocks before inference and produces no measured result. See [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) for the current schema and comparison prerequisites.
+
+On macOS, `scripts/measure_process_tree_rss.py` uses target-scoped `libproc` child enumeration and `PROC_PIDTASKALLINFO` RSS queries; it records the backend, process identities, 100 ms samples, and any sampling gaps. An inaccessible target descendant or an unresolved process-tree race returns `BLOCKED` rather than dropping the process. RSS sums can double-count shared pages. The separate macOS physical-footprint field remains `not_collected`; helper high-water RSS, aggregate process-tree RSS, and physical footprint are different measures.
+
+The native test script reports unit/worker, real fixture, and AppKit bundle-launch outcomes independently. It verifies the `.app` plist, executable, mode, and code signature before LaunchServices. A missing AppKit result is never PASS: only the exact `kLSNoExecutableErr` with no result is `BLOCKED`; a test-written failure or any other missing result is `FAIL`. For an AppKit pasteboard result from an authorized desktop context, open Terminal.app in the logged-in session and run `scripts/run_macos_appkit_pasteboard_test.sh`. It compiles and executes the existing isolated unique-pasteboard test directly, without reading the general clipboard. That result does not change a separately blocked `.app` LaunchServices launch into a pass.
+
+For the controlled copy check, use a fresh identified `--synthetic-copy-diagnostic` window. Confirm the exact fixed sample and clipboard warning, click Copy Result once, paste once into a new blank unsaved plain-text TextEdit document, then compare the complete text without normalization (including both newlines, spaces, Unicode composition, punctuation, and emoji). Record only `MATCH`/`MISMATCH` and the boundary; discard the document without saving. If the GUI or permission boundary is unavailable, report `BLOCKED`. Do not inspect the general clipboard, log text, or retry.
 
 ## Prerequisites
 
@@ -1948,7 +1973,7 @@ python3 scripts/measure_process_tree_rss.py --interval-ms 100 \
   "$MODEL_DIR" "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
 ```
 
-The JSON records a timestamped per-process snapshot, PIDs, process start identity, per-process RSS bytes, tree peak RSS bytes, sampling gaps, and limits. It never stores command arguments, environment variables, audio, or transcript output. On macOS it currently records no additional physical-footprint metric; the 100 ms `ps` sampling can miss short-lived helpers and RSS sums can double-count shared pages. It measures the launched tree, not the full Outflow application. Run ten times with distinct output paths before quoting the highest observed result.
+The JSON records a timestamped per-process snapshot, PIDs, process start identity, per-process RSS bytes, tree peak RSS bytes, sampling gaps, backend, and limits. It never stores command arguments, environment variables, audio, or transcript output. On macOS it uses target-scoped `libproc`; inaccessible descendants block a complete record. It records no additional physical-footprint metric, and RSS sums can double-count shared pages. It measures the launched tree, not the full Outflow application. Run ten times with distinct output paths before quoting the highest observed result.
 
 Validate native notices and reproduce the available local audits with:
 

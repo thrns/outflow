@@ -11,6 +11,7 @@ unverified, mismatched, or malformed fixtures and never prints native output.
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import UTC, datetime
 import hashlib
 import json
@@ -39,12 +40,27 @@ else:
     from validate_model_asset_inventory import validate_manifest as validate_asset_manifest
 
 
-RESULT_SCHEMA_VERSION = 2
+RESULT_SCHEMA_VERSION = 3
 RESULT_TYPE = "measured_native_asr"
-EVALUATION_VERSION = "outflow-native-asr-benchmark-v2"
+EVALUATION_VERSION = "outflow-native-asr-benchmark-v3"
 SOURCE_REVISION = "234f60faa0eb388b01cdf7e60aca232af37aefda"
 MODEL_CATALOG_PATH = "small-streaming-en/quantized_26_08_21"
-EXPECTED_ARCHITECTURE = 4
+MODEL_CANDIDATES = {
+    "small": {
+        "identity": "small-streaming-en",
+        "macro": "MOONSHINE_MODEL_ARCH_SMALL_STREAMING",
+        "architecture": 4,
+        "asset_id_prefix": "moonshine-small-streaming-",
+    },
+    "tiny": {
+        "identity": "tiny-streaming-en",
+        "macro": "MOONSHINE_MODEL_ARCH_TINY_STREAMING",
+        "architecture": 2,
+        "asset_id_prefix": "moonshine-tiny-streaming-en-",
+    },
+}
+DEFAULT_CANDIDATE = "small"
+EXPECTED_ARCHITECTURE = MODEL_CANDIDATES[DEFAULT_CANDIDATE]["architecture"]
 EXPECTED_HEADER_VERSION = 30000
 REQUIRED_MODEL_ASSETS = {
     "adapter.ort",
@@ -398,8 +414,108 @@ def verify_native_runtime(
     }
 
 
-def verify_source(source_dir: Path) -> dict[str, Any]:
-    """Verify the exact clean upstream source and pinned C API constants."""
+def derive_source_model_contract(source_dir: Path, candidate: str) -> dict[str, Any]:
+    """Read the selected English streaming file contract from pinned source."""
+
+    selected = MODEL_CANDIDATES.get(candidate)
+    if selected is None:
+        raise BenchmarkError("unsupported model candidate")
+    try:
+        header = (source_dir / "core" / "moonshine-c-api.h").read_text(encoding="utf-8")
+        catalog = (source_dir / "core" / "moonshine-model-catalog.cpp").read_text(encoding="utf-8")
+        metadata = (source_dir / "core" / "moonshine-model-file-metadata.generated.cpp").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise BenchmarkError("pinned source model catalog could not be read") from error
+
+    architecture_match = re.search(
+        rf"#define\s+{re.escape(selected['macro'])}\s+\(\s*(\d+)\s*\)", header
+    )
+    header_match = re.search(
+        r"#define\s+MOONSHINE_HEADER_VERSION\s+\(\s*(\d+)\s*\)", header
+    )
+    quantized_match = re.search(
+        r'constexpr const char\*\s+kStreamingQuantizedDir\s*=\s*"([^"]+)"\s*;', catalog
+    )
+    if (
+        architecture_match is None
+        or int(architecture_match.group(1)) != selected["architecture"]
+        or header_match is None
+        or int(header_match.group(1)) != EXPECTED_HEADER_VERSION
+        or quantized_match is None
+    ):
+        raise BenchmarkError("pinned C API candidate contract is unsupported")
+
+    catalog_path = f"{selected['identity']}{quantized_match.group(1)}"
+    base_url = f"https://download.moonshine.ai/model/{catalog_path}"
+    catalog_binding = re.search(
+        rf"\{{\s*{re.escape(selected['macro'])}\s*,\s*std::string\(kCdnModelBase\)\s*\+\s*"
+        rf'"/{re.escape(selected["identity"])}"\s*\+\s*kStreamingQuantizedDir\s*\}}',
+        catalog,
+    )
+    if catalog_binding is None:
+        raise BenchmarkError("candidate is not present in the pinned English model catalog")
+
+    component_files = re.search(
+        r"std::vector<std::string>\s+stt_component_files\s*\([^)]*\)\s*\{.*?"
+        r"std::vector<std::string>\s+files\s*=\s*\{(?P<files>.*?)\};",
+        catalog,
+        flags=re.DOTALL,
+    )
+    if component_files is None:
+        raise BenchmarkError("pinned streaming model file contract could not be parsed")
+    required_names = re.findall(r'"([^"\\]+)"', component_files.group("files"))
+    if not required_names or len(required_names) != len(set(required_names)):
+        raise BenchmarkError("pinned streaming model file contract is ambiguous")
+
+    entry_pattern = re.compile(
+        r"\{\s*(?P<url_expr>(?:\"(?:[^\"\\]|\\.)*\"\s*)+),\s*"
+        r"(?P<size>-?\d+)\s*,\s*\"(?P<checksum>[^\"]*)\"\s*,\s*"
+        r"\"(?P<checksum_type>[^\"]*)\"\s*\}",
+        flags=re.DOTALL,
+    )
+    metadata_entries: dict[str, dict[str, Any]] = {}
+    for entry in entry_pattern.finditer(metadata):
+        url = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', entry.group("url_expr")))
+        if not url.startswith(base_url + "/"):
+            continue
+        name = url.rsplit("/", 1)[-1]
+        if name in metadata_entries:
+            raise BenchmarkError("pinned model metadata contains duplicate file identities")
+        metadata_entries[name] = {
+            "url": url,
+            "expected_bytes": int(entry.group("size")),
+            "vendor_checksum": entry.group("checksum"),
+            "vendor_checksum_type": entry.group("checksum_type"),
+        }
+    files: dict[str, dict[str, Any]] = {}
+    for name in required_names:
+        record = metadata_entries.get(name)
+        if (
+            record is None
+            or record["expected_bytes"] <= 0
+            or record["vendor_checksum_type"] != "crc32c"
+            or not record["vendor_checksum"]
+        ):
+            raise BenchmarkError("pinned source metadata is incomplete for a required model file")
+        files[name] = record
+
+    contract = {
+        "source_revision": SOURCE_REVISION,
+        "candidate": candidate,
+        "model_identity": selected["identity"],
+        "architecture": selected["architecture"],
+        "c_api_header_version": EXPECTED_HEADER_VERSION,
+        "catalog_path": catalog_path,
+        "required_files": files,
+    }
+    contract["source_contract_sha256"] = hashlib.sha256(
+        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return contract
+
+
+def verify_source(source_dir: Path, candidate: str = "small") -> dict[str, Any]:
+    """Verify the exact clean upstream source and selected C API contract."""
 
     try:
         revision = subprocess.run(
@@ -416,60 +532,272 @@ def verify_source(source_dir: Path) -> dict[str, Any]:
             text=True,
             timeout=10,
         ).stdout
-        header = (source_dir / "core" / "moonshine-c-api.h").read_text(encoding="utf-8")
     except (OSError, subprocess.SubprocessError, UnicodeError) as error:
         raise BenchmarkError("pinned Moonshine source or C API header could not be verified") from error
     if revision != SOURCE_REVISION or status.strip():
         raise BenchmarkError("Moonshine source is not the required clean pinned revision")
-    header_match = re.search(
-        r"#define\s+MOONSHINE_HEADER_VERSION\s+\(\s*(\d+)\s*\)", header
-    )
-    architecture_match = re.search(
-        r"#define\s+MOONSHINE_MODEL_ARCH_SMALL_STREAMING\s+\(\s*(\d+)\s*\)",
-        header,
-    )
-    if (
-        header_match is None
-        or architecture_match is None
-        or int(header_match.group(1)) != EXPECTED_HEADER_VERSION
-        or int(architecture_match.group(1)) != EXPECTED_ARCHITECTURE
-    ):
-        raise BenchmarkError("Moonshine C API header does not match the expected contract")
+    contract = derive_source_model_contract(source_dir, candidate)
     return {
         "source_revision": revision,
-        "c_api_header_version": int(header_match.group(1)),
-        "model_architecture": int(architecture_match.group(1)),
+        "c_api_header_version": EXPECTED_HEADER_VERSION,
+        "model_architecture": contract["architecture"],
+        "candidate": candidate,
+        "source_contract_sha256": contract["source_contract_sha256"],
     }
 
 
-def verify_model_assets(manifest_path: Path, asset_root: Path) -> dict[str, Any]:
-    """Validate the eight local model files and keep observed SHA separate from revision."""
+def _crc32c_base64(path: Path) -> str:
+    """Compute the pinned source registry's CRC32C check without networking."""
 
-    asset_manifest = load_asset_manifest(manifest_path)
-    errors, counts = validate_asset_manifest(asset_manifest, asset_root)
+    table = []
+    for value in range(256):
+        crc_value = value
+        for _ in range(8):
+            crc_value = (crc_value >> 1) ^ (0x82F63B78 if crc_value & 1 else 0)
+        table.append(crc_value)
+    crc = 0xFFFFFFFF
+    try:
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                for byte in chunk:
+                    crc = table[(crc ^ byte) & 0xFF] ^ (crc >> 8)
+    except OSError as error:
+        raise BenchmarkError("a candidate model artifact could not be read") from error
+    checksum = (crc ^ 0xFFFFFFFF).to_bytes(4, "big")
+    return base64.b64encode(checksum).decode("ascii")
+
+
+def _candidate_manifest_assets(contract: Mapping[str, Any], asset_root: Path) -> list[dict[str, Any]]:
+    """Create a local-only inventory from bytes that match pinned source metadata."""
+
+    try:
+        asset_root.lstat()
+    except OSError as error:
+        raise BenchmarkError("candidate artifact directory is missing") from error
+    if not asset_root.is_dir() or asset_root.is_symlink():
+        raise BenchmarkError("candidate artifact root must be a real directory")
+    try:
+        entries = list(asset_root.iterdir())
+    except OSError as error:
+        raise BenchmarkError("candidate artifact directory could not be inspected") from error
+    if len(entries) != len(contract["required_files"]):
+        raise BenchmarkError("candidate artifact directory is incomplete or contains unsupported files")
+
+    assets = []
+    for name, source_record in sorted(contract["required_files"].items()):
+        path = asset_root / name
+        try:
+            info = path.lstat()
+        except OSError as error:
+            raise BenchmarkError("candidate model is blocked: a required artifact is missing") from error
+        if not path.is_file() or path.is_symlink() or info.st_size != source_record["expected_bytes"]:
+            raise BenchmarkError("candidate model is blocked: artifact type or source byte size does not match")
+        if _crc32c_base64(path) != source_record["vendor_checksum"]:
+            raise BenchmarkError("candidate model is blocked: local bytes do not match the pinned source checksum")
+        identity = contract["model_identity"]
+        provenance = (
+            f"Pinned Moonshine source {contract['source_revision']}; "
+            f"contract SHA-256 {contract['source_contract_sha256']}; "
+            f"source expected bytes {source_record['expected_bytes']}; "
+            f"vendor CRC32C {source_record['vendor_checksum']}; "
+            f"locally observed SHA-256 {file_sha256(path)}."
+        )
+        assets.append(
+            {
+                "asset_id": f"moonshine-{identity}-{name.replace('.', '-')}",
+                "category": "tokenizer" if name == "tokenizer.bin" else "model",
+                "status": "file-verified",
+                "source": "Moonshine AI",
+                "source_url": source_record["url"],
+                "source_revision": None,
+                "file_path": name,
+                "sha256": file_sha256(path),
+                "provenance_reference": provenance,
+                "license_identifier": None,
+                "license_evidence_reference": None,
+                "license_review_status": "review-pending",
+                "redistribution_status": "undetermined",
+                "redistribution_evidence_reference": None,
+                "notice_attribution_status": "undetermined",
+                "notice_attribution_evidence_reference": None,
+            }
+        )
+    return assets
+
+
+def prepare_candidate_asset_manifest(
+    source_dir: Path, candidate: str, asset_root: Path, output_path: Path
+) -> dict[str, Any]:
+    """Write an exclusive local artifact inventory; never author an approval."""
+
+    contract = derive_source_model_contract(source_dir, candidate)
+    assets = _candidate_manifest_assets(contract, asset_root)
+    document = {
+        "schema_version": 1,
+        "candidate": candidate,
+        "model_identity": contract["model_identity"],
+        "model_architecture": contract["architecture"],
+        "source_revision": contract["source_revision"],
+        "source_contract_sha256": contract["source_contract_sha256"],
+        "acquisition_approval_status": "not-recorded",
+        "acquisition_approval_reference": None,
+        "assets": assets,
+    }
+    try:
+        with output_path.open("x", encoding="utf-8") as output:
+            json.dump(document, output, indent=2, sort_keys=True, ensure_ascii=False)
+            output.write("\n")
+    except FileExistsError as error:
+        raise BenchmarkError("manifest output already exists; choose a new path") from error
+    except OSError as error:
+        raise BenchmarkError("candidate manifest could not be written") from error
+    return document
+
+
+def _validate_tiny_approval(
+    document: Mapping[str, Any], approval_reference: str | None, repository_root: Path
+) -> None:
+    if (
+        document.get("acquisition_approval_status") != "approved"
+        or not isinstance(approval_reference, str)
+        or not approval_reference
+        or document.get("acquisition_approval_reference") != approval_reference
+    ):
+        raise BenchmarkError("BLOCKED: Tiny evaluation acquisition approval is not recorded")
+    reference_path = Path(approval_reference)
+    if reference_path.is_absolute() or ".." in reference_path.parts:
+        raise BenchmarkError("Tiny approval reference must be a repository-relative evidence path")
+    try:
+        approval_file = (repository_root / reference_path).resolve(strict=True)
+        approval_file.relative_to(repository_root.resolve(strict=True))
+        approval_text = approval_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeError, ValueError) as error:
+        raise BenchmarkError("BLOCKED: Tiny acquisition approval evidence could not be verified") from error
+    if (
+        "TINY EVALUATION ACQUISITION APPROVED" not in approval_text
+        or SOURCE_REVISION not in approval_text
+        or "tiny-streaming-en" not in approval_text
+    ):
+        raise BenchmarkError("BLOCKED: Tiny acquisition approval evidence does not authorize this source candidate")
+
+
+def verify_model_assets(
+    manifest_path: Path,
+    asset_root: Path,
+    *,
+    candidate: str = "small",
+    contract: Mapping[str, Any] | None = None,
+    approval_reference: str | None = None,
+    repository_root: Path = REPOSITORY_ROOT,
+) -> dict[str, Any]:
+    """Validate exact local files against source-derived candidate metadata."""
+
+    selected_candidate = MODEL_CANDIDATES.get(candidate)
+    if selected_candidate is None:
+        raise BenchmarkError("unsupported model candidate")
+    source_contract = contract
+    strict_source_contract = source_contract is not None
+    if source_contract is None and candidate == "small":
+        source_contract = {
+            "source_revision": SOURCE_REVISION,
+            "candidate": "small",
+            "model_identity": "small-streaming-en",
+            "architecture": MODEL_CANDIDATES["small"]["architecture"],
+            "c_api_header_version": EXPECTED_HEADER_VERSION,
+            "catalog_path": MODEL_CATALOG_PATH,
+            "source_contract_sha256": None,
+            "required_files": {
+                name: {
+                    "url": f"https://download.moonshine.ai/model/{MODEL_CATALOG_PATH}/{name}",
+                    "expected_bytes": None,
+                    "vendor_checksum": None,
+                    "vendor_checksum_type": None,
+                }
+                for name in REQUIRED_MODEL_ASSETS
+            },
+        }
+    if source_contract is None:
+        raise BenchmarkError("candidate source contract is required before model verification")
+    if candidate == "small":
+        asset_manifest = load_asset_manifest(manifest_path)
+    else:
+        asset_manifest = load_json(manifest_path)
+        expected_root = {
+            "schema_version", "candidate", "model_identity", "model_architecture",
+            "source_revision", "source_contract_sha256", "acquisition_approval_status",
+            "acquisition_approval_reference", "assets",
+        }
+        if not isinstance(asset_manifest, dict) or set(asset_manifest) != expected_root:
+            raise BenchmarkError("Tiny candidate manifest metadata is incomplete")
+        if (
+            type(asset_manifest["schema_version"]) is not int
+            or asset_manifest["schema_version"] != 1
+            or asset_manifest["candidate"] != "tiny"
+            or asset_manifest["model_identity"] != selected_candidate["identity"]
+            or type(asset_manifest["model_architecture"]) is not int
+            or asset_manifest["model_architecture"] != selected_candidate["architecture"]
+            or asset_manifest["source_revision"] != SOURCE_REVISION
+            or asset_manifest["source_contract_sha256"] != source_contract["source_contract_sha256"]
+        ):
+            raise BenchmarkError("Tiny candidate model identity does not match the pinned source contract")
+        _validate_tiny_approval(asset_manifest, approval_reference, repository_root)
+        asset_manifest = {"schema_version": 1, "assets": asset_manifest["assets"]}
+
+    errors, _counts = validate_asset_manifest(asset_manifest, asset_root)
     if errors:
         raise BenchmarkError(f"model asset inventory validation failed ({len(errors)} issue(s))")
     selected = [
-        asset
-        for asset in asset_manifest["assets"]
-        if asset["asset_id"].startswith("moonshine-small-streaming-")
+        asset for asset in asset_manifest["assets"]
+        if isinstance(asset, dict) and asset.get("asset_id", "").startswith(
+            selected_candidate["asset_id_prefix"]
+        )
     ]
+    required_files = source_contract["required_files"]
     names = {asset["file_path"] for asset in selected if asset["file_path"] is not None}
-    if names != REQUIRED_MODEL_ASSETS or len(selected) != len(REQUIRED_MODEL_ASSETS):
-        raise BenchmarkError("Small Streaming inventory does not contain exactly eight expected files")
-    if any(asset["status"] != "file-verified" for asset in selected):
-        raise BenchmarkError("one or more Small Streaming files are not locally hash-verified")
-    if any(asset["source_revision"] is not None for asset in selected):
-        raise BenchmarkError("model source revision is conflated with the observed artifact SHA")
-    if any(not _is_sha256(asset["sha256"]) for asset in selected):
-        raise BenchmarkError("one or more Small Streaming artifact SHA-256 values are missing")
-    model_bytes = sum((asset_root / asset["file_path"]).stat().st_size for asset in selected)
+    if names != set(required_files) or len(selected) != len(required_files):
+        raise BenchmarkError(f"{candidate.title()} Streaming inventory does not match its pinned source file contract")
+    for asset in selected:
+        name = asset["file_path"]
+        expected_source = required_files[name]
+        if (
+            asset["status"] != "file-verified"
+            or asset["source_revision"] is not None
+            or not _is_sha256(asset["sha256"])
+            or asset["source_url"] != expected_source["url"]
+            or (
+                strict_source_contract
+                and candidate == "tiny"
+                and SOURCE_REVISION not in asset["provenance_reference"]
+            )
+            or (
+                strict_source_contract
+                and candidate == "tiny"
+                and source_contract["source_contract_sha256"] not in asset["provenance_reference"]
+            )
+            or (
+                strict_source_contract
+                and candidate == "tiny"
+                and expected_source["vendor_checksum"] not in asset["provenance_reference"]
+            )
+        ):
+            raise BenchmarkError(f"{candidate.title()} artifact identity or provenance is incomplete")
+        path = asset_root / name
+        if expected_source["expected_bytes"] is not None and path.stat().st_size != expected_source["expected_bytes"]:
+            raise BenchmarkError(f"{candidate.title()} artifact byte size differs from the pinned source catalog")
+        if strict_source_contract and _crc32c_base64(path) != expected_source["vendor_checksum"]:
+            raise BenchmarkError(f"{candidate.title()} artifact does not match the pinned source CRC32C")
+
+    ordered = sorted(selected, key=lambda item: item["file_path"])
     return {
-        "catalog_path": MODEL_CATALOG_PATH,
+        "candidate": candidate,
+        "model_identity": selected_candidate["identity"],
+        "catalog_path": source_contract["catalog_path"],
+        "source_contract_sha256": source_contract["source_contract_sha256"],
+        "architecture": selected_candidate["architecture"],
         "immutable_artifact_revision": None,
-        "asset_sha256": {asset["file_path"]: asset["sha256"].lower() for asset in sorted(selected, key=lambda x: x["file_path"])},
-        "asset_bytes": {asset["file_path"]: (asset_root / asset["file_path"]).stat().st_size for asset in sorted(selected, key=lambda x: x["file_path"])},
-        "total_bytes": model_bytes,
+        "asset_sha256": {asset["file_path"]: asset["sha256"].lower() for asset in ordered},
+        "asset_bytes": {asset["file_path"]: (asset_root / asset["file_path"]).stat().st_size for asset in ordered},
+        "total_bytes": sum((asset_root / asset["file_path"]).stat().st_size for asset in ordered),
         "redistribution_status": "undetermined",
         "license_review_status": "review-pending",
     }
@@ -499,15 +827,41 @@ def _run_json_command(command: Sequence[str], *, timeout_seconds: float) -> Any:
         raise BenchmarkError("native Moonshine command returned malformed output") from error
 
 
-def parse_load_probe(value: Any, *, required_samples: int = 2) -> list[float]:
+def _validate_candidate_architecture(architecture: int) -> None:
+    if type(architecture) is not int or architecture not in {
+        candidate["architecture"] for candidate in MODEL_CANDIDATES.values()
+    }:
+        raise BenchmarkError("unsupported development model architecture")
+
+
+def _validate_candidate_architecture(architecture: int) -> None:
+    if type(architecture) is not int or architecture not in {
+        candidate["architecture"] for candidate in MODEL_CANDIDATES.values()
+    }:
+        raise BenchmarkError("unsupported development model architecture")
+
+
+def parse_load_probe(
+    value: Any,
+    *,
+    required_samples: int = 2,
+    expected_architecture: int = EXPECTED_ARCHITECTURE,
+) -> list[float]:
     """Validate cold-process and warm-reload timing samples from the helper."""
 
-    if not isinstance(value, dict) or set(value) != {"schema_version", "execution_provider", "model_load_ms"}:
+    _validate_candidate_architecture(expected_architecture)
+    if not isinstance(value, dict) or set(value) != {
+        "schema_version", "execution_provider", "architecture", "header_version", "model_load_ms"
+    }:
         raise BenchmarkError("native model-load probe has an invalid shape")
     samples = value["model_load_ms"]
     if (
         type(value["schema_version"]) is not int or value["schema_version"] != 1
         or value["execution_provider"] != "CPUExecutionProvider"
+        or type(value["architecture"]) is not int
+        or value["architecture"] != expected_architecture
+        or type(value["header_version"]) is not int
+        or value["header_version"] != EXPECTED_HEADER_VERSION
         or not isinstance(samples, list) or len(samples) < required_samples
     ):
         raise BenchmarkError("native model-load probe is incomplete")
@@ -522,9 +876,15 @@ def parse_load_probe(value: Any, *, required_samples: int = 2) -> list[float]:
     return [float(sample) for sample in samples]
 
 
-def parse_native_output(value: Any, expected_count: int) -> tuple[float, list[dict[str, Any]]]:
+def parse_native_output(
+    value: Any,
+    expected_count: int,
+    *,
+    expected_architecture: int = EXPECTED_ARCHITECTURE,
+) -> tuple[float, list[dict[str, Any]]]:
     """Validate batch inference output while keeping hypotheses in memory only."""
 
+    _validate_candidate_architecture(expected_architecture)
     required_root = {"schema_version", "execution_provider", "architecture", "header_version", "model_load_ms", "outputs"}
     if not isinstance(value, dict) or set(value) != required_root:
         raise BenchmarkError("native inference output has an invalid shape")
@@ -532,7 +892,7 @@ def parse_native_output(value: Any, expected_count: int) -> tuple[float, list[di
         type(value["schema_version"]) is not int
         or value["schema_version"] != 1
         or value["execution_provider"] != "CPUExecutionProvider"
-        or value["architecture"] != EXPECTED_ARCHITECTURE
+        or value["architecture"] != expected_architecture
         or value["header_version"] != EXPECTED_HEADER_VERSION
     ):
         raise BenchmarkError("native inference output has an unexpected model contract")
@@ -793,6 +1153,7 @@ def build_measured_result(
     stop_to_final = [float(row["stop_to_final_ms"]) for row in speech]
     rtfs = [float(row["real_time_factor"]) for row in speech]
     coverage = assess_corpus_coverage(list(fixtures))
+    coverage["collection_status"] = manifest["collection_status"]
     required_coverage_met = coverage["complete"]
     wer_value = aggregate_record["wer"]
     physical_4gb_eligibility = assess_physical_4gb_eligibility(machine)
@@ -807,9 +1168,12 @@ def build_measured_result(
         "fixture_manifest_sha256": fixture_manifest_sha256,
         "source": dict(source),
         "model": {
+            "candidate": model["candidate"],
+            "model_identity": model["model_identity"],
             "catalog_path": model["catalog_path"],
             "immutable_artifact_revision": model["immutable_artifact_revision"],
-            "architecture": EXPECTED_ARCHITECTURE,
+            "architecture": model["architecture"],
+            "source_contract_sha256": model["source_contract_sha256"],
             "c_api_header_version": EXPECTED_HEADER_VERSION,
             "asset_sha256": dict(model["asset_sha256"]),
             "asset_bytes": dict(model["asset_bytes"]),
@@ -896,10 +1260,23 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, Any]:
     """Validate provenance, run native inference, score and persist metrics."""
 
     repository_root = Path(arguments.repository_root).resolve(strict=True)
-    manifest, fixtures, manifest_hash = load_verified_fixtures(arguments.fixture_manifest, repository_root)
-    source = verify_source(arguments.source_dir)
+    candidate = getattr(arguments, "candidate", DEFAULT_CANDIDATE)
+    if candidate not in MODEL_CANDIDATES:
+        raise BenchmarkError("unsupported model candidate")
+    if candidate == "tiny" and getattr(arguments, "asset_manifest", None) is None:
+        raise BenchmarkError("BLOCKED: Tiny requires an explicit verified candidate manifest")
+    source = verify_source(arguments.source_dir, candidate)
+    contract = derive_source_model_contract(arguments.source_dir, candidate)
     asset_root = arguments.asset_root or arguments.model_dir
-    model = verify_model_assets(arguments.asset_manifest, asset_root)
+    model = verify_model_assets(
+        arguments.asset_manifest,
+        asset_root,
+        candidate=candidate,
+        contract=contract,
+        approval_reference=getattr(arguments, "acquisition_approval_reference", None),
+        repository_root=repository_root,
+    )
+    manifest, fixtures, manifest_hash = load_verified_fixtures(arguments.fixture_manifest, repository_root)
     if Path(arguments.model_dir).resolve(strict=True) != Path(asset_root).resolve(strict=True):
         raise BenchmarkError("model directory must match the validated asset root")
 
@@ -917,16 +1294,23 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, Any]:
         native_files["onnxruntime_library"],
     )
     load_probe = _run_json_command(
-        [str(native_runner), "--load-probe", str(arguments.model_dir), "3"],
+        [str(native_runner), "--load-probe", str(arguments.model_dir), "3", str(model["architecture"])],
         timeout_seconds=arguments.timeout_seconds,
     )
-    load_samples = parse_load_probe(load_probe, required_samples=3)
+    load_samples = parse_load_probe(
+        load_probe, required_samples=3, expected_architecture=model["architecture"]
+    )
     audio_paths = [str(fixture["audio_path"]) for fixture in fixtures]
     native_json = _run_json_command(
-        [str(native_runner), str(arguments.model_dir), *audio_paths],
+        [
+            str(native_runner), "--model-arch", str(model["architecture"]),
+            str(arguments.model_dir), *audio_paths,
+        ],
         timeout_seconds=arguments.timeout_seconds,
     )
-    native_output = parse_native_output(native_json, len(fixtures))
+    native_output = parse_native_output(
+        native_json, len(fixtures), expected_architecture=model["architecture"]
+    )
     prepared = [dict(fixture) for fixture in fixtures]
     for fixture in prepared:
         fixture["audio_metadata"] = dict(fixture["audio_metadata"])
@@ -971,7 +1355,9 @@ def _default_binary(source_dir: Path, kind: str) -> Path:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Measure the pinned local Moonshine model on verified fixtures.")
     parser.add_argument("--fixture-manifest", type=Path, default=REPOSITORY_ROOT / "docs" / "benchmark-fixtures.json")
-    parser.add_argument("--asset-manifest", type=Path, default=REPOSITORY_ROOT / "evidence" / "mvp" / "prompt-79-model-assets.json")
+    parser.add_argument("--candidate", choices=tuple(MODEL_CANDIDATES), default=DEFAULT_CANDIDATE, help="development-only candidate; Tiny must be selected explicitly")
+    parser.add_argument("--asset-manifest", type=Path, help="Small inventory by default; required when candidate is Tiny")
+    parser.add_argument("--acquisition-approval-reference", help="repository evidence path for maintainer-approved Tiny evaluation")
     parser.add_argument("--asset-root", type=Path, help="directory containing all eight validated model assets")
     parser.add_argument("--model-dir", type=Path, required=True, help="model directory passed to the native C API")
     parser.add_argument("--source-dir", type=Path, required=True, help="clean pinned Moonshine source checkout")
@@ -984,6 +1370,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--timeout-seconds", type=float, default=3600.0)
     parser.add_argument("--output", type=Path, help="new sanitized measured-results JSON path")
     arguments = parser.parse_args(argv)
+    if arguments.candidate == "small" and arguments.asset_manifest is None:
+        arguments.asset_manifest = REPOSITORY_ROOT / "evidence" / "mvp" / "prompt-79-model-assets.json"
     if arguments.timeout_seconds <= 0 or not math.isfinite(arguments.timeout_seconds):
         parser.error("--timeout-seconds must be positive and finite")
     try:
@@ -993,7 +1381,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     print("MEASURED_NATIVE_ASR_RESULT: READY")
     print(f"Verified ready fixtures: {result['corpus']['verified_ready_fixture_count']}")
-    print(f"Small Streaming model bytes: {result['model']['total_asset_bytes']}")
+    print(f"Candidate: {result['model']['candidate']} ({result['model']['model_identity']}, architecture {result['model']['architecture']})")
+    print(f"Model bytes: {result['model']['total_asset_bytes']}")
     print(f"Aggregate speech WER: {result['aggregate']['wer']}")
     print(f"Physical 4 GB gate: {result['release_gates']['physical_4gb_gate']}")
     print(f"Verified corpus coverage gate: {result['release_gates']['verified_corpus_coverage']}")

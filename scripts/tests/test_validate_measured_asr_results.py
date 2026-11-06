@@ -10,6 +10,7 @@ from typing import Any
 
 from scripts.run_native_asr_benchmark import (
     EVALUATION_VERSION,
+    MODEL_CANDIDATES,
     EXPECTED_ARCHITECTURE,
     EXPECTED_HEADER_VERSION,
     MODEL_CATALOG_PATH,
@@ -20,6 +21,7 @@ from scripts.run_native_asr_benchmark import (
 )
 from scripts.score_wer import NORMALIZATION_POLICY_VERSION
 from scripts.validate_fixture_manifest import assess_corpus_coverage
+from scripts.compare_native_asr_candidates import ComparisonBlocked, compare_candidate_results
 from scripts.validate_measured_asr_results import MeasuredResultsError, main, validate_measured_results
 
 
@@ -65,6 +67,7 @@ def valid_result() -> dict[str, Any]:
         "human_reference_verified": True,
     }]
     coverage = assess_corpus_coverage(coverage_input)
+    coverage["collection_status"] = "planned"
     memory = 18_000_000_000
     timing = {
         "recognition_p50_ms": 40.0,
@@ -86,11 +89,16 @@ def valid_result() -> dict[str, Any]:
             "source_revision": SOURCE_REVISION,
             "c_api_header_version": EXPECTED_HEADER_VERSION,
             "model_architecture": EXPECTED_ARCHITECTURE,
+            "candidate": "small",
+            "source_contract_sha256": "b" * 64,
         },
         "model": {
+            "candidate": "small",
+            "model_identity": MODEL_CANDIDATES["small"]["identity"],
             "catalog_path": MODEL_CATALOG_PATH,
             "immutable_artifact_revision": None,
             "architecture": EXPECTED_ARCHITECTURE,
+            "source_contract_sha256": "b" * 64,
             "c_api_header_version": EXPECTED_HEADER_VERSION,
             "asset_sha256": {name: hashlib.sha256(name.encode()).hexdigest() for name in REQUIRED_MODEL_ASSETS},
             "asset_bytes": {name: 1 for name in REQUIRED_MODEL_ASSETS},
@@ -167,6 +175,25 @@ class MeasuredResultsValidatorTests(unittest.TestCase):
         self.assertEqual(summary["fixtures"], 1)
         self.assertEqual(summary["speech_fixtures"], 1)
         self.assertFalse(summary["coverage_complete"])
+
+    def test_result_architecture_must_match_selected_candidate(self) -> None:
+        value = valid_result()
+        value["source"]["model_architecture"] = MODEL_CANDIDATES["tiny"]["architecture"]
+        with self.assertRaisesRegex(MeasuredResultsError, "pinned source identity"):
+            validate_measured_results(value)
+
+    def test_candidate_comparison_is_blocked_for_planned_corpus(self) -> None:
+        small = valid_result()
+        tiny = valid_result()
+        tiny["source"].update(candidate="tiny", model_architecture=MODEL_CANDIDATES["tiny"]["architecture"])
+        tiny["model"].update(
+            candidate="tiny",
+            model_identity=MODEL_CANDIDATES["tiny"]["identity"],
+            catalog_path="tiny-streaming-en/quantized_26_08_21",
+            architecture=MODEL_CANDIDATES["tiny"]["architecture"],
+        )
+        with self.assertRaisesRegex(ComparisonBlocked, "complete approved corpus"):
+            compare_candidate_results(small, tiny)
 
     def test_malformed_root_and_unsupported_result_types_are_rejected(self) -> None:
         with self.assertRaisesRegex(MeasuredResultsError, "root fields"):

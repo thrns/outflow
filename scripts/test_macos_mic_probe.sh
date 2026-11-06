@@ -7,7 +7,7 @@ EXPECTED_MOONSHINE_SHA256="42128afcc4ad6f71d8f6c79012aa81d0b8755c3c6b393c8f9c380
 EXPECTED_ORT_SHA256="480790a978a48ad3e06ce86b6025e037bd70221637f5c104a8dde19617364cf4"
 
 fail() {
-  printf 'mic probe tests failed: %s\n' "$1" >&2
+  printf 'FAIL actual native test or implementation failure: %s\n' "$1" >&2
   exit 1
 }
 
@@ -54,7 +54,7 @@ clang++ "${COMMON_FLAGS[@]}" "${INCLUDES[@]}" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/session_worker.cpp" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/model_verifier.cpp" \
   "${LIBRARIES[@]}" -o "$TEST_DIR/core_test" || fail "core test compilation failed"
-"$TEST_DIR/core_test"
+"$TEST_DIR/core_test" || fail "native core test executable returned failure"
 
 clang++ "${COMMON_FLAGS[@]}" "${INCLUDES[@]}" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/tests/worker_test.cpp" \
@@ -63,7 +63,8 @@ clang++ "${COMMON_FLAGS[@]}" "${INCLUDES[@]}" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/session_worker.cpp" \
   "$REPOSITORY_ROOT/dev/macos-mic-probe/model_verifier.cpp" \
   "${LIBRARIES[@]}" -o "$TEST_DIR/worker_test" || fail "worker test compilation failed"
-"$TEST_DIR/worker_test"
+"$TEST_DIR/worker_test" || fail "native worker test executable returned failure"
+printf 'PASS native unit and worker tests\n'
 
 if [[ "$RUN_REAL_FIXTURE" == "--real-fixture" ]]; then
   : "${OUTFLOW_MIC_PROBE_MODEL_DIR:?set OUTFLOW_MIC_PROBE_MODEL_DIR to the locally authorized model directory}"
@@ -107,9 +108,13 @@ PY
         "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" "${OUTFLOW_MIC_PROBE_FIXTURE_SECONDS:-12}"
     else
       "$TEST_DIR/real_fixture_harness" "$OUTFLOW_MIC_PROBE_MODEL_DIR" \
-        "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" "${OUTFLOW_MIC_PROBE_FIXTURE_SECONDS:-12}"
+        "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" "${OUTFLOW_MIC_PROBE_FIXTURE_SECONDS:-12}" || \
+        fail "real ASR fixture harness returned failure"
     fi
   done
+  printf 'PASS real ASR fixture tests\n'
+else
+  printf 'NOT RUN real ASR fixture tests (pass --real-fixture to execute)\n'
 fi
 
 PASTEBOARD_APP_BUILD_DIR="$TEST_DIR/pasteboard-probe-build"
@@ -156,18 +161,27 @@ reject_invalid_launch "microphone capture combination" \
   --verification-id 79J-INVALID --synthetic-copy-diagnostic --microphone-capture
 printf 'PASS native app rejected 4 invalid synthetic diagnostic launches without opening AppKit.\n'
 
+python3 "$REPOSITORY_ROOT/scripts/classify_macos_appkit_test.py" \
+  validate-bundle --bundle "$PASTEBOARD_APP" || fail "AppKit test bundle failed structural or code-signature validation"
 PASTEBOARD_RESULT="$TEST_DIR/pasteboard-integration-result.txt"
+PASTEBOARD_LAUNCH_LOG="$TEST_DIR/pasteboard-launch.log"
 PASTEBOARD_OPEN_STATUS=0
 if /usr/bin/open -n -W -a "$PASTEBOARD_APP" --args \
-  --isolated-pasteboard-test "$PASTEBOARD_RESULT"; then
+  --isolated-pasteboard-test "$PASTEBOARD_RESULT" >"$PASTEBOARD_LAUNCH_LOG" 2>&1; then
   PASTEBOARD_OPEN_STATUS=0
 else
   PASTEBOARD_OPEN_STATUS=$?
 fi
-[[ -f "$PASTEBOARD_RESULT" ]] || \
-  fail "isolated AppKit test did not report a result (LaunchServices status $PASTEBOARD_OPEN_STATUS)"
-cat "$PASTEBOARD_RESULT"
-rg -q '^PASS isolated AppKit pasteboard integration tests:' "$PASTEBOARD_RESULT" || \
-  fail "isolated AppKit pasteboard integration test failed"
-[[ "$PASTEBOARD_OPEN_STATUS" == 0 ]] || \
-  fail "LaunchServices reported status $PASTEBOARD_OPEN_STATUS after the AppKit test"
+if python3 "$REPOSITORY_ROOT/scripts/classify_macos_appkit_test.py" classify \
+  --launch-status "$PASTEBOARD_OPEN_STATUS" \
+  --result "$PASTEBOARD_RESULT" \
+  --launch-log "$PASTEBOARD_LAUNCH_LOG"; then
+  cat "$PASTEBOARD_RESULT"
+else
+  APPKIT_CLASSIFICATION_STATUS=$?
+  if [[ "$APPKIT_CLASSIFICATION_STATUS" == 2 ]]; then
+    printf 'AppKit test was not counted as a pass. Run scripts/run_macos_appkit_pasteboard_test.sh from Terminal.app in the logged-in desktop session.\n' >&2
+    exit 2
+  fi
+  exit 1
+fi
