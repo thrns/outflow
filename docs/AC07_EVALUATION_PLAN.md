@@ -64,7 +64,7 @@ AC-07 acceptance evidence.
 
 ## C. Shared evaluation coordinator
 
-The evaluation now has five distinct pieces:
+The evaluation now has six distinct pieces:
 
 1. **Exact-output scorer:** checks corpus count and byte-for-byte exact-match
    percentage using the unchanged 200-case minimum and 99% threshold.
@@ -93,6 +93,16 @@ The evaluation now has five distinct pieces:
    `actual=expected` value is used only for the scorer's reference validation;
    all alteration and acceptance-gate results are discarded. It reports no
    production score and does not establish acceptance.
+6. **Separate actual-output bundle and identity binder:**
+   [`scripts/validate_cleanup_ac07_actual_outputs.py`](../scripts/validate_cleanup_ac07_actual_outputs.py)
+   first validates the manifest, hash-bound references, and protected
+   annotations through the existing protected-reference validator. It then
+   associates separately supplied actual strings by exact case ID and checks
+   corpus/revision identity, source declarations, complete ID correspondence,
+   and UTF-8 encodability. It neither compares actual and expected values nor
+   invokes either scorer. A `production_declared` source and its
+   `execution_evidence_ref` are unauthenticated declarations; production
+   execution remains unverified by this binder.
 
 Run its 200-case synthetic demonstration from the repository root:
 
@@ -126,6 +136,11 @@ expected outputs are correct or independently approved. The validator cannot
 authenticate a `review_evidence_ref`; a `reviewed` declaration is not
 approval. The checked-in three-case bundle is synthetic only.
 
+The complete binding order is **manifest → hash-bound reference bundle →
+validated protected annotations → separately supplied actual outputs**. Each
+later artifact must use the identity and exact case-ID set established by the
+earlier binding step.
+
 Before a future evaluation passes shared records to both scorers, it must
 complete this verification sequence:
 
@@ -143,11 +158,19 @@ complete this verification sequence:
    bound reference strings. This validates reference metadata only; declared
    kinds do not prove annotation correctness, and successful ranges do not
    authenticate independent review.
-5. Only after independent reference approval and production execution, assemble
-   shared evaluation records with corresponding actual outputs and the
-   independently reviewed annotations, then invoke the existing shared
-   coordinator. This is the point at which actual-output preservation is
-   evaluated.
+5. Bind the separately supplied actual-output bundle with
+   [`scripts/validate_cleanup_ac07_actual_outputs.py`](../scripts/validate_cleanup_ac07_actual_outputs.py).
+   Its cases match the verified reference IDs exactly, independent of order.
+   The binder never derives actual strings from expected strings. A declared
+   `production_declared` source or evidence-reference string is not
+   authenticated production evidence.
+6. Only after independent reference approval, authenticated production
+   execution, and integration evidence, assemble shared evaluation records
+   with corresponding actual outputs and the independently reviewed
+   annotations, then invoke the existing shared coordinator. This is the point
+   at which exact-output accuracy and actual protected-token preservation are
+   scored. The identity binder alone establishes neither cleanup correctness
+   nor acceptance.
 
 The metadata validator checks hash syntax; the separate binding validator
 checks manifest-to-content correspondence; the protected-reference validator
@@ -204,18 +227,24 @@ protection.
    authoritative requirements and tests together where needed.
 2. Have the corpus owner freeze and identify the independently reviewed
    expected-output set and protected-token annotations.
-3. Validate manifest metadata, then validate the separate bundle structure and
+3. Validate manifest metadata, then validate the separate reference bundle and
    bind its exact IDs and SHA-256 digests to the manifest as described above.
    This proves declared hash correspondence only; independently review and
    approve the expected references separately.
-4. Independently approve the expected references and their review evidence.
-5. Run production cleanup on the approved corpus without changing expected
-   strings after seeing the output, and preserve corresponding actual outputs.
-6. Only after both reference approval and production execution, assemble the
-   shared records and run `evaluate_cleanup_ac07_cases()` over the same corpus
-   and outputs. It sends the shared in-memory records through both unchanged
-   scorers and reports their results separately.
-7. Record both numerical gates, the mode distinction, production integration
+4. Validate the protected-token annotations against those same references.
+5. Independently approve the expected references and their review evidence.
+6. Run production cleanup on the approved corpus without changing expected
+   strings after seeing the output, and preserve corresponding actual outputs
+   with authenticated execution and integration evidence.
+7. Bind the separate actual-output bundle to the verified reference identity
+   and complete case-ID set. Its source declaration alone does not
+   authenticate production execution.
+8. Only after reference approval, authenticated production execution, and
+   integration evidence, assemble the shared records and run
+   `evaluate_cleanup_ac07_cases()` over the same corpus and outputs. It sends
+   the shared in-memory records through both unchanged scorers and reports
+   their results separately.
+9. Record both numerical gates, the mode distinction, production integration
    evidence, and limitations. Report AC-07 only after every formal acceptance
    condition is satisfied.
 

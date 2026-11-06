@@ -249,6 +249,12 @@ Added a standard-library validator and separate three-case synthetic reference b
 
 This is reference-integrity infrastructure only. It does not run cleanup, use the 200 characterization fixtures as acceptance data, score outputs, or verify that expected strings are correct. The hashes are checked against the manifest without repair. The Clean/Verbatim policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands, demo output, tests, environment, and limitations are recorded in [`evidence/T-035-T-036-ac07-reference-bundle-binding.md`](../evidence/T-035-T-036-ac07-reference-bundle-binding.md).
 
+### AC-07 synthetic actual-output identity binding — partial T-035/T-036 evaluation-infrastructure progress (2026-11-05)
+
+Added a separately authored three-case synthetic actual-output bundle and a standard-library validator. The validator first reuses protected-reference binding for the manifest, reference hashes, case IDs, and UTF-8 protected-token annotations, then checks output corpus/revision identity, explicit source declarations, exact case-ID correspondence, and UTF-8 actual strings. Cases are associated by exact ID, including reordered arrays; empty actual strings are retained. The demo prints identity and counts only, says production execution is not verified, and leaves AC-07 unevaluated.
+
+This is output-identity infrastructure only. It does not construct outputs from expected strings, execute cleanup, compare output accuracy, score protected-token changes, or authenticate a `production_declared` source or its evidence reference. The eventual shared coordinator may score verified references with corresponding actual outputs after the required evidence gates; this task did not invoke it. Formal evaluation still requires an approved acceptance corpus, approved Clean/Verbatim semantics, authenticated production execution, and integration evidence. The policy remains **PROPOSED — NOT APPROVED**. **T-017, T-018, T-023, T-035, T-036, T-038, T-039, AC-07, AC-08, and every release gate remain unchecked.** Exact commands, results, environment, branch/commit, and limitations are recorded in [`evidence/T-035-T-036-ac07-actual-output-binding.md`](../evidence/T-035-T-036-ac07-actual-output-binding.md).
+
 ## 1. Milestone map / critical path
 
 ```mermaid
@@ -350,12 +356,14 @@ Each task includes the primary feature/acceptance link and concrete completion a
 - [ ] **T-035 — Implement deterministic whitespace/punctuation pipeline.** Deps: T-023. Ordered pure functions, Unicode handling, idempotence; ≥150 goldens. [F-07/C-06/AC-07]
 - [ ] **T-036 — Implement Verbatim/Clean and filler policy.** Deps: T-035,T-017. Explicit isolated filler-only deletion and 50 additional goldens, protect proper nouns/numbers. [F-07/C-06/AC-07]
 
-The AC-07 manifest/reference/annotation validators are evaluation-infrastructure
-only. Protected-reference binding checks synthetic annotation structure and
-UTF-8 ranges against hash-bound expected strings; it does not implement or
-evaluate production cleanup, prove actual token preservation, approve the
-Clean/Verbatim policy, or complete T-035, T-036, or AC-07. Those task checkboxes
-and all release gates remain open.
+The AC-07 manifest/reference/annotation/output binders are evaluation-
+infrastructure only. Protected-reference binding checks synthetic annotation
+structure and UTF-8 ranges against hash-bound expected strings; actual-output
+binding checks only identity, declarations, and complete case correspondence.
+Neither implements or evaluates production cleanup, proves actual token
+preservation, authenticates production execution, approves the Clean/Verbatim
+policy, or completes T-035, T-036, or AC-07. Those task checkboxes and all
+release gates remain open.
 
 - [ ] **T-037 — Implement no-speech detection.** Deps: T-029,T-030. Silence/low-confidence policy prevents inserts on 50 silent/noise samples; avoid constant microphone gating. [F-05/C-04/AC-05]
 - [ ] **T-038 — Implement vocabulary CRUD.** Deps: T-017,T-018. Limit 500 entries, 128 Unicode chars each, boundary-aware validation and save/load/delete tests. [F-08/C-08/AC-08]

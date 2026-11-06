@@ -4194,3 +4194,56 @@ with different input and expected offsets. `demo-003` labels the `AC-07`
 identifier as a synthetic `proper_noun` only to demonstrate the contract; this
 does not show natural-language proper-noun coverage. The expected summary ends
 with `Corpus approval: NOT ESTABLISHED` and `AC-07 acceptance: NOT EVALUATED`.
+
+## AC-07 synthetic actual-output identity binding
+
+The four-artifact relationship is **manifest → hash-bound reference bundle →
+validated protected annotations → separately supplied actual outputs**.
+[`scripts/validate_cleanup_ac07_actual_outputs.py`](scripts/validate_cleanup_ac07_actual_outputs.py)
+first calls the existing protected-reference validator, then validates an
+independently supplied output bundle against that verified identity. It
+associates cases by exact, case-sensitive ID, independent of array order, and
+checks exact corpus ID and revision, explicit source declarations, complete
+case correspondence, and UTF-8 actual strings. Empty actual strings are
+retained. The binder does not generate actual values from expected strings,
+normalize output, compare expected and actual values, inspect protected-token
+preservation, or call the shared scorer/coordinator.
+
+`synthetic_demo` outputs require a null `execution_evidence_ref`.
+`production_declared` outputs require a nonempty reference string, but that
+reference is not proof that production code ran. A synthetic-purpose manifest
+rejects a production declaration. Even for an acceptance candidate, the
+summary reports production execution as unverified.
+
+Run the demonstration and focused tests from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_cleanup_ac07_actual_outputs.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_cleanup_ac07_actual_outputs -v
+```
+
+Expected demonstration output:
+
+```text
+AC-07 actual-output binding: SYNTHETIC DEMO
+Corpus ID: ac07-synthetic-manifest-demo
+Revision: draft-001
+Run ID: synthetic-run-001
+Reference cases: 3
+Actual-output cases: 3
+Case-ID correspondence: PASS
+Actual UTF-8 strings validated: 3/3
+Output source: SYNTHETIC DEMO
+Production execution: NOT VERIFIED
+Reference review: PENDING
+Corpus approval: NOT ESTABLISHED
+AC-07 acceptance: NOT EVALUATED
+```
+
+Output identity validation does not establish cleanup correctness. The
+existing shared coordinator may eventually score verified references against
+corresponding actual outputs after approved references, approved Clean/Verbatim
+semantics, authenticated production execution, and integration evidence are
+available. This task does not invoke it. The authoritative AC-07 thresholds
+and all task/release status remain unchanged; the Clean/Verbatim policy is
+still **PROPOSED — NOT APPROVED**.

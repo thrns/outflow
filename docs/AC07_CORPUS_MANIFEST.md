@@ -136,6 +136,58 @@ reports reference review as pending, corpus approval as not established, and
 AC-07 acceptance as not evaluated; it does not print annotation or transcript
 text.
 
+## Separate actual-output bundle and identity binding
+
+Actual outputs are supplied in a fourth, separate JSON artifact. Its version 1
+schema contains exactly `schema_version`, `corpus_id`, `revision`, `run_id`,
+`source_kind`, `execution_evidence_ref`, and a nonempty `cases` array. Each
+case contains exactly `id` and `actual`. The output corpus ID, revision, and
+case IDs must match the identity already verified across the manifest,
+hash-bound reference bundle, and protected-token annotation bundle. Cases are
+matched by exact, case-sensitive ID rather than array position, so a reordered
+output bundle is valid when the complete ID set matches.
+
+The `source_kind` declaration is `synthetic_demo` or `production_declared`.
+Synthetic outputs require `execution_evidence_ref: null`; a production
+declaration requires a nonempty string. A `synthetic_demo` manifest rejects a
+`production_declared` source. An `acceptance_candidate` manifest may accept
+either declaration. An execution-evidence reference is only a declaration and
+is not proof that production code ran; output identity validation never
+independently verifies production provenance.
+
+[`scripts/validate_cleanup_ac07_actual_outputs.py`](../scripts/validate_cleanup_ac07_actual_outputs.py)
+first calls the protected-reference validator, then validates output identity,
+strict fields, source declarations, complete case-ID correspondence, and
+UTF-8 encodability. Empty actual strings are retained as valid outputs. The
+binder does not normalize or alter actual strings, compare them to expected
+strings, inspect protected-token preservation, or generate outputs from
+expected values. The checked-in three-case output file is independently
+authored synthetic test data; it contains no input, expected-output, or
+protected-token text.
+
+The four-artifact relationship is:
+
+**Manifest → hash-bound reference bundle → validated protected annotations → separately supplied actual outputs.**
+
+Run the synthetic demonstration and focused tests from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_cleanup_ac07_actual_outputs.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_cleanup_ac07_actual_outputs -v
+```
+
+The summary is printed only after every binding succeeds. It contains identity
+and counts only, and explicitly says `Production execution: NOT VERIFIED` and
+`AC-07 acceptance: NOT EVALUATED`. The existing shared coordinator may later
+score verified references against corresponding actual outputs, but this
+validator does not invoke it. Output identity and a source declaration do not
+establish cleanup correctness.
+
+Formal AC-07 evaluation still requires an approved acceptance corpus, approved
+Clean/Verbatim semantics, authenticated production execution, and integration
+evidence. The authoritative case-count, exact-output, and protected-token
+thresholds remain in the PRD and are unchanged.
+
 ## Validator and synthetic draft
 
 From the repository root:

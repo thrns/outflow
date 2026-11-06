@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "corpus_id": "ac07-synthetic-manifest-demo",
+  "revision": "draft-001",
+  "run_id": "synthetic-run-001",
+  "source_kind": "synthetic_demo",
+  "execution_evidence_ref": null,
+  "cases": [
+    {
+      "id": "demo-001",
+      "actual": "Independent synthetic output for demo-001"
+    },
+    {
+      "id": "demo-002",
+      "actual": "Independent synthetic output for demo-002"
+    },
+    {
+      "id": "demo-003",
+      "actual": "Independent synthetic output for demo-003"
+    }
+  ]
+}
