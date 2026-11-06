@@ -5,7 +5,7 @@ flows: [UF-05]
 acceptance: [AC-07]
 owner: coordinator / codex/ac07-corpus-manifest-foundation
 base_commit: 3f2cccecba56aa7d02dc9e760690d55961f0a423
-result_commit: implementation commit on codex/ac07-corpus-manifest-foundation; exact SHA recorded in task delivery
+result_commit: 84a19e2a0c4e95985877544bfb9a2fd842739ffb
 platform: macOS 26.6.2 (25G83), arm64; Python 3.13.13; Rust/Cargo 1.99.1
 implementation: Version 1 metadata-only manifest schema, standard-library validator, three-case synthetic draft, tests, and synchronized documentation
 doc_updates: docs/AC07_CORPUS_MANIFEST.md; docs/AC07_EVALUATION_PLAN.md; README.md; docs/TASKS.md
@@ -93,7 +93,7 @@ The full Python suite printed diagnostic text from existing negative-path CLI te
 
 - Task branch: `codex/ac07-corpus-manifest-foundation`
 - Base branch and commit: `codex/ac07-shared-evaluation-contract` at `3f2cccecba56aa7d02dc9e760690d55961f0a423`
-- Result commit: implementation commit on the task branch; its exact SHA is recorded in the final task delivery. The final evidence-record commit and remote synchronization are also reported there.
+- Implementation result commit: `84a19e2a0c4e95985877544bfb9a2fd842739ffb` on the task branch. This evidence file is finalized in a subsequent evidence-only commit; the final branch tip is recorded in the task delivery.
 - Corpus review: **PENDING**
 - Corpus approval: **NOT ESTABLISHED**
 - AC-07 acceptance: **NOT EVALUATED**
