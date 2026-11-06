@@ -122,3 +122,11 @@ integration`). Therefore the local branch has no upstream tracking reference,
 and local HEAD, upstream, and remote branch SHA cannot be confirmed equal.
 Retry publication after repository write access or remote ref updates are
 available; do not treat the branch as pushed.
+
+### Delivery-status correction (2026-11-05)
+
+The GitHub branch `codex/ac07-protected-token-evaluator` was subsequently
+verified at commit
+`8ec1b7d194f634c63c6b7377311442dbe9d0e7b5`. The failed-push attempts and
+earlier missing-remote-branch observation above are retained as historical
+evidence; this correction records the later verified branch state.

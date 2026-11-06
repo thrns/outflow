@@ -3960,3 +3960,87 @@ synthetic unit tests and demo validate evaluator behavior only; they do not
 certify cleanup quality, comprehensive preservation, or AC-07 acceptance.
 See the [AC-07 evaluation plan](docs/AC07_EVALUATION_PLAN.md) for the
 remaining evidence requirements.
+
+## Shared AC-07 evaluation coordinator
+
+[`scripts/evaluate_cleanup_ac07.py`](scripts/evaluate_cleanup_ac07.py)
+coordinates the exact-output and protected-token scorers using one in-memory
+case collection. It validates each complete record and its token annotations
+with the existing protected-token evaluator, then projects the same cases to
+the exact-output scorer. It returns both independent score objects and fails
+if their case counts differ. It does not calculate a combined percentage or
+return an AC-07 acceptance decision.
+
+Run the synthetic demonstration and focused tests from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/evaluate_cleanup_ac07.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_evaluate_cleanup_ac07 -v
+```
+
+Expected demo output:
+
+```text
+AC-07 combined evaluator: SYNTHETIC DEMO
+Cases: 200
+Exact matches: 198
+Mismatches: 2
+Exact-output rate: 99.00%
+Minimum corpus size: PASS
+Exact-output threshold: PASS
+Protected numeric tokens: 1 (0 altered)
+Protected proper nouns: 1 (0 altered)
+Protected-token gate: PASS (synthetic only)
+Shared case count: PASS
+Final Clean/Verbatim policy: NOT APPROVED
+AC-07 acceptance: NOT EVALUATED
+```
+
+Call `evaluate_cleanup_ac07_cases(cases)` with records in this shared format:
+
+```python
+{
+    "id": "case-001",
+    "input": "Dr . Élodie met 2026",
+    "expected": "Dr. Élodie met 2026",
+    "actual": "Dr. Élodie met 2026",
+    "protected_tokens": [
+        {
+            "kind": "proper_noun",
+            "text": "Élodie",
+            "input_bytes": [5, 12],
+            "output_bytes": [4, 11],
+        }
+    ],
+}
+```
+
+`protected_tokens` is required but may be empty on individual records. Across
+the evaluated corpus, the protected-token gate requires valid annotations for
+both `number` and `proper_noun`, with zero altered tokens. Offsets are
+zero-based, half-open UTF-8 byte ranges: `input_bytes` selects the token in
+`input`, and `output_bytes` selects it in `expected`.
+
+Troubleshooting:
+
+- **Missing field:** include `id`, `input`, `expected`, `actual`, and
+  `protected_tokens` on every record. Each annotation needs `kind`, `text`,
+  `input_bytes`, and `output_bytes`.
+- **Invalid annotation or UTF-8 offset:** verify that the ranges select the
+  declared token in the corresponding input and expected strings, stay within
+  bounds, and start and end on UTF-8 character boundaries. Fix the reference
+  metadata; invalid annotations fail the whole evaluation.
+- **Duplicate ID:** assign each record a unique, nonempty string `id`.
+- **Protected-token gate fails with no alterations:** annotate at least one
+  numeric token and one proper noun. Empty annotation lists remain valid but
+  do not provide token-kind coverage.
+- **Exact-output threshold and protected-token gate differ:** the gates answer
+  separate questions. An unprotected punctuation mismatch can reduce exact
+  accuracy while preserving every annotated token; a protected-token change
+  can fail preservation even when exact accuracy remains at or above 99%.
+
+Passing both synthetic gates is not formal acceptance. AC-07 still requires
+an independently reviewed reference corpus, approved Clean/Verbatim semantics,
+production cleanup results, and integration evidence. The existing 200
+characterization fixtures are not designated as acceptance data, and the PRD
+thresholds remain unchanged.

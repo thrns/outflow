@@ -62,7 +62,36 @@ and an accented proper noun. It reads no characterization corpus and prints
 counts only. A passing synthetic gate is verification of scoring logic, not
 AC-07 acceptance evidence.
 
-## C. Actual acceptance evidence
+## C. Shared evaluation coordinator
+
+The evaluation now has three distinct layers:
+
+1. **Exact-output scorer:** checks corpus count and byte-for-byte exact-match
+   percentage using the unchanged 200-case minimum and 99% threshold.
+2. **Protected-token scorer:** checks annotated numeric and proper-noun
+   preservation at independently reviewed UTF-8 byte ranges.
+3. **Shared coordinator:** [`scripts/evaluate_cleanup_ac07.py`](../scripts/evaluate_cleanup_ac07.py)
+   accepts one in-memory collection in the protected-token record format,
+   materializes it once, validates it with the protected-token evaluator, and
+   projects those same records into the exact-output scorer. Both results are
+   returned separately, and a case-count mismatch fails evaluation. Invalid
+   records or reference annotations reject the whole evaluation; the
+   coordinator does not return a partial result or an overall acceptance flag.
+
+Run its 200-case synthetic demonstration from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/evaluate_cleanup_ac07.py --demo
+```
+
+The demonstration creates cases and explicit token offsets in memory. It has
+198 exact matches, two mismatches after the protected ranges, one annotated
+numeric token, one accented proper noun, and zero altered protected tokens. It
+reads no cleanup fixtures, runs no Rust code, and writes no case contents to
+disk. Passing its two numerical gates verifies only the scorer wiring and
+synthetic arithmetic; it does not establish acceptance.
+
+## D. Actual acceptance evidence
 
 Scoring a set of strings is only one part of AC-07. Before an acceptance result
 can be reported, the project still needs all of the following:
@@ -106,18 +135,18 @@ protection.
    expected-output set and protected-token annotations.
 3. Run the production cleanup path against that exact corpus without changing
    expected strings after seeing the output.
-4. Run `score_cleanup_cases()` and
-   `score_protected_cleanup_cases()` against the same independently approved
-   corpus and its corresponding production outputs. The exact-output input is
-   the corpus IDs and expected/actual strings; protected-token scoring also
-   receives each record's input and reviewed annotations.
+4. Run `evaluate_cleanup_ac07_cases()` against the same independently approved
+   corpus and its corresponding production outputs. It sends the shared
+   in-memory records through both unchanged scorers and reports their results
+   separately.
 5. Record both numerical gates, the mode distinction, production integration
    evidence, and limitations. Report AC-07 only after every formal acceptance
    condition is satisfied.
 
-This procedure is a proposal for future evaluation. The two scorers are
-independent and neither alone establishes final acceptance. The
-protected-token evaluator cannot establish AC-07 without the approved corpus
-and corresponding production outputs. Neither scorer approves Verbatim
-behavior, modifies PRD thresholds, or makes a current-behavior test pass into
+This procedure is a proposal for future evaluation. The two scorers remain
+independent and neither alone establishes final acceptance. Passing both
+synthetic gates does not establish acceptance: a reviewed reference corpus,
+approved Clean/Verbatim semantics, production cleanup results, and integration
+evidence are still required. The coordinator does not approve Verbatim
+behavior, modify PRD thresholds, or make a current-behavior test pass into
 AC-07 acceptance.
