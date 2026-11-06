@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import unittest
 import wave
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts.run_native_asr_benchmark import (
@@ -29,6 +30,7 @@ from scripts.run_native_asr_benchmark import (
     parse_native_output,
     percentile,
     validate_wav,
+    verify_source,
 )
 from scripts.score_wer import NORMALIZATION_POLICY_VERSION, calculate_wer
 from scripts.validate_fixture_manifest import REPOSITORY_ROOT, validate_manifest
@@ -79,6 +81,36 @@ def output_fixture(hypothesis: str, *, index: int = 0) -> dict[str, object]:
 
 
 class NativeAsrBenchmarkTests(unittest.TestCase):
+    def test_verify_source_accepts_pinned_parenthesized_header_macros(self) -> None:
+        header = (
+            "#define MOONSHINE_HEADER_VERSION (30000)\n"
+            "#define MOONSHINE_MODEL_ARCH_SMALL_STREAMING (4)\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            source_root = Path(temporary)
+            core = source_root / "core"
+            core.mkdir()
+            (core / "moonshine-c-api.h").write_text(header, encoding="utf-8")
+            git_outputs = [
+                SimpleNamespace(stdout=SOURCE_REVISION + "\n"),
+                SimpleNamespace(stdout=""),
+            ]
+            with patch(
+                "scripts.run_native_asr_benchmark.subprocess.run",
+                side_effect=git_outputs,
+            ) as run:
+                identity = verify_source(source_root)
+
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(
+            identity,
+            {
+                "source_revision": SOURCE_REVISION,
+                "c_api_header_version": EXPECTED_HEADER_VERSION,
+                "model_architecture": EXPECTED_ARCHITECTURE,
+            },
+        )
+
     def test_market_4gb_memory_boundary_includes_binary_reporting_only(self) -> None:
         machine = {
             "physical_memory_bytes": 4_000_000_000,

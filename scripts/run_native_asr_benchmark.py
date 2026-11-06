@@ -421,8 +421,13 @@ def verify_source(source_dir: Path) -> dict[str, Any]:
         raise BenchmarkError("pinned Moonshine source or C API header could not be verified") from error
     if revision != SOURCE_REVISION or status.strip():
         raise BenchmarkError("Moonshine source is not the required clean pinned revision")
-    header_match = re.search(r"#define\s+MOONSHINE_HEADER_VERSION\s+(\d+)", header)
-    architecture_match = re.search(r"MOONSHINE_MODEL_ARCH_SMALL_STREAMING\s*=\s*(\d+)", header)
+    header_match = re.search(
+        r"#define\s+MOONSHINE_HEADER_VERSION\s+\(\s*(\d+)\s*\)", header
+    )
+    architecture_match = re.search(
+        r"#define\s+MOONSHINE_MODEL_ARCH_SMALL_STREAMING\s+\(\s*(\d+)\s*\)",
+        header,
+    )
     if (
         header_match is None
         or architecture_match is None
