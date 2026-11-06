@@ -349,6 +349,14 @@ Each task includes the primary feature/acceptance link and concrete completion a
 - [ ] **T-034 — Wire session actions to audio/ASR.** Deps: T-026,T-030,T-031,T-032,T-033. One stream, correct start/stop/cancel, no mic in Idle; end-to-end offline fixture. [F-03,F-04,F-05,F-06/C-02,C-03,C-05/AC-03]
 - [ ] **T-035 — Implement deterministic whitespace/punctuation pipeline.** Deps: T-023. Ordered pure functions, Unicode handling, idempotence; ≥150 goldens. [F-07/C-06/AC-07]
 - [ ] **T-036 — Implement Verbatim/Clean and filler policy.** Deps: T-035,T-017. Explicit isolated filler-only deletion and 50 additional goldens, protect proper nouns/numbers. [F-07/C-06/AC-07]
+
+The AC-07 manifest/reference/annotation validators are evaluation-infrastructure
+only. Protected-reference binding checks synthetic annotation structure and
+UTF-8 ranges against hash-bound expected strings; it does not implement or
+evaluate production cleanup, prove actual token preservation, approve the
+Clean/Verbatim policy, or complete T-035, T-036, or AC-07. Those task checkboxes
+and all release gates remain open.
+
 - [ ] **T-037 — Implement no-speech detection.** Deps: T-029,T-030. Silence/low-confidence policy prevents inserts on 50 silent/noise samples; avoid constant microphone gating. [F-05/C-04/AC-05]
 - [ ] **T-038 — Implement vocabulary CRUD.** Deps: T-017,T-018. Limit 500 entries, 128 Unicode chars each, boundary-aware validation and save/load/delete tests. [F-08/C-08/AC-08]
 - [ ] **T-039 — Implement vocabulary hints and post-correction.** Deps: T-029,T-035,T-038. Use Moonshine keyterms where supported and guaranteed deterministic postmap; 100 word boundary fixtures. [F-08/C-06/AC-08]

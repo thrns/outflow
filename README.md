@@ -4160,3 +4160,37 @@ Troubleshooting:
 - **Demo passes:** this is synthetic reference-integrity verification only.
   Reference review remains pending, corpus approval is not established, and
   AC-07 acceptance is not evaluated.
+
+## AC-07 synthetic protected-reference annotation binding
+
+[`scripts/validate_cleanup_ac07_protected_references.py`](scripts/validate_cleanup_ac07_protected_references.py)
+binds a separate protected-token annotation bundle to the existing manifest and
+SHA-256-verified reference bundle. It requires the same corpus ID, revision,
+and exact case-ID set; annotation kinds must match each case's declared
+`protected_kinds`. It uses the existing protected-token scorer to check that
+each token's independent input and expected ranges select the declared text at
+valid, nonoverlapping UTF-8 byte boundaries. No token text or transcript is
+printed.
+
+Run the synthetic demonstration and focused tests from the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_cleanup_ac07_protected_references.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_cleanup_ac07_protected_references -v
+```
+
+The tool validates annotation-to-reference correspondence only. Manifest
+`protected_kinds` are declarations, reference hashes bind supplied strings to
+those declarations, and successful annotation ranges show that the selected
+bytes match the declared tokens. Those checks do not authenticate independent
+review, prove that production cleanup preserves the tokens, or evaluate
+acceptance. The scorer is called with `actual=expected` only so its existing
+reference-range checks can be reused; all alteration and gate results are
+ignored. Actual-output preservation remains a later evaluation step after
+independent review and production execution.
+
+In the checked-in demonstration, `demo-001` uses the numeric substring `001`
+with different input and expected offsets. `demo-003` labels the `AC-07`
+identifier as a synthetic `proper_noun` only to demonstrate the contract; this
+does not show natural-language proper-noun coverage. The expected summary ends
+with `Corpus approval: NOT ESTABLISHED` and `AC-07 acceptance: NOT EVALUATED`.

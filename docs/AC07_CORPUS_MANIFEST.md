@@ -87,6 +87,55 @@ be used as AC-07 acceptance data.
 
 The manifest records planned categories, modes, settings, and declared protected kinds. It does not score exact outputs or count altered protected tokens; those remain the responsibility of the existing exact-output and protected-token evaluators.
 
+## Separate protected-token annotation bundle
+
+Protected-token annotations live in a third, separate JSON artifact. Its
+version 1 schema has exactly `schema_version`, `corpus_id`, `revision`, and
+`cases`. Each case has exactly `id` and `protected_tokens`; each token has
+exactly `kind`, `text`, `input_bytes`, and `output_bytes`. The annotation
+bundle's corpus ID, revision, and exact case-ID set must match the manifest and
+the hash-verified reference bundle. Cases may be reordered. Token kinds are
+`number` or `proper_noun`; the set of kinds on each case must equal that case's
+manifest `protected_kinds`. Repeated nonoverlapping tokens of one kind are
+allowed.
+
+[`scripts/validate_cleanup_ac07_protected_references.py`](../scripts/validate_cleanup_ac07_protected_references.py)
+first runs the existing manifest/reference binding validator, then checks the
+separate annotation bundle. It reuses the protected-token scorer to validate
+that each half-open UTF-8 byte range selects the declared token in the exact
+reference input and expected strings, with no overlap or split character.
+During this reference-only check the scorer receives `actual=expected`; its
+alteration counts and acceptance-gate result are discarded. This is not a
+production cleanup result or protected-token acceptance evaluation.
+
+The manifest's `protected_kinds` are declarations only. Matching those kinds
+with annotations does not authenticate independent review of the token
+selections. Matching reference hashes proves correspondence to the manifest's
+declared bytes, not reference correctness or approval. Valid annotation ranges
+prove only that those annotations point to the declared tokens in the supplied
+references; they do not prove that production cleanup preserves those tokens.
+Only later actual-output scoring can measure preservation, and that scoring
+still does not establish AC-07 acceptance by itself.
+
+The synthetic annotation for case `demo-003` treats the literal `AC-07`
+identifier as a `proper_noun` solely to demonstrate the contract. It is not
+evidence of natural-language proper-noun coverage. The numeric `001` in
+`demo-001` demonstrates input and expected byte ranges shifted by different
+prefix lengths. All three artifacts are synthetic and are not acceptance data.
+
+Run the synthetic protected-reference demonstration and focused tests from
+the repository root:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_cleanup_ac07_protected_references.py --demo
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_cleanup_ac07_protected_references -v
+```
+
+The summary prints only identity and counts after all three artifacts bind. It
+reports reference review as pending, corpus approval as not established, and
+AC-07 acceptance as not evaluated; it does not print annotation or transcript
+text.
+
 ## Validator and synthetic draft
 
 From the repository root:

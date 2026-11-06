@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "corpus_id": "ac07-synthetic-manifest-demo",
+  "revision": "draft-001",
+  "cases": [
+    {
+      "id": "demo-001",
+      "protected_tokens": [
+        {
+          "kind": "number",
+          "text": "001",
+          "input_bytes": [37, 40],
+          "output_bytes": [40, 43]
+        }
+      ]
+    },
+    {
+      "id": "demo-002",
+      "protected_tokens": []
+    },
+    {
+      "id": "demo-003",
+      "protected_tokens": [
+        {
+          "kind": "proper_noun",
+          "text": "AC-07",
+          "input_bytes": [0, 5],
+          "output_bytes": [0, 5]
+        }
+      ]
+    }
+  ]
+}

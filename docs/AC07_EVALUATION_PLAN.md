@@ -64,7 +64,7 @@ AC-07 acceptance evidence.
 
 ## C. Shared evaluation coordinator
 
-The evaluation now has four distinct pieces:
+The evaluation now has five distinct pieces:
 
 1. **Exact-output scorer:** checks corpus count and byte-for-byte exact-match
    percentage using the unchanged 200-case minimum and 99% threshold.
@@ -84,6 +84,15 @@ The evaluation now has four distinct pieces:
    input and expected strings; the binding validator checks exact IDs and
    content hashes against the manifest without printing the strings. Neither
    artifact nor validator approves references.
+5. **Protected-reference annotation bundle and validator:**
+   [`scripts/validate_cleanup_ac07_protected_references.py`](../scripts/validate_cleanup_ac07_protected_references.py)
+   binds an independent token-annotation file to the same corpus identity and
+   case IDs, checks that each case's annotation-kind set matches the manifest
+   declaration, and reuses the protected-token scorer to validate the UTF-8
+   ranges against the hash-bound input and expected strings. Its temporary
+   `actual=expected` value is used only for the scorer's reference validation;
+   all alteration and acceptance-gate results are discarded. It reports no
+   production score and does not establish acceptance.
 
 Run its 200-case synthetic demonstration from the repository root:
 
@@ -128,14 +137,25 @@ complete this verification sequence:
    SHA-256 of each exact UTF-8 input and expected string with the corresponding
    manifest digests. A reordered bundle is valid when the exact IDs and content
    match. Do not normalize or repair mismatches.
-4. Only after independent reference approval and production execution, assemble
-   shared evaluation records with the corresponding actual outputs and
-   protected-token annotations, then invoke the existing shared coordinator.
+4. Validate the separate protected-token annotation bundle against the same
+   corpus identity and case IDs. Compare its kinds to manifest declarations,
+   then validate every token's input and expected UTF-8 byte ranges against the
+   bound reference strings. This validates reference metadata only; declared
+   kinds do not prove annotation correctness, and successful ranges do not
+   authenticate independent review.
+5. Only after independent reference approval and production execution, assemble
+   shared evaluation records with corresponding actual outputs and the
+   independently reviewed annotations, then invoke the existing shared
+   coordinator. This is the point at which actual-output preservation is
+   evaluated.
 
 The metadata validator checks hash syntax; the separate binding validator
-checks manifest-to-content correspondence. Neither validator calculates
-exact-output accuracy, counts protected-token alterations, authenticates
-review evidence, or establishes approval.
+checks manifest-to-content correspondence; the protected-reference validator
+checks annotations against that bound reference content. These validation
+steps do not calculate exact-output accuracy or prove production preservation.
+None authenticates review evidence or establishes approval. The protected
+reference validator's `actual=expected` scorer call is only a way to reuse its
+input/expected range checks; its alteration and gate results are ignored.
 
 ## E. Actual acceptance evidence
 
@@ -156,8 +176,11 @@ can be reported, the project still needs all of the following:
    appropriately reviewed, privacy-safe evaluation artifacts.
 4. **Protected-token gate.** Demonstrate zero altered numeric and proper-noun
    tokens in the protected acceptance cases with the separate protected-token
-   evaluator. The exact-output scorer does not inspect token annotations or
-   evaluate this gate.
+   evaluator using actual production outputs. Prior annotation binding checks
+   only that the annotations select the declared tokens in the reference
+   strings; they do not prove preservation by production cleanup. The
+   exact-output scorer does not inspect token annotations or evaluate this
+   gate.
 5. **Approved mode semantics.** Resolve the proposed Clean/Verbatim policy,
    document the final semantics, and verify the required distinction with
    paired cases. [`CLEANUP_MODE_POLICY.md`](CLEANUP_MODE_POLICY.md) remains
