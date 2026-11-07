@@ -34,7 +34,7 @@ commands:
   - {command: "cargo run -p outflow-settings --example settings_lifecycle --locked", result: PASS, notes: "Ran first-run, preference, vocabulary CRUD, save, and reload lifecycle in a new temporary directory."}
   - {command: "cargo run -p outflow-settings --example settings_lifecycle --locked -- --reset", result: PASS, notes: "Explicit option reset only the newly created temporary example file."}
   - {command: "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.tests.test_validate_measured_asr_results -v", result: PASS, notes: "18 focused measured-result and hardware-evidence tests passed."}
-  - {command: "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v", result: PASS, notes: "629 tests passed; 1 optional real native ASR integration test skipped because verified fixture/local artifact configuration is unavailable."}
+  - {command: "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v", result: PASS, notes: "629 tests discovered: 628 passed, 1 optional real native ASR integration test skipped because verified fixture/local artifact configuration is unavailable."}
   - {command: "python3 scripts/compare_native_asr_candidates.py --help", result: PASS, notes: "CLI exposes the required separate Small and Tiny hardware-evidence paths."}
   - {command: "git diff --check", result: PASS, notes: "No whitespace errors."}
   - {command: "rg -n '/Users/|/private/tmp|/private/var' README.md", result: PASS, notes: "No developer-specific absolute paths remain in README."}
