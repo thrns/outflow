@@ -2,12 +2,11 @@
 //!
 //! This adapter borrows vocabulary strings from the settings DTO and delegates
 //! vocabulary validation and matching-policy assessment to `outflow-core`. It
-//! does not load, initialize, run full-settings validation, serialize, migrate,
-//! or save settings. Callers must supply trusted source-policy provenance
-//! explicitly because schema v1 has no matching-policy marker. Existing
-//! settings decode/load paths validate before this API can be called and may
-//! reject malformed or legacy-conflicting collections first; this API is not a
-//! raw-file recovery mechanism.
+//! does not load, initialize, serialize, migrate, or save settings. Callers
+//! must supply trusted source-policy provenance explicitly because schema v1
+//! has no matching-policy marker. The settings service has a separate bounded
+//! review-only decoder for vocabulary conflicts; ordinary settings decoding
+//! remains strict and this API is not a general raw-file recovery mechanism.
 
 use crate::Settings;
 use outflow_core::vocabulary::VocabularyEntryRef;
@@ -33,11 +32,11 @@ pub use outflow_core::vocabulary_migration::{
 /// do not establish provenance. `Unknown` remains review-required for any
 /// nonempty collection.
 ///
-/// This API accepts an already-constructed settings object only. Existing
-/// deserialization and load paths validate settings using lowercase-only
-/// matching and can reject malformed input or pre-existing lowercase
-/// conflicts before this function is available. It neither changes nor
-/// bypasses those paths.
+/// This API accepts an already-constructed settings object only. Strict schema
+/// decoding now uses the same Unicode 18 collection validator as `outflow-core`.
+/// The service may use a separate read-only decoder to report existing
+/// conflicts before a user explicitly repairs them; this function does not
+/// bypass normal validation or persistence policy.
 ///
 /// A compatible result means only that the supplied source policy has no
 /// conflicts under the assessed rules. It is not a migration, conflict

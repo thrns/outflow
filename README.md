@@ -1,10 +1,12 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, explicit-path loading and initialization, an explicitly confirmed reset, and an atomic JSON writer on Unix. The production Tauri shell and dictation flow, Windows owner-only ACL writing, and release packaging have not been implemented. A separate development-only native macOS microphone probe is documented below.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, an explicit-path transactional settings service, explicitly confirmed reset, and an atomic JSON writer on Unix. The production Tauri shell and dictation flow, Windows owner-only ACL writing, and release packaging have not been implemented. A separate development-only native macOS microphone probe is documented below.
 
 ## Current MVP baseline — 2026-11-06
 
 This checkout is not a shipping desktop app. `npm run dev` opens the browser-only Settings preview; it does not request microphone access or connect the React UI to Rust. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+
+This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
 ### Run and validate the current preview
 
@@ -26,7 +28,7 @@ cargo fmt --all -- --check
 cargo check --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 bash -n scripts/build_macos_mic_probe.sh scripts/run_macos_mic_probe.sh scripts/test_macos_mic_probe.sh
 git diff --check
 ```
@@ -48,18 +50,22 @@ The Prompt 79K real-result observation remains unresolved: the finalized session
 
 ### Milestone 2 native qualification tools
 
-The development benchmark defaults to Small (Moonshine architecture `4`); select Tiny explicitly with `--candidate tiny`. Tiny's eight-file streaming contract is parsed from the pinned Moonshine source, including its own file list, sizes, and vendor CRC32C metadata. The preparation tool hashes only files already on disk and never downloads. It writes local SHA-256 provenance with acquisition approval left `not-recorded`; Tiny inference requires the exact complete inventory plus separate approval evidence. Results retain the selected architecture, and the comparison tool blocks unless both candidates have measured results from the same complete approved corpus and comparable verified physical CPU hardware. A reviewable comparison never approves release.
+The development benchmark defaults to Small (Moonshine architecture `4`); select Tiny explicitly with `--candidate tiny`. Tiny's eight-file streaming contract is parsed from the pinned Moonshine source, including its own file list, sizes, and vendor CRC32C metadata. The preparation tool hashes only files already on disk and never downloads. It writes local SHA-256 provenance with acquisition approval left `not-recorded`; Tiny inference requires the exact complete inventory plus separate approval evidence. Results retain the selected architecture. Candidate comparison additionally requires a separate human-reviewed hardware-evidence sidecar for each result, bound to the exact result-file SHA-256 and machine/session identity. This permission is for comparison only; it does not approve a model or certify the physical 4 GB release gate.
+
+Set `MOONSHINE_SOURCE_DIR` to the exact authorized pinned source checkout before using the following commands. Output paths use `${TMPDIR:-/tmp}` so no developer-specific local directory is embedded:
 
 ```sh
 python3 scripts/prepare_native_asr_candidate_manifest.py \
   --candidate tiny \
-  --source-dir /Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f \
-  --asset-root /private/tmp/outflow-feasibility/models/tiny-streaming-en \
-  --output /private/tmp/outflow-tiny-candidate-manifest.json
+  --source-dir "${MOONSHINE_SOURCE_DIR:?Set MOONSHINE_SOURCE_DIR first}" \
+  --asset-root ${TMPDIR:-/tmp}/outflow-feasibility/models/tiny-streaming-en \
+  --output ${TMPDIR:-/tmp}/outflow-tiny-candidate-manifest.json
 
 python3 scripts/compare_native_asr_candidates.py \
   --small /path/to/measured-small.json \
-  --tiny /path/to/measured-tiny.json
+  --tiny /path/to/measured-tiny.json \
+  --small-hardware-evidence /path/to/reviewed-small-hardware.json \
+  --tiny-hardware-evidence /path/to/reviewed-tiny-hardware.json
 ```
 
 On this host the Tiny asset directory is empty, so preparation exits `2` with a missing/incomplete artifact error. Do not substitute Small files or treat source metadata as verified Tiny weights. The frozen benchmark corpus also has zero ready fixtures, so it blocks before inference and produces no measured result. See [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) for the current schema and comparison prerequisites.
@@ -592,9 +598,9 @@ The JSON schema v1 shape is:
 
 Configured shortcuts are strings; an unconfigured shortcut is explicitly `null`. In the Rust API, `RecordingSettings::input_device == None` means the system default and maps to the JSON string `"system-default"`; a configured device key maps to its string value. Cleanup modes serialize as `"clean"` and `"verbatim"`. Field names are snake case, and Unicode vocabulary strings round-trip unchanged.
 
-`Settings::validate()` rejects unsupported schema versions and languages, automatic update checking, duplicate or empty configured shortcuts, more than 500 vocabulary entries, empty source/replacement phrases, phrases over 128 Unicode scalar values, and duplicate source phrases ignoring case. `Settings::to_json()` validates before encoding. `Settings::from_json()` rejects malformed documents, unsupported schema versions, missing required fields (including omitted nullable shortcut keys), unknown fields, and invalid settings; it reuses `Settings::validate()` for schema, language, update-policy, shortcut, and vocabulary rules. Errors retain parser locations or safe validation details, never raw JSON or vocabulary/shortcut values.
+`Settings::validate()` rejects unsupported schema versions and languages, automatic update checking, duplicate or empty configured shortcuts, more than 500 vocabulary entries, empty source/replacement phrases, phrases over 128 Unicode scalar values, and duplicate source phrases under Unicode 18 canonical-caseless matching. `Settings::to_json()` validates before encoding. `Settings::from_json()` rejects malformed documents, unsupported schema versions, missing required fields (including omitted nullable shortcut keys), unknown fields, and invalid settings; it reuses `Settings::validate()` for schema, language, update-policy, shortcut, and vocabulary rules. Errors retain parser locations or safe validation details, never raw JSON or vocabulary/shortcut values.
 
-Schema version **1** is the only supported version; unsupported versions are rejected. JSON encoding and decoding are in-memory operations. The separate atomic writer can save validated settings on Unix, and the explicit-path loader can read them; schema migration and frontend/Tauri integration are not implemented. Do not treat the schema codec or file operations as evidence that `T-017`, `T-018`, `AC-11`, or `AC-12` is complete; their broader prerequisites and definitions of done remain outstanding.
+Schema version **1** is the only supported version; unsupported versions are rejected. JSON encoding and decoding are in-memory operations. `SettingsService` composes the explicit-path loader, the existing stable-ID vocabulary CRUD, and the atomic writer: each preference or vocabulary change is validated on a candidate, saved, and only then made the live snapshot. Existing nonempty schema-v1 vocabularies have unknown matching-policy provenance and require an explicit per-instance review acknowledgment before any write; this acknowledgment is not persisted. The service does not discover the real configuration path, register login items, or connect to Tauri/React. Windows owner-only ACL persistence is not implemented. Do not treat the library or file tests as evidence that `T-017`, `T-018`, `AC-11`, or `AC-12` is complete; their broader prerequisites and definitions of done remain outstanding.
 
 Run the non-sensitive defaults example and Rust tests with:
 
@@ -1509,7 +1515,7 @@ The running page was visually inspected in the browser at **1440×900**, **390×
 
 ## Current implementation status
 
-The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, validation, explicit-path loading and safe initialization, explicit confirmed reset, and explicit-path atomic writes on Unix. The reset and settings filesystem behavior were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, Windows ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Reset button, confirmation dialog, Tauri command, Home features, reusable component library, Tauri shell, microphone capture, or in-app dictation behavior is included. Prompt 79 adds a standalone native Moonshine streaming smoke test, not an application runtime. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.
+The starter screen and Settings layout/navigation preview are implemented, with one browser-only Launch at Login preference. The dependency-free `outflow-core` Rust foundation provides a smoke-test status message; `outflow-settings` provides schema v1 defaults, JSON serialization/deserialization, Unicode 18 vocabulary validation, explicit-path loading, the transactional settings/vocabulary service, explicitly confirmed reset, and atomic writes on Unix. Settings filesystem behavior and the new service were tested on macOS 26.6.2 arm64 only; Linux and Windows were not tested. Migration, Windows owner-only ACL writing, and frontend persistence remain unimplemented. The React preference does not persist or affect computer startup, and it is not connected to the Rust model. The other Settings sections remain placeholders; no Tauri command, shell, microphone capture, or in-app dictation behavior is included. Prompt 79 adds a standalone native Moonshine streaming smoke test, not an application runtime. T-001, T-017, and T-018 remain unchecked; T-017 is incomplete because migration behavior and its T-001 prerequisite remain outstanding, and T-018 is incomplete because the cross-platform writer requirements are not met. F-11, AC-11, AC-12, T-051, and native startup integration remain incomplete. The Rust crates are development foundations, not application runtime features.
 
 ## Prompt 79 — macOS native inference evidence (partial)
 
@@ -1532,15 +1538,15 @@ The probe uses AVAudioEngine's default input, queries its actual sample rate/cha
 Use a logged-in macOS desktop session, Apple Clang and the macOS SDK, the pinned Moonshine source tree, the already-built and hash-verified Moonshine/ONNX Runtime libraries, and the eight locally authorized model files outside Git. The build fails closed on unexpected source-revision input, header constants, binary hashes, or architecture; it does not download dependencies or assets. Set these variables to the actual local paths (the examples shown are the paths used for this development run):
 
 ```sh
-export MOONSHINE_SOURCE_DIR=/private/tmp/outflow-feasibility/moonshine-234f60faa0eb388b01cdf7e60aca232af37aefda
+export MOONSHINE_SOURCE_DIR=${TMPDIR:-/tmp}/outflow-feasibility/moonshine-234f60faa0eb388b01cdf7e60aca232af37aefda
 export MOONSHINE_SOURCE_REVISION=234f60faa0eb388b01cdf7e60aca232af37aefda
-export MOONSHINE_LIBRARY=/private/tmp/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
+export MOONSHINE_LIBRARY=${TMPDIR:-/tmp}/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
 export MOONSHINE_ORT_LIBRARY="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib"
-export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-mic-probe-build-01
+export OUTFLOW_MIC_PROBE_BUILD_DIR=${TMPDIR:-/tmp}/outflow-mic-probe-build-01
 
 scripts/build_macos_mic_probe.sh
 export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
-export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+export OUTFLOW_MIC_PROBE_MODEL_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming
 ```
 
 The app bundle is created outside the repository and ad-hoc signed for local development. Its `Info.plist` contains a microphone usage description. The code currently expects macOS 26.0 or newer because this is the host/SDK build used for the feasibility pass; it is not a cross-version support claim.
@@ -1567,7 +1573,7 @@ The pinned local `two_cities_16k.wav` fixture is a development smoke fixture, no
 scripts/run_macos_mic_probe.sh \
   --timed-fixture "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav" \
   --fixture-seconds 12 \
-  --metrics-file /private/tmp/outflow-mic-probe-run-01.json
+  --metrics-file ${TMPDIR:-/tmp}/outflow-mic-probe-run-01.json
 ```
 
 Expected output is an app window labeled **timed fixture** with partial text appearing during replay and a final result after about 12 seconds. Metrics use an exclusive create and refuse to overwrite an existing file; select a fresh path for each run. They include model load, first partial, update cadence, audio duration, stop-to-final, native process high-water RSS, CPU time, thread count, queue depth and overflow count. There is no accelerated-fixture mode in this probe. Prompt 79D's accelerated native smoke measurements remain separate and are not mixed with these time-paced observations.
@@ -1586,7 +1592,7 @@ This compiles and runs core audio/state/permission/queue/WAV tests and injected 
 export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
 export OUTFLOW_MIC_PROBE_FIXTURE_SECONDS=12
 export OUTFLOW_MIC_PROBE_FIXTURE_RUNS=10
-export OUTFLOW_MIC_PROBE_PROFILE_DIR=/private/tmp/outflow-mic-probe-rss-10
+export OUTFLOW_MIC_PROBE_PROFILE_DIR=${TMPDIR:-/tmp}/outflow-mic-probe-rss-10
 scripts/test_macos_mic_probe.sh --real-fixture
 ```
 
@@ -1596,7 +1602,7 @@ This test uses the real native model and writes one 100 ms process-tree RSS reco
 APP_PID=$(/usr/bin/pgrep -n -x OutflowMicProbe)
 python3 scripts/measure_process_tree_rss.py \
   --pid "$APP_PID" --duration-seconds 30 --interval-ms 100 \
-  --output /private/tmp/outflow-mic-probe-app-rss-01.json
+  --output ${TMPDIR:-/tmp}/outflow-mic-probe-app-rss-01.json
 ```
 
 Use one app instance when attaching; the PID lookup selects the newest matching process. The sampler records process identities, RSS, sample timestamps and gaps, but not command arguments or environment. Its RSS is not macOS physical-footprint measurement and does not certify the 4 GB release gate.
@@ -1622,10 +1628,10 @@ Prompt 79F hardens the same development probe's permission and session lifecycle
 Use the locally prepared source, native libraries and model from the prerequisites above. Choose a new build directory for each build:
 
 ```sh
-export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-prompt79f-build
+export OUTFLOW_MIC_PROBE_BUILD_DIR=${TMPDIR:-/tmp}/outflow-prompt79f-build
 scripts/build_macos_mic_probe.sh
 export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
-export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+export OUTFLOW_MIC_PROBE_MODEL_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming
 export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
 export OUTFLOW_MIC_PROBE_FIXTURE_SECONDS=12
 export OUTFLOW_MIC_PROBE_FIXTURE_RUNS=1
@@ -1644,7 +1650,7 @@ Run a new app process with timed fixture replay and an unused metadata path:
 scripts/run_macos_mic_probe.sh \
   --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
   --fixture-seconds 12 \
-  --metrics-file /private/tmp/outflow-prompt79f-cancel-metrics.json
+  --metrics-file ${TMPDIR:-/tmp}/outflow-prompt79f-cancel-metrics.json
 ```
 
 Click **Start recording** and wait until **Listening** and a nonempty temporary preview are visible. Press **Cancel**. Confirm the preview and final-result area are empty, the UI says **Cancelled**, capture/fixture and worker cleanup are complete, and no late result appears. The displayed cancellation line includes sanitized queue depth, maximum depth, overflow and (for a live microphone session) microphone-release and worker-cleanup times. Confirm the explicit metrics path does not exist after cancellation. Then press **Dismiss result**, verify **Idle**, and start another fixture session; allow it to finish with **Stop** and verify a fresh final result.
@@ -1656,7 +1662,7 @@ scripts/run_macos_mic_probe.sh \
   --timed-fixture "$OUTFLOW_MIC_PROBE_FIXTURE_WAV" \
   --fixture-seconds 12 \
   --auto-cancel-after-ms 3500 \
-  --metrics-file /private/tmp/outflow-prompt79f-auto-cancel-metrics.json
+  --metrics-file ${TMPDIR:-/tmp}/outflow-prompt79f-auto-cancel-metrics.json
 ```
 
 The timer only invokes Cancel while that same session remains Listening. This mode still uses the visible app and actual Moonshine partial inference, but the samples come from the fixture rather than the microphone.
@@ -1693,13 +1699,13 @@ Prompt 79G introduced a development-only **Copy Result** action to the existing 
 Use the already-authorized local Moonshine source, libraries, model, and fixture. These paths match the environment used for the Prompt 79G verification on the local macOS host; choose a fresh build directory if it already exists:
 
 ```sh
-export MOONSHINE_SOURCE_DIR=/private/tmp/outflow-feasibility/moonshine-234f60faa0eb388b01cdf7e60aca232af37aefda
+export MOONSHINE_SOURCE_DIR=${TMPDIR:-/tmp}/outflow-feasibility/moonshine-234f60faa0eb388b01cdf7e60aca232af37aefda
 export MOONSHINE_SOURCE_REVISION=234f60faa0eb388b01cdf7e60aca232af37aefda
-export MOONSHINE_LIBRARY=/private/tmp/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
+export MOONSHINE_LIBRARY=${TMPDIR:-/tmp}/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
 export MOONSHINE_ORT_LIBRARY="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib"
-export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+export OUTFLOW_MIC_PROBE_MODEL_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming
 export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
-export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-prompt79g-build
+export OUTFLOW_MIC_PROBE_BUILD_DIR=${TMPDIR:-/tmp}/outflow-prompt79g-build
 scripts/build_macos_mic_probe.sh
 export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
 scripts/run_macos_mic_probe.sh \
@@ -1748,7 +1754,7 @@ The warning displayed before copying is: **“Copy replaces the clipboard. If wr
 Export the pinned local Moonshine paths from the preceding Prompt 79G **Build and launch** block, then use a fresh Prompt 79H build directory:
 
 ```sh
-export OUTFLOW_MIC_PROBE_BUILD_DIR=/private/tmp/outflow-prompt79h-build
+export OUTFLOW_MIC_PROBE_BUILD_DIR=${TMPDIR:-/tmp}/outflow-prompt79h-build
 scripts/build_macos_mic_probe.sh
 export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
 scripts/run_macos_mic_probe.sh \
@@ -1790,7 +1796,7 @@ The development-only runner accepts an optional `--verification-id <identifier>`
 Use the existing pinned Moonshine source, libraries, model, and WAV fixture environment described above. A fresh build directory is required for every app build:
 
 ```sh
-export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d /private/tmp/outflow-prompt79i.XXXXXX)"
+export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d ${TMPDIR:-/tmp}/outflow-prompt79i.XXXXXX)"
 scripts/build_macos_mic_probe.sh
 export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
 
@@ -1852,7 +1858,7 @@ The pinned source commit `234f60faa0eb388b01cdf7e60aca232af37aefda` selects the 
 
 ```sh
 set -eu
-MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+MODEL_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming
 mkdir -m 700 -p "$MODEL_DIR"
 BASE=https://download.moonshine.ai/model/small-streaming-en/quantized_26_08_21
 for file in adapter.ort cross_kv.ort decoder_kv.ort encoder.ort \
@@ -1871,9 +1877,9 @@ This is a developer-controlled preparation step, not application behavior. The b
 Prerequisites used here: macOS 26.6.2 (25G83), arm64 Apple M3 Pro with 18 GB RAM, Xcode Command Line Tools / Apple Clang 21.0.0.21000101, CMake 4.4.5, the clean pinned Moonshine checkout, and its already-present macOS arm64 ONNX Runtime 1.23.2. The out-of-tree wrapper enables the upstream `MOONSHINE_TTS_BUILD_ONNX` target because the current C API references those symbols even when that option is off. CMake also compiles two source-checkout Git LFS inputs: pyannote community-1 data and embedded VCTK reference voices. They were materialized only in the external checkout for this local build; their notices/release rights are not approved.
 
 ```sh
-MOONSHINE_SOURCE=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
-WRAPPER_DIR=/private/tmp/prompt79-moonshine-wrapper
-BUILD_DIR=/private/tmp/prompt79-moonshine-wrapper-build-onnx
+MOONSHINE_SOURCE="${MOONSHINE_SOURCE_DIR:?Set MOONSHINE_SOURCE_DIR first}"
+WRAPPER_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-wrapper
+BUILD_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-wrapper-build-onnx
 mkdir -p "$WRAPPER_DIR"
 cat > "$WRAPPER_DIR/CMakeLists.txt" <<EOF
 cmake_minimum_required(VERSION 3.22.1)
@@ -1896,10 +1902,10 @@ clang++ -std=c++17 -O2 -I"$MOONSHINE_SOURCE/core" \
   -L"$BUILD_DIR/moonshine-core" -lmoonshine \
   -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
   -Wl,-rpath,"$MOONSHINE_SOURCE/core/third-party/onnxruntime/lib/macos/arm64" \
-  -o /private/tmp/prompt79_moonshine_stream_smoke
+  -o ${TMPDIR:-/tmp}/prompt79_moonshine_stream_smoke
 DYLD_LIBRARY_PATH="$MOONSHINE_SOURCE/core/third-party/onnxruntime/lib/macos/arm64:$BUILD_DIR/moonshine-core" \
-  /private/tmp/prompt79_moonshine_stream_smoke \
-  /private/tmp/prompt79-moonshine-small-streaming \
+  ${TMPDIR:-/tmp}/prompt79_moonshine_stream_smoke \
+  ${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming \
   "$MOONSHINE_SOURCE/test-assets/two_cities_librivox_48k.wav"
 ```
 
@@ -1915,12 +1921,12 @@ The current Prompt 79 native build therefore misses the 950,000,000-byte RSS thr
 
 ### Prompt 79C reproduction: native evaluation and process-tree RSS
 
-These commands use the existing authorized local Small model files at `/private/tmp/prompt79-moonshine-small-streaming`; they do not download or package them. Confirm the pinned source, model hashes, and fixture readiness first:
+These commands use the existing authorized local Small model files at `${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming`; they do not download or package them. Confirm the pinned source, model hashes, and fixture readiness first:
 
 ```sh
-MOONSHINE_SOURCE_DIR=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
-MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
-BUILD_DIR=/private/tmp/prompt79-moonshine-wrapper-build-onnx
+MOONSHINE_SOURCE_DIR="${MOONSHINE_SOURCE_DIR:-/path/to/pinned/moonshine-source-234f60f}"
+MODEL_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming
+BUILD_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-wrapper-build-onnx
 
 python3 scripts/moonshine_model_source_audit.py --source-dir "$MOONSHINE_SOURCE_DIR"
 python3 scripts/validate_model_asset_inventory.py \
@@ -1936,9 +1942,9 @@ clang++ -std=c++17 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
   -L"$BUILD_DIR/moonshine-core" -lmoonshine \
   -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
   -Wl,-rpath,"$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64" \
-  -o /private/tmp/prompt79c_moonshine_stream_smoke
+  -o ${TMPDIR:-/tmp}/prompt79c_moonshine_stream_smoke
 DYLD_LIBRARY_PATH="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64:$BUILD_DIR/moonshine-core" \
-  /private/tmp/prompt79c_moonshine_stream_smoke \
+  ${TMPDIR:-/tmp}/prompt79c_moonshine_stream_smoke \
   "$MODEL_DIR" "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
 ```
 
@@ -1950,16 +1956,16 @@ clang++ -std=c++20 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
   -L"$BUILD_DIR/moonshine-core" -lmoonshine \
   -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
   -Wl,-rpath,"$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64" \
-  -o /private/tmp/prompt79c_moonshine_asr_batch
+  -o ${TMPDIR:-/tmp}/prompt79c_moonshine_asr_batch
 
 python3 scripts/run_native_asr_benchmark.py \
   --model-dir "$MODEL_DIR" --asset-root "$MODEL_DIR" \
   --source-dir "$MOONSHINE_SOURCE_DIR" \
-  --native-runner /private/tmp/prompt79c_moonshine_asr_batch \
+  --native-runner ${TMPDIR:-/tmp}/prompt79c_moonshine_asr_batch \
   --moonshine-library "$BUILD_DIR/moonshine-core/libmoonshine.dylib" \
   --onnxruntime-library "$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib" \
   --machine-label MAC-ARM64-01 --cpu-label "Apple M3 Pro" \
-  --output /private/tmp/prompt79c-measured-asr.json
+  --output ${TMPDIR:-/tmp}/prompt79c-measured-asr.json
 ```
 
 The current fixture manifest has **zero ready fixtures**, so the runner exits nonzero with `no verified ready fixtures are available for native evaluation` before model loading. It writes no measured-results file. To run the corpus evaluation, first add a lawfully usable file-level corpus and human-verified references under the fixture policy, then re-run this command with a new output path. The opt-in integration test needs the environment values listed in `scripts/tests/test_native_asr_integration.py`; it skips when the verified corpus or native artifacts are absent.
@@ -1968,8 +1974,8 @@ Run the sampler for one smoke process (choose a new output path each time; it re
 
 ```sh
 python3 scripts/measure_process_tree_rss.py --interval-ms 100 \
-  --output /private/tmp/prompt79c-rss-run-01.json -- \
-  /private/tmp/prompt79c_moonshine_stream_smoke \
+  --output ${TMPDIR:-/tmp}/prompt79c-rss-run-01.json -- \
+  ${TMPDIR:-/tmp}/prompt79c_moonshine_stream_smoke \
   "$MODEL_DIR" "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
 ```
 
@@ -1989,7 +1995,7 @@ python3 -m unittest scripts.tests.test_measure_process_tree_rss scripts.tests.te
 The trust-state query was read-only and did not request permission or control any UI:
 
 ```sh
-CLANG_MODULE_CACHE_PATH=/private/tmp/prompt79c-clang-module-cache swift -e \
+CLANG_MODULE_CACHE_PATH=${TMPDIR:-/tmp}/prompt79c-clang-module-cache swift -e \
   'import ApplicationServices; print(AXIsProcessTrusted() ? "AX_TRUSTED" : "AX_NOT_TRUSTED")'
 ```
 
@@ -2000,9 +2006,9 @@ Prompt 79D tightened the fixture-coverage, physical-hardware, native-linkage, an
 Set the same local source, build, and model locations used by the recorded experiment. These paths are outside Git and must already exist; the commands do not download source, models, or speech data.
 
 ```sh
-MOONSHINE_SOURCE_DIR=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
-BUILD_DIR=/private/tmp/prompt79-moonshine-wrapper-build-onnx
-MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+MOONSHINE_SOURCE_DIR="${MOONSHINE_SOURCE_DIR:-/path/to/pinned/moonshine-source-234f60f}"
+BUILD_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-wrapper-build-onnx
+MODEL_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming
 ORT_DIR="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64"
 
 python3 scripts/moonshine_model_source_audit.py --source-dir "$MOONSHINE_SOURCE_DIR"
@@ -2019,18 +2025,18 @@ clang++ -std=c++17 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
   -L"$BUILD_DIR/moonshine-core" -lmoonshine \
   -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
   -Wl,-rpath,"$ORT_DIR" \
-  -o /private/tmp/prompt79d_moonshine_stream_smoke
+  -o ${TMPDIR:-/tmp}/prompt79d_moonshine_stream_smoke
 
 clang++ -std=c++20 -O2 -I"$MOONSHINE_SOURCE_DIR/core" \
   tests/native/moonshine_asr_batch.cpp \
   -L"$BUILD_DIR/moonshine-core" -lmoonshine \
   -Wl,-rpath,"$BUILD_DIR/moonshine-core" \
   -Wl,-rpath,"$ORT_DIR" \
-  -o /private/tmp/prompt79d_moonshine_asr_batch
+  -o ${TMPDIR:-/tmp}/prompt79d_moonshine_asr_batch
 
 DYLD_LIBRARY_PATH="$BUILD_DIR/moonshine-core:$ORT_DIR" \
   python3 scripts/verify_native_runtime.py \
-    --native-runner /private/tmp/prompt79d_moonshine_asr_batch \
+    --native-runner ${TMPDIR:-/tmp}/prompt79d_moonshine_asr_batch \
     --moonshine-library "$BUILD_DIR/moonshine-core/libmoonshine.dylib" \
     --onnxruntime-library "$ORT_DIR/libonnxruntime.1.23.2.dylib"
 ```
@@ -2040,7 +2046,7 @@ The runtime verifier asks the helper which dyld image contains `moonshine_get_ve
 The native smoke used two sequential 12-second streaming sessions over the same upstream audio slice. Reproduce both measured configurations with ten fresh process-tree runs each; use a new output directory because the sampler refuses to overwrite evidence.
 
 ```sh
-RUNS_DIR=/private/tmp/prompt79d-repro-runs
+RUNS_DIR=${TMPDIR:-/tmp}/prompt79d-repro-runs
 mkdir -p "$RUNS_DIR"
 for mode in default single_thread; do
   for run in $(seq -w 1 10); do
@@ -2048,12 +2054,12 @@ for mode in default single_thread; do
     if [ "$mode" = single_thread ]; then
       python3 scripts/measure_process_tree_rss.py --interval-ms 100 \
         --output "$output" -- env MOONSHINE_ORT_SINGLE_THREAD=1 \
-        /private/tmp/prompt79d_moonshine_stream_smoke "$MODEL_DIR" \
+        ${TMPDIR:-/tmp}/prompt79d_moonshine_stream_smoke "$MODEL_DIR" \
         "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
     else
       python3 scripts/measure_process_tree_rss.py --interval-ms 100 \
         --output "$output" -- \
-        /private/tmp/prompt79d_moonshine_stream_smoke "$MODEL_DIR" \
+        ${TMPDIR:-/tmp}/prompt79d_moonshine_stream_smoke "$MODEL_DIR" \
         "$MOONSHINE_SOURCE_DIR/test-assets/two_cities_librivox_48k.wav"
     fi
   done
@@ -2069,14 +2075,14 @@ DYLD_LIBRARY_PATH="$BUILD_DIR/moonshine-core:$ORT_DIR" \
   python3 scripts/run_native_asr_benchmark.py \
     --model-dir "$MODEL_DIR" --asset-root "$MODEL_DIR" \
     --source-dir "$MOONSHINE_SOURCE_DIR" \
-    --native-runner /private/tmp/prompt79d_moonshine_asr_batch \
+    --native-runner ${TMPDIR:-/tmp}/prompt79d_moonshine_asr_batch \
     --moonshine-library "$BUILD_DIR/moonshine-core/libmoonshine.dylib" \
     --onnxruntime-library "$ORT_DIR/libonnxruntime.1.23.2.dylib" \
     --machine-label MAC-ARM64-01 --cpu-label "Apple M3 Pro" \
-    --output /private/tmp/prompt79d-measured-asr.json
+    --output ${TMPDIR:-/tmp}/prompt79d-measured-asr.json
 
 python3 scripts/validate_measured_asr_results.py \
-  --file /private/tmp/prompt79d-measured-asr.json
+  --file ${TMPDIR:-/tmp}/prompt79d-measured-asr.json
 ```
 
 With the checked-in manifest, the evaluator currently exits with `no verified ready fixtures are available for native evaluation` before loading the model and writes no result. The checked-in manifest contains eight planned rows and zero ready rows. Do not use the smoke WAV as a WER fixture: it has no reviewed reference or Outflow fixture permission record. A ready fixture requires the exact audio and reference hashes, measured audio metadata, file-level provenance and permission evidence, independent coverage attributes, and a human-verified transcription. `collection_status: complete` must wait until all minimum counts and diversity requirements in [`docs/BENCHMARK_FIXTURES.md`](docs/BENCHMARK_FIXTURES.md) pass. The validator rejects duplicate IDs, malformed fields, missing/changed reference files, incomplete coverage, and unsupported attribute combinations.
@@ -2136,7 +2142,7 @@ Run the complete applicable repository checks from the root:
 
 ```sh
 python3 scripts/moonshine_model_source_audit.py \
-  --source-dir /Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
+  --source-dir "${MOONSHINE_SOURCE_DIR:?Set MOONSHINE_SOURCE_DIR first}"
 python3 -m unittest discover -s scripts/tests -v
 RUSTUP_TOOLCHAIN=stable cargo fmt --all -- --check
 RUSTUP_TOOLCHAIN=stable cargo check --workspace --locked
@@ -2304,7 +2310,7 @@ Task 76 configured the pinned `core/` CMake project on macOS arm64 and retained 
 ```sh
 python3 scripts/moonshine_native_license_inventory.py \
   --source-dir ../moonshine-upstream-234f60f \
-  --build-dir /private/tmp/outflow-moonshine-task76-cmake-arm64-final
+  --build-dir ${TMPDIR:-/tmp}/outflow-moonshine-task76-cmake-arm64-final
 ```
 
 The report labels components `RUNTIME`, `BUILD-ONLY`, `OPTIONAL`, or `UNRESOLVED` and flags incomplete attribution with `REDISTRIBUTION_EVIDENCE_INCOMPLETE`. Moonshine's root MIT license covers Moonshine-authored repository source outside `core/third-party`; vendored third-party components use their own local license/notice evidence and are assessed separately. A license file's presence does not establish complete notices, binary/package contents, or redistribution approval. The existing model candidate inventory is not a selected production bundle: Small Streaming revision, exact model files and hashes, model-specific license evidence/approval, and the T-013 runtime manifest remain outstanding. This report supports the native dependency portion of T-009; it does not complete T-009.
@@ -2363,7 +2369,7 @@ python3 scripts/try_moonshine_cmake_configure.py \
   --osx-architectures arm64
 ```
 
-Task 76 used this same runner and selection with the verified local source and `/private/tmp/outflow-moonshine-task76-cmake-arm64-final`; the [Task 76 evidence](evidence/model/moonshine-native-configure-task-76.md) records the exact expanded invocation and result.
+Task 76 used this same runner and selection with the verified local source and `${TMPDIR:-/tmp}/outflow-moonshine-task76-cmake-arm64-final`; the [Task 76 evidence](evidence/model/moonshine-native-configure-task-76.md) records the exact expanded invocation and result.
 
 The runner supplies `CMAKE_BUILD_TYPE=Release`, `MOONSHINE_TTS_BUILD_ONNX=OFF`, `MOONSHINE_RELIABILITY=OFF`, `FETCHCONTENT_FULLY_DISCONNECTED=ON`, and `FETCHCONTENT_UPDATES_DISCONNECTED=ON`. It does not invoke a build, install, CTest, or download command. These FetchContent settings are not a general network sandbox: inspect the configured CMake entry and its included modules for custom acquisition paths. For the pinned `core/` entry, inspection found no `FetchContent`, `ExternalProject`, `file(DOWNLOAD)`, `execute_process`, or curl/wget path. The separate `micro/` entry does use FetchContent for Pico SDK and is not configured here.
 
@@ -2815,7 +2821,7 @@ If a phrase is rejected at the length boundary, count Unicode scalar values: eac
 
 `outflow_core::vocabulary::validate_vocabulary_collection(&[VocabularyEntryRef])` validates a borrowed, read-only collection and returns `Result<(), VocabularyCollectionError>`. It accepts zero through `MAX_VOCABULARY_ENTRIES` (500) entries and rejects a larger collection with its supplied count and the maximum. Each entry is checked by the existing `validate_vocabulary_entry`, preserving its nonempty and 128 Unicode scalar-value rules. Validation errors report the size, first invalid entry, or first duplicate pair without including phrase text. Validation order remains size, per-entry checks in input order, then duplicate checks in input order.
 
-The `outflow-core` collection validator uses the versioned Unicode 18.0.0 canonical-caseless key documented below. Written replacements do not determine uniqueness. Original text remains unchanged. The core collection validator does not persist entries or perform transcript replacement or word-boundary matching. The existing `outflow-settings` schema validator remains lowercase-only; wiring it to this policy is a separate C-08 integration task. The initial collection work and its verification remain documented in [Task 42 evidence](evidence/rust-vocabulary-collection-task-42.md); current Unicode matching implementation and verification are in [Task 45 evidence](evidence/rust-vocabulary-icu4x-task-45.md).
+The `outflow-core` collection validator uses the versioned Unicode 18.0.0 canonical-caseless key documented below. Written replacements do not determine uniqueness. Original text remains unchanged. The core collection validator does not persist entries or perform transcript replacement or word-boundary matching. At the time of this Task 42 snapshot, the settings validator had not yet been connected to the core policy; Milestone 3 now uses the same validator for settings decode and persistence. The initial collection work and its verification remain documented in [Task 42 evidence](evidence/rust-vocabulary-collection-task-42.md); current Unicode matching implementation and verification are in [Task 45 evidence](evidence/rust-vocabulary-icu4x-task-45.md).
 
 Run the focused tests and synthetic example from the repository root:
 
@@ -2855,11 +2861,11 @@ python3 scripts/check_vocabulary_unicode_policy.py --demo
 python3 -m unittest scripts.tests.test_check_vocabulary_unicode_policy -v
 ```
 
-The Python demonstration is a development reference only: it reports the running Python Unicode data version and does not supply the production Unicode 18.0.0 data. Task 45 replaces the former lowercase-only Rust comparator with ICU4X 2.4.0 and adds matching regression tests. This does not implement vocabulary persistence or text replacement. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
+The Python demonstration is a development reference only: it reports the running Python Unicode data version and does not supply the production Unicode 18.0.0 data. Task 45 replaced the former lowercase-only Rust comparator with ICU4X 2.4.0 and added matching regression tests. At that task snapshot, this did not implement vocabulary persistence or text replacement; Milestone 3 adds tested Rust persistence but still does not connect the browser UI or implement speech replacement. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
 
 ## Focused Task 45 — ICU4X vocabulary matching
 
-The core crate pins `icu_casemap = "=2.4.0"` and `icu_normalizer = "=2.4.0"`, both with `default-features = false` and `compiled_data`. The versioned API derives keys using Unicode 18.0.0 D145: `NFD(toCasefold(NFD(input)))`. It uses full default, non-Turkic folding and preserves original values. The verified ASCII fast path is tested against ICU for every pair of ASCII scalars. The existing settings-schema validator still uses lowercase-only matching; reconciling that stored-settings path is a separate task. No vocabulary collection persistence, CRUD, transcript replacement, or frontend integration is included here.
+The core crate pins `icu_casemap = "=2.4.0"` and `icu_normalizer = "=2.4.0"`, both with `default-features = false` and `compiled_data`. The versioned API derives keys using Unicode 18.0.0 D145: `NFD(toCasefold(NFD(input)))`. It uses full default, non-Turkic folding and preserves original values. The verified ASCII fast path is tested against ICU for every pair of ASCII scalars. At the time of Task 45, the settings-schema validator still used lowercase-only matching and no vocabulary persistence or CRUD was included. Milestone 3 now aligns validation and adds a tested Rust service; transcript replacement and frontend integration remain out of scope.
 
 Run the release benchmark with synthetic data:
 
@@ -2911,7 +2917,7 @@ RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary_migration --locked
 RUSTUP_TOOLCHAIN=stable cargo test -p outflow-core vocabulary --locked
 ```
 
-The settings crate still validates vocabulary uniqueness with lowercase-only matching. Its current schema v1 has no matching-policy field, rejects unsupported schema versions, and has no migration implementation; schema version alone or an absent policy field is not proof of which application build last validated a file. Before persistent integration, establish trusted schema/build lineage or add an explicitly versioned policy marker through an approved schema change, define safe review and rollback behavior, and connect the checker to settings loading/saving. See [Vocabulary Matching Migration Compatibility](docs/VOCABULARY_MATCHING_MIGRATION.md) for the boundary and evidence. This checker does not complete T-017, T-018, T-038, T-039, or AC-08; repository T-046 remains the copy-only result panel task.
+At the time of this migration-checker snapshot, settings validation and persistence had not been integrated. Milestone 3 now uses Unicode 18 validation and explicit review for nonempty schema-v1 collections, but schema v1 still has no matching-policy field, so schema version alone does not establish source-policy provenance. No schema migration was added. See [Vocabulary Matching Migration Compatibility](docs/VOCABULARY_MATCHING_MIGRATION.md) for the current boundary and evidence. This checker and its follow-up do not complete T-017, T-018, T-038, T-039, or AC-08; repository T-046 remains the copy-only result panel task.
 
 Task 46 verification snapshot: 148 Rust tests passed (24 migration-checker tests added; the 124-test pre-task baseline remained passing), along with the requested Rust checks/build, 136 frontend tests plus typecheck/lint/build, and 258 Python tests. Task 47 verification is recorded below and in [Task 47 evidence](evidence/rust-vocabulary-readiness-task-47.md).
 
@@ -2931,7 +2937,7 @@ RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
 
 The focused suite covers unknown provenance with and without conflicts, all readiness decisions, Unicode collisions, Turkish dotted/dotless-I and cross-script distinctions, typed validation errors, the 500-entry limit, stable conflict indices, text preservation, repeatability, and the absence of a persistence input. The example prints readiness outcomes generated by the assessment API and uses synthetic values only.
 
-Settings load/save migration integration remains unimplemented: schema v1 has no matching-policy marker or migration path, and `crates/settings` still validates vocabulary uniqueness with lowercase-only matching. This settings validator is **not Unicode 18-compatible**. Task 48 adds a separate opt-in adapter for already-constructed settings values; it is not called by decoding, loading, initialization, validation, or saving. Before connecting readiness to those paths, establish trustworthy source provenance, define explicit conflict review, approve a versioned schema migration, and verify atomic write/rollback behavior. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
+At the Task 47 snapshot, settings load/save integration was unimplemented and the validator was not Unicode 18-compatible. Milestone 3 now applies Unicode 18 validation during decode and save and connects `SettingsService` to read-only readiness with unknown provenance plus per-instance explicit review. Schema v1 still has no matching-policy marker or migration path. A future schema migration still needs trustworthy provenance and an approved versioned contract; see the current service section below. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
 
 Troubleshooting:
 
@@ -2948,7 +2954,7 @@ Task 47 adds a pure readiness assessment only; no settings files, schema fields,
 
 Callers must supply trusted `VocabularySourcePolicy` provenance. Schema v1 has no matching-policy marker, so schema version alone, file timestamps, application version strings, operating system, and absence of conflicts do not establish policy provenance. For any nonempty collection, `Unknown` returns `SourcePolicyUnknown` even when there are no conflicts. `CompatibleForExplicitMigration` means only that verified legacy entries have no conflicts under Unicode 18; it does not mean a migration ran or settings were saved. Conflicts retain indices and classification and require manual resolution without automatic winner selection.
 
-The preflight receives an already-constructed DTO and has no file or network interface. Existing `Settings::from_json`, deserialization, and load paths validate first using lowercase-only uniqueness. They can reject malformed entries or existing lowercase conflicts before the preflight can inspect them; the adapter does not bypass or recover rejected files. Schema v1 and all existing serialization, validation, initialization, load, and save behavior remain unchanged. Automatic integration still requires trusted provenance, an approved schema/migration decision, explicit conflict review and safe atomic-write/rollback behavior. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
+The preflight itself receives an already-constructed DTO and has no file or network interface. At the Task 48 snapshot, ordinary decode and load rejected conflicts before the preflight could inspect them. Milestone 3 adds a narrow bounded review decoder for schema-v1 documents rejected only for Unicode 18 duplicate-source conflicts; malformed fields and unsupported schemas still fail closed. The service preserves the original file until an explicitly reviewed candidate is atomically saved. Schema v1 still cannot establish source-policy provenance, and this does not authorize a schema migration. T-017, T-018, T-038, T-039, and AC-08 remain incomplete.
 
 Run the settings tests and the synthetic output demonstration from the repository root:
 
@@ -2979,7 +2985,7 @@ No persistent migration or automatic conflict resolution is implemented. T-017, 
 
 The only accepted marker spelling is the exact, case-sensitive `unicode18-canonical-caseless-v1`. The fixture rejects a missing or empty marker, wrong-case aliases, unsupported policy or Unicode versions, malformed marker JSON types, missing or malformed vocabulary fields, and unsupported schema versions. Marker recognition is only a declaration: it does not establish verified legacy or Unicode 18 provenance. Unknown provenance stays review-required even with no conflicts, and the test supplies verified provenance only as an explicit synthetic assumption.
 
-The read-only checks cover `straße` / `STRASSE`, composed `é` / decomposed `e` plus combining acute, and Greek `σ` / `ς`. They report Unicode 18 conflicts by entry index and preserve both original mappings. The fixture does not write settings or apply a migration. Production schema v1, defaults, serialization, lowercase validation, and load/save behavior remain unchanged; production schema-v2 loading is still unsupported.
+The read-only checks cover `straße` / `STRASSE`, composed `é` / decomposed `e` plus combining acute, and Greek `σ` / `ς`. They report Unicode 18 conflicts by entry index and preserve both original mappings. The fixture does not write settings or apply a migration. At the Task 50 snapshot, production schema v1, defaults, serialization, lowercase validation, and load/save behavior remained unchanged. Milestone 3 later aligned schema-v1 validation with Unicode 18 and added the transactional service; production schema-v2 loading remains unsupported.
 
 Run the focused fixture and print its asserted contract summary with:
 
@@ -2994,11 +3000,11 @@ Persistent migration still requires an approved complete schema and marker contr
 
 ## Read-only vocabulary migration planning report (Task 51)
 
-[crates/settings/tests/vocabulary_schema_v2_migration_plan.rs](crates/settings/tests/vocabulary_schema_v2_migration_plan.rs) adds a pure, test-only planner that combines the proposed schema-v2 marker contract with the existing settings compatibility preflight. It accepts a source decoded through schema v1, a synthetic proposed-v2 JSON document, and an explicit source-policy assumption. The target marker is the exact unicode18-canonical-caseless-v1 declaration; it never determines whether the source was validated with legacy lowercase or Unicode 18 matching.
+[crates/settings/tests/vocabulary_schema_v2_migration_plan.rs](crates/settings/tests/vocabulary_schema_v2_migration_plan.rs) adds a pure, test-only planner that combines the proposed schema-v2 marker contract with the existing settings compatibility preflight. It accepts a synthetic schema-v1 `Settings` value, a proposed-v2 JSON document, and an explicit source-policy assumption. Conflict-bearing DTOs are constructed in memory because strict schema-v1 decoding now rejects them; the separate decoder tests still verify that boundary. The target marker is the exact unicode18-canonical-caseless-v1 declaration; it never determines whether the source was validated with legacy lowercase or Unicode 18 matching.
 
 The report returns a review status and ordered conflict indices/classifications without vocabulary text. Unknown provenance remains review-required; Unicode 18 collisions require manual conflict resolution; verified legacy data without conflicts is only compatible for a future migration review; verified current data is already current for review. Empty vocabulary needs no vocabulary-key migration, but does not authorize a rewrite of the full settings schema. Conflict-free entries are not migration-approved.
 
-Malformed content rejected by the existing schema-v1 decoder cannot reach the planner. The planner reads no user settings or files and performs no write or migration. Production loading remains schema v1 and lowercase-only. Trusted provenance, manual conflict decisions, and atomic-write/rollback verification remain future requirements.
+Malformed content rejected by the schema-v1 decoder cannot reach the planner. The planner reads no user settings or files and performs no write or migration. Production loading remains schema v1, now validated with Unicode 18 canonical-caseless matching; the service separately opens conflict-only files read-only for explicit review. Trusted provenance, schema migration, and cross-platform atomic-write/rollback verification remain future requirements.
 
 Run the focused tests and printable summary with:
 
@@ -3065,7 +3071,7 @@ This is a test fixture, not recognized speech. Diagnostic startup does not reque
 Use the already-authorized pinned Moonshine source/runtime paths described in [Pinned macOS native build and smoke test](#pinned-macos-native-build-and-smoke-test). A fresh output directory is required. The build still links the existing native runtime, but the diagnostic launch needs no model directory and performs no model verification or model load:
 
 ```sh
-export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d /private/tmp/outflow-prompt79j.XXXXXX)"
+export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d ${TMPDIR:-/tmp}/outflow-prompt79j.XXXXXX)"
 scripts/build_macos_mic_probe.sh
 
 export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
@@ -3167,13 +3173,13 @@ Copy eligibility still requires ResultReady, the accepted nonzero session ID, an
 Use the already-authorized pinned local source, libraries, model, and WAV fixture from the Prompt 79J build environment. Export those variables first if they are not present in the shell, then build to a fresh directory and launch with the full 120-second fixture window:
 
 ```sh
-export MOONSHINE_SOURCE_DIR=/Users/bixxie/Desktop/Projects/moonshine-upstream-234f60f
+export MOONSHINE_SOURCE_DIR="${MOONSHINE_SOURCE_DIR:-/path/to/pinned/moonshine-source-234f60f}"
 export MOONSHINE_SOURCE_REVISION=234f60faa0eb388b01cdf7e60aca232af37aefda
-export MOONSHINE_LIBRARY=/private/tmp/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
+export MOONSHINE_LIBRARY=${TMPDIR:-/tmp}/prompt79-moonshine-wrapper-build-onnx/moonshine-core/libmoonshine.dylib
 export MOONSHINE_ORT_LIBRARY="$MOONSHINE_SOURCE_DIR/core/third-party/onnxruntime/lib/macos/arm64/libonnxruntime.1.23.2.dylib"
-export OUTFLOW_MIC_PROBE_MODEL_DIR=/private/tmp/prompt79-moonshine-small-streaming
+export OUTFLOW_MIC_PROBE_MODEL_DIR=${TMPDIR:-/tmp}/prompt79-moonshine-small-streaming
 export OUTFLOW_MIC_PROBE_FIXTURE_WAV="$MOONSHINE_SOURCE_DIR/test-assets/two_cities_16k.wav"
-export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d /private/tmp/outflow-prompt79k.XXXXXX)"
+export OUTFLOW_MIC_PROBE_BUILD_DIR="$(mktemp -d ${TMPDIR:-/tmp}/outflow-prompt79k.XXXXXX)"
 
 scripts/build_macos_mic_probe.sh
 export OUTFLOW_MIC_PROBE_APP="$OUTFLOW_MIC_PROBE_BUILD_DIR/OutflowMicProbe.app"
@@ -3287,11 +3293,11 @@ RUSTUP_TOOLCHAIN=stable cargo test \
 
 **Task 54 verifies pre-commit cancellation and in-memory recovery only; persistent filesystem rollback is NOT TESTED.** Existing atomic-writer tests do not establish schema-v2 migration rollback. Future migration work still needs real write, disk-full, permission, pre/post-replacement, interruption recovery, last-known-good preservation, permissions, Windows replacement/ACL, Linux filesystem, and unsupported-downgrade checks. T-017, T-018, T-038, T-039, T-053, and AC-08 remain incomplete. See [the migration contract](docs/VOCABULARY_MATCHING_MIGRATION.md#pre-commit-review-cancellation-and-retry-task-54) and [Task 54 evidence](evidence/rust-vocabulary-cancellation-task-54.md).
 
-## Native in-memory Rust vocabulary CRUD (partial T-038)
+## Native Rust vocabulary CRUD (partial T-038)
 
 `outflow-settings` now exposes `add_vocabulary_entry`, `edit_vocabulary_entry`, and `delete_vocabulary_entry` for an in-memory `Vec<VocabularyEntry>`. Add and edit reuse `outflow-core`'s current 500-entry, 128-Unicode-scalar, and Unicode 18 canonical-caseless spoken-phrase validation. Stable IDs must be unique; edit preserves the selected ID and its position, and delete removes by ID while preserving the remaining order. Each operation validates a temporary candidate before replacing the caller's vector, so failures leave the full collection unchanged. Typed errors identify duplicate IDs, duplicate spoken phrases, invalid fields, missing IDs, and a full collection without including vocabulary values or IDs.
 
-This is native CRUD logic only. It does not write settings or connect the browser preview to Rust. Schema-v1 serialization, loading, matching behavior, and persistence are unchanged. The example optionally exercises the existing atomic writer and loader in a fresh temporary directory using synthetic values; this is a demonstration of those existing APIs, not production CRUD persistence. The current writer reports unsupported on platforms without its owner-only atomic replacement implementation.
+The CRUD functions remain in-memory operations. `SettingsService` below wraps them in candidate validation and atomic persistence; neither API is connected to the browser preview. The current writer reports unsupported on platforms without its owner-only atomic replacement implementation.
 
 Run the synthetic Add → Edit → Delete example from the repository root:
 
@@ -3315,7 +3321,7 @@ RUSTUP_TOOLCHAIN=stable cargo test -p outflow-settings vocabulary_crud --locked
 RUSTUP_TOOLCHAIN=stable cargo test --workspace --locked
 ```
 
-The synthetic tests cover Add/Edit/Delete, stable ID and position preservation, missing and duplicate IDs, Unicode 18 `straße`/`STRASSE` and composed/decomposed collisions, Unicode and emoji, scalar/collection limits, atomic rejection, and content-free errors. No new dependency is required. The full implementation handoff and exact verification results are recorded in [`evidence/rust-vocabulary-crud-task-38.md`](evidence/rust-vocabulary-crud-task-38.md).
+The original synthetic CRUD tests cover Add/Edit/Delete, stable ID and position preservation, missing and duplicate IDs, Unicode 18 `straße`/`STRASSE` and composed/decomposed collisions, Unicode and emoji, scalar/collection limits, atomic rejection, and content-free errors. No new dependency is required. The earlier in-memory implementation handoff is recorded in [`evidence/rust-vocabulary-crud-task-38.md`](evidence/rust-vocabulary-crud-task-38.md).
 
 Troubleshooting:
 
@@ -3323,10 +3329,59 @@ Troubleshooting:
 - **`InvalidEntry`:** inspect the reported field and reason; each spoken and written value must contain non-whitespace text and no more than 128 Unicode scalar values.
 - **`DuplicateSpoken`:** the phrase conflicts under Unicode 18 canonical-caseless matching. Error text contains only collection indices.
 - **`MissingId`:** pass the stable ID already present in the in-memory collection. The error does not echo IDs.
-- **Temporary save/reload unavailable:** the example still demonstrates in-memory CRUD, while the existing writer does not provide its owner-only replacement guarantee on that platform. This API does not add another persistence path.
+- **Temporary save/reload unavailable:** the in-memory CRUD functions still work, but the settings writer does not provide its owner-only replacement guarantee on that platform.
 - **Temporary directory creation fails:** check that the operating-system temporary directory is writable; the example creates and removes a uniquely named directory there and never targets the user's real settings.
 
-This partial implementation does not complete T-038 or AC-08. Boundary-aware replacement, production settings persistence integration, frontend/native settings integration, deletion/save/load acceptance, and the T-017/T-018 prerequisites remain open. T-017, T-018, T-038, T-039, and all release gates remain unchecked.
+This partial implementation does not complete T-038 or AC-08. Boundary-aware replacement, frontend/native settings integration, and the T-017/T-018 prerequisites remain open. T-017, T-018, T-038, T-039, and all release gates remain unchecked.
+
+## Transactional Rust settings and vocabulary service (partial T-038)
+
+`SettingsService::open(path)` accepts only the caller-supplied path. A missing file returns validated defaults in memory and does not create a file. A valid existing schema-v1 file is loaded read-only. Preference changes and Add/Edit/Delete vocabulary operations clone the snapshot, use the existing validators/CRUD functions, write through `save_settings_atomic()`, and replace live state only after the atomic replacement is visible. Errors contain field names, indices, and operation status; they never include vocabulary text or IDs. Reset calls the existing reset operation and requires explicit confirmation.
+
+Schema v1 does not record vocabulary matching-policy provenance. The service reports nonempty existing collections as `SourcePolicyUnknown`, does not rewrite them on open, and blocks saves until the caller explicitly confirms that the ordered list was reviewed. That acknowledgment applies only to the current service instance. If strict decoding finds a canonical-caseless conflict, a bounded read-only path exposes original entries and index-only readiness so a caller can explicitly edit/delete them; it does not normalize or choose a winner. Every candidate must pass the core Unicode 18 validator before save.
+
+Run the full synthetic lifecycle from the repository root:
+
+```sh
+cargo run -p outflow-settings --example settings_lifecycle --locked
+```
+
+To also explicitly reset the **temporary example file** after the lifecycle:
+
+```sh
+cargo run -p outflow-settings --example settings_lifecycle --locked -- --reset
+```
+
+The example creates a new directory under the operating-system temporary directory, prints only setting/status summaries, vocabulary counts, and the temporary settings-file path, and keeps that file so the JSON can be inspected. It never reads the user's actual configuration directory. Expected output is:
+
+```text
+first run: status=FirstRun, cleanup=Clean, remove_fillers=true, run_at_login=false, vocabulary_entries=0
+preferences: clean: Saved
+preferences: verbatim: Saved
+vocabulary add: Saved
+vocabulary add: Saved
+saved: status=Loaded, cleanup=Verbatim, remove_fillers=false, run_at_login=true, vocabulary_entries=2
+reloaded: status=VocabularyReviewRequired, cleanup=Verbatim, remove_fillers=false, run_at_login=true, vocabulary_entries=2
+Explicit vocabulary review acknowledged: YES (source policy remains unknown)
+vocabulary edit: Saved
+vocabulary delete: Saved
+edited and deleted: status=Loaded, cleanup=Verbatim, remove_fillers=false, run_at_login=true, vocabulary_entries=1
+reloaded again: status=VocabularyReviewRequired, cleanup=Verbatim, remove_fillers=false, run_at_login=true, vocabulary_entries=1
+Temporary settings file: <temporary-directory>/settings.json
+Explicit reset: NOT RUN (pass --reset to reset this temporary file)
+```
+
+The file contains only schema-v1 settings and explicit vocabulary. It contains no audio, transcript, or clipboard fields. The service does not connect React/Tauri, access a microphone/model/network, or register the login-item preference with the OS. Windows owner-only ACL persistence remains a separate unmet requirement; do not claim Windows persistence complete.
+
+Troubleshooting:
+
+- **`VocabularyReviewRequired`:** inspect the ordered vocabulary through the caller's settings UI and explicitly acknowledge review before changing or saving a nonempty list. Reopening requires review again.
+- **`UnsupportedSchemaVersion`, corrupt JSON, or unsafe file:** the service returns a typed error and leaves the original file untouched. Use a separately confirmed reset only when discarding the settings is intended.
+- **Save failure:** the live snapshot is retained unless the storage layer confirms the atomic rename; a parent-directory sync failure is surfaced as `DurabilityUncertain` because the replacement is already visible.
+- **`UnsupportedPlatform`:** the current writer fails closed where owner-only replacement permissions are not implemented; Windows is not yet supported by this persistence path.
+- **Temporary example file:** use the exact path printed by the example to inspect or remove its temporary directory. The example never targets application configuration.
+
+Filesystem tests are in `crates/settings/tests/settings_service.rs`. They cover first-run no-write, valid load without file modification, preferences, Add/Edit/Delete persistence and order, Unicode/legacy-policy review, 500/501 entries, invalid phrases and duplicate IDs/source phrases, corrupt and unsupported files, failed-save preservation, reset confirmation, redaction, and data-field privacy. This is partial F-08/C-08 library progress only; it does not complete T-038, AC-08, the T-017/T-018 prerequisites, Windows ACL persistence, or the application UI integration.
 
 ## Native Rust whitespace normalization (partial T-035)
 

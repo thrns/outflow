@@ -12,9 +12,21 @@ from typing import Any, Sequence
 if __package__:
     from .run_native_asr_benchmark import BenchmarkError, _unique_object, _reject_constant
     from .validate_measured_asr_results import MeasuredResultsError, validate_measured_results
+    from .validate_hardware_evidence import (
+        HardwareEvidenceError,
+        load_hardware_evidence,
+        sha256_bytes,
+        validate_hardware_evidence,
+    )
 else:
     from run_native_asr_benchmark import BenchmarkError, _unique_object, _reject_constant
     from validate_measured_asr_results import MeasuredResultsError, validate_measured_results
+    from validate_hardware_evidence import (
+        HardwareEvidenceError,
+        load_hardware_evidence,
+        sha256_bytes,
+        validate_hardware_evidence,
+    )
 
 
 class ComparisonBlocked(ValueError):
@@ -23,6 +35,12 @@ class ComparisonBlocked(ValueError):
 
 def load_result(path: Path) -> dict[str, Any]:
     """Load a bounded sanitized result and validate its measurement contract."""
+
+    return load_result_with_sha256(path)[0]
+
+
+def load_result_with_sha256(path: Path) -> tuple[dict[str, Any], str]:
+    """Load one result and hash the exact bytes validated from that read."""
 
     try:
         raw = path.read_bytes()
@@ -38,11 +56,19 @@ def load_result(path: Path) -> dict[str, Any]:
         if isinstance(error, ComparisonBlocked):
             raise
         raise ComparisonBlocked("candidate result could not be validated") from error
-    return result
+    return result, sha256_bytes(raw)
 
 
-def compare_candidate_results(small: dict[str, Any], tiny: dict[str, Any]) -> dict[str, Any]:
-    """Return aggregate deltas only when corpus and hardware evidence match."""
+def compare_candidate_results(
+    small: dict[str, Any],
+    tiny: dict[str, Any],
+    *,
+    small_result_sha256: str | None = None,
+    tiny_result_sha256: str | None = None,
+    small_hardware_evidence: dict[str, Any] | None = None,
+    tiny_hardware_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return deltas only with matching human-reviewed comparison evidence."""
 
     try:
         validate_measured_results(small)
@@ -62,21 +88,35 @@ def compare_candidate_results(small: dict[str, Any], tiny: dict[str, Any]) -> di
             or result["timing"]["stop_to_final_p95_ms"] is None
         ):
             raise ComparisonBlocked("comparison requires real measurements on a complete approved corpus")
+    if (
+        small_result_sha256 is None
+        or tiny_result_sha256 is None
+        or small_hardware_evidence is None
+        or tiny_hardware_evidence is None
+    ):
+        raise ComparisonBlocked("separate human-reviewed hardware evidence is required")
+    try:
+        small_review = validate_hardware_evidence(
+            small, small_hardware_evidence, measured_result_sha256=small_result_sha256
+        )
+        tiny_review = validate_hardware_evidence(
+            tiny, tiny_hardware_evidence, measured_result_sha256=tiny_result_sha256
+        )
+    except HardwareEvidenceError as error:
+        raise ComparisonBlocked("hardware review evidence is missing, altered, or mismatched") from error
+
     hardware_fields = (
-        "machine_identifier", "os", "os_release", "architecture", "physical_memory_bytes",
-        "cpu_label", "reference_hardware_class",
+        "machine_label", "machine_identifier", "os", "os_release", "architecture",
+        "physical_memory_bytes", "physical_memory_source", "cpu_label",
     )
     small_machine, tiny_machine = small["machine"], tiny["machine"]
     if (
-        small_machine["physical_hardware_status"] != "verified_physical"
-        or tiny_machine["physical_hardware_status"] != "verified_physical"
-        or small_machine["real_hardware_measurements_completed"] is not True
-        or tiny_machine["real_hardware_measurements_completed"] is not True
-        or small_machine["cpu_only_inference_exercised"] is not True
+        small_machine["cpu_only_inference_exercised"] is not True
         or tiny_machine["cpu_only_inference_exercised"] is not True
         or any(small_machine[field] != tiny_machine[field] for field in hardware_fields)
+        or small_review["reference_hardware_class"] != tiny_review["reference_hardware_class"]
     ):
-        raise ComparisonBlocked("candidate measurements are not comparable on verified physical hardware")
+        raise ComparisonBlocked("candidate measurements do not match the approved hardware review basis")
 
     def candidate_summary(result: dict[str, Any]) -> dict[str, Any]:
         model = result["model"]
@@ -93,8 +133,10 @@ def compare_candidate_results(small: dict[str, Any], tiny: dict[str, Any]) -> di
 
     return {
         "comparison_status": "READY_FOR_REVIEW_ONLY",
+        "comparison_permission": "approved_for_candidate_comparison_only",
         "fixture_manifest_sha256": small["fixture_manifest_sha256"],
         "hardware_comparable": True,
+        "physical_4gb_certification": "NOT_ESTABLISHED_BY_COMPARISON",
         "candidates": {
             "small": candidate_summary(small),
             "tiny": candidate_summary(tiny),
@@ -102,6 +144,7 @@ def compare_candidate_results(small: dict[str, Any], tiny: dict[str, Any]) -> di
         "release_decision": "NOT_APPROVED",
         "limitations": [
             "This comparison does not certify full-application RSS or installed footprint.",
+            "Human-reviewed hardware evidence grants comparison permission only; it does not certify a physical 4 GB release target.",
             "A candidate model remains unapproved until all PRD quality, latency, memory, disk, privacy, hardware, and licensing gates pass.",
         ],
     }
@@ -111,10 +154,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Compare Small and Tiny measured results on one approved corpus and hardware.")
     parser.add_argument("--small", type=Path, required=True)
     parser.add_argument("--tiny", type=Path, required=True)
+    parser.add_argument("--small-hardware-evidence", type=Path, required=True)
+    parser.add_argument("--tiny-hardware-evidence", type=Path, required=True)
     arguments = parser.parse_args(argv)
     try:
-        result = compare_candidate_results(load_result(arguments.small), load_result(arguments.tiny))
-    except (ComparisonBlocked, BenchmarkError, MeasuredResultsError) as error:
+        small, small_hash = load_result_with_sha256(arguments.small)
+        tiny, tiny_hash = load_result_with_sha256(arguments.tiny)
+        result = compare_candidate_results(
+            small,
+            tiny,
+            small_result_sha256=small_hash,
+            tiny_result_sha256=tiny_hash,
+            small_hardware_evidence=load_hardware_evidence(arguments.small_hardware_evidence),
+            tiny_hardware_evidence=load_hardware_evidence(arguments.tiny_hardware_evidence),
+        )
+    except (ComparisonBlocked, BenchmarkError, MeasuredResultsError, HardwareEvidenceError) as error:
         print(f"BLOCKED candidate comparison: {error}", file=sys.stderr)
         return 2
     json.dump(result, sys.stdout, indent=2, sort_keys=True)

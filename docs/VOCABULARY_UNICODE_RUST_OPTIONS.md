@@ -1,6 +1,8 @@
 # Rust Unicode Matching Implementation Review
 
-**Status: ICU4X 2.4.0 SELECTED AND APPROVED FOR TASK 45.** Unicode 18.0.0 canonical-caseless matching is the approved F-08 uniqueness policy. This document records the implementation and dependency review; it does not complete vocabulary persistence, CRUD, transcript replacement, or AC-08.
+**Status: ICU4X 2.4.0 SELECTED AND APPROVED FOR TASK 45.** Unicode 18.0.0 canonical-caseless matching is the approved F-08 uniqueness policy. This document records the Task 45 implementation and dependency review. Milestone 3 later applied the approved validator to schema-v1 settings and added a reusable Rust persistence service; schema migration, transcript replacement, and frontend integration remain incomplete, and AC-08 is not complete.
+
+The Task 45 snapshot notes below preserve the core-only status at that time. For current settings behavior and provenance limits, see [the Milestone 3 service update](VOCABULARY_MATCHING_MIGRATION.md#milestone-3-settings-service-update-2026-11-06).
 
 ## Selected implementation
 
@@ -11,7 +13,7 @@ icu_casemap = { version = "=2.4.0", default-features = false, features = ["compi
 icu_normalizer = { version = "=2.4.0", default-features = false, features = ["compiled_data"] }
 ```
 
-The versioned API is `comparison_key(phrase, VocabularyMatchingVersion::Unicode18CanonicalCaselessV1)` in `crates/core/src/vocabulary_matching.rs`. `CURRENT_VOCABULARY_MATCHING_VERSION` is used by the `outflow-core` collection validator. It applies the D145 transformation `NFD(toCasefold(NFD(input)))` with the default full, non-Turkic `CaseMapper::fold_string()` and borrowed NFD compiled data. The generated `icu_casemap_data`, `icu_normalizer_data`, and `icu_properties_data` 2.4.0 packages identify Unicode 18.0.0. No runtime provider or data download is used. The existing `outflow-settings` serialized-settings validator still uses lowercase-only matching and is outside this task's core-only integration scope.
+The versioned API is `comparison_key(phrase, VocabularyMatchingVersion::Unicode18CanonicalCaselessV1)` in `crates/core/src/vocabulary_matching.rs`. `CURRENT_VOCABULARY_MATCHING_VERSION` is used by the `outflow-core` collection validator. It applies the D145 transformation `NFD(toCasefold(NFD(input)))` with the default full, non-Turkic `CaseMapper::fold_string()` and borrowed NFD compiled data. The generated `icu_casemap_data`, `icu_normalizer_data`, and `icu_properties_data` 2.4.0 packages identify Unicode 18.0.0. No runtime provider or data download is used. At the Task 45 snapshot, settings validation was outside this task's core-only scope; Milestone 3 now uses the same collection validator for persisted settings.
 
 Version names identify both algorithm and Unicode data. Future data or algorithm changes require a new enum variant and migration review. Original spoken and written values remain unchanged, and derived keys are temporary. This matching change does not implement persistence, CRUD, transcript replacement, or frontend integration.
 
@@ -78,7 +80,7 @@ Task 45 records matched release measurements from the same Rust toolchain, macOS
 
 ## Persistence and future migration
 
-No matching key is persisted by Task 45. The settings crate already validates serialized vocabulary using its pre-existing lowercase-only rule; reconcile that C-08 validation path before treating Unicode 18 as the persisted-settings conflict rule. When vocabulary storage is extended, derive keys from unchanged originals. Before a version update, scan saved entries for newly colliding keys and require recoverable resolution; do not overwrite, normalize, delete, or silently select an entry. Update policy versions only with reviewed Unicode data, UCD regressions, cross-platform checks, collision analysis, license review, and fresh size measurements.
+Task 45 did not persist matching keys. At that snapshot, the settings crate still used its pre-existing lowercase-only rule. Milestone 3 now validates schema-v1 settings with Unicode 18, but does not persist comparison keys or record their provenance in the schema. Before a future policy version update, scan saved entries for newly colliding keys and require recoverable resolution; do not overwrite, normalize, delete, or silently select an entry. Update policy versions only with reviewed Unicode data, UCD regressions, cross-platform checks, collision analysis, license review, and fresh size measurements.
 
 ## Primary references
 

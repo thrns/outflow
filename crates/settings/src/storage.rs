@@ -1,7 +1,10 @@
 //! Explicit-path loading, user-directed reset, and atomic persistence for C-08 settings.
 //!
-//! The loader reads only a caller-supplied regular file, caps input at
+//! The ordinary loader reads only a caller-supplied regular file, caps input at
 //! [`MAX_SETTINGS_FILE_BYTES`], and validates through [`Settings::from_json`].
+//! A crate-private review loader uses the same path checks and byte cap but can
+//! return only otherwise-valid schema-v1 settings with vocabulary conflicts so
+//! the service can report index-only review readiness without writing them.
 //! The writer validates and encodes through [`Settings::to_json`], creates a
 //! same-directory temporary file, synchronizes it, and atomically renames it
 //! over the destination. A confirmed reset requires an existing regular file
@@ -241,6 +244,22 @@ pub const MAX_SETTINGS_FILE_BYTES: u64 = 1024 * 1024;
 /// that fail validation. Errors never include paths, file contents, or
 /// vocabulary and shortcut values.
 pub fn load_settings(path: &Path) -> Result<Option<Settings>, SettingsStorageError> {
+    load_settings_with_decoder(path, Settings::from_json)
+}
+
+/// Reads a schema-v1 file through the same bounded, no-symlink checks while
+/// allowing only vocabulary-policy conflicts for explicit service review.
+/// This is crate-private so ordinary readers remain fail-closed.
+pub(crate) fn load_settings_for_vocabulary_review(
+    path: &Path,
+) -> Result<Option<Settings>, SettingsStorageError> {
+    load_settings_with_decoder(path, Settings::from_json_for_vocabulary_review)
+}
+
+fn load_settings_with_decoder(
+    path: &Path,
+    decode: fn(&str) -> Result<Settings, SettingsJsonError>,
+) -> Result<Option<Settings>, SettingsStorageError> {
     if path.file_name().filter(|name| !name.is_empty()).is_none() {
         return Err(SettingsStorageError::InvalidFilePath);
     }
@@ -320,7 +339,7 @@ pub fn load_settings(path: &Path) -> Result<Option<Settings>, SettingsStorageErr
     }
 
     let json = String::from_utf8(bytes).map_err(|_| SettingsStorageError::InvalidUtf8)?;
-    match Settings::from_json(&json) {
+    match decode(&json) {
         Ok(settings) => Ok(Some(settings)),
         Err(SettingsJsonError::InvalidDocument { line, column }) => {
             Err(SettingsStorageError::InvalidDocument { line, column })
@@ -1743,7 +1762,7 @@ pub fn save_settings_atomic(path: &Path, settings: &Settings) -> Result<(), Sett
     )
 }
 
-fn save_settings_atomic_with_hooks<W, S, B, P>(
+pub(crate) fn save_settings_atomic_with_hooks<W, S, B, P>(
     path: &Path,
     settings: &Settings,
     write_json: W,

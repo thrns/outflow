@@ -834,13 +834,6 @@ def _validate_candidate_architecture(architecture: int) -> None:
         raise BenchmarkError("unsupported development model architecture")
 
 
-def _validate_candidate_architecture(architecture: int) -> None:
-    if type(architecture) is not int or architecture not in {
-        candidate["architecture"] for candidate in MODEL_CANDIDATES.values()
-    }:
-        raise BenchmarkError("unsupported development model architecture")
-
-
 def parse_load_probe(
     value: Any,
     *,

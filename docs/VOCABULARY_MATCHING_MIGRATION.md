@@ -2,6 +2,12 @@
 
 This document describes a read-only compatibility checker and migration-readiness assessment for vocabulary matching changes. They do not implement a settings migration, change saved configuration, or alter the production collection validator.
 
+## Milestone 3 settings-service update (2026-11-06)
+
+The production schema remains v1 and still has no trusted vocabulary-policy provenance field. `Settings::validate`, decoding, and persistence now use the core Unicode 18 canonical-caseless collection validator. `SettingsService` loads nonempty v1 collections as `SourcePolicyUnknown` and requires an explicit per-instance review acknowledgment before writes. If a schema-v1 collection conflicts under Unicode 18, the service uses a bounded, read-only review decoder to expose original entries and index-only readiness; edits or deletes must resolve the conflict before a candidate can be saved. No source policy is inferred from schema version, and the service does not add or migrate to schema v2.
+
+Earlier implementation notes below describe the state at their respective task snapshots. Their statements that the settings decoder used lowercase-only uniqueness or could not inspect a conflicting file have been superseded by this update. The preflight remains read-only, and its source-policy readiness outcomes remain unchanged.
+
 ## Policies compared
 
 The legacy policy is Rust `str::to_lowercase()`, identified by `rust-str-to-lowercase-v1` in checker results. It lowercases Unicode text but does not perform full Unicode case folding or canonical normalization. The identifier is Outflow's policy label; Rust's lowercase tables come from the compiler's standard library and do not name a separately pinned Unicode data release.
@@ -65,9 +71,9 @@ Only after a separately approved settings-schema migration exists:
 - Write atomically, retain a recoverable last-known-good configuration, and verify rollback on write failure.
 - Never silently overwrite a legacy file whose vocabulary is incompatible under the target interpretation.
 
-The current settings schema is version 1. It has no vocabulary matching-policy field, and its validator still checks spoken uniqueness with Rust `to_lowercase()`. That settings validator is lowercase-only and must not be described as Unicode 18-compatible. Schema versions describe serialized structure; a missing matching-policy field does not establish which application build or matching behavior last validated or wrote a file. Unknown or unprovable lineage must remain ambiguous rather than being assumed to be legacy lowercase data.
+The current settings schema is version 1 and has no vocabulary matching-policy field. Its collection validator uses Unicode 18 canonical-caseless matching, but this algorithm does not establish which policy previously validated or wrote an existing file. Schema versions describe serialized structure; a missing matching-policy field does not establish matching-policy provenance. Unknown or unprovable lineage must remain ambiguous rather than being assumed to be legacy lowercase data.
 
-The settings crate accepts schema v1 only and rejects unsupported schema versions. `Settings::from_json` and `Deserialize` validate decoded values; `load_settings` uses `from_json`; `initialize_settings` validates either loaded settings or first-run defaults. `Settings::to_json` and the atomic save path validate before writing. There is no settings migration implementation, and the readiness assessment is not connected to loading or saving.
+The settings crate accepts schema v1 only and rejects unsupported schema versions. `Settings::from_json` and `Deserialize` validate decoded values; `load_settings` uses `from_json`; `initialize_settings` validates either loaded settings or first-run defaults. `Settings::to_json` and the atomic save path validate before writing. There is no schema migration implementation. The settings service uses the existing readiness assessment with `Unknown` provenance for every nonempty collection and requires explicit review before durable changes.
 
 ## Settings DTO compatibility preflight (Task 48)
 
@@ -77,7 +83,7 @@ The adapter does not participate in `Settings::validate`, JSON serialization/des
 
 Source policy is always explicit. Schema v1 does not contain a policy marker; schema version, modification time, application version, operating system, or the absence of conflicts cannot establish trusted provenance. A nonempty collection with `Unknown` provenance remains `SourcePolicyUnknown`, even with an empty conflict list. `CompatibleForExplicitMigration` means only that verified legacy entries have no reported conflict. No outcome means a migration was applied, conflict resolution occurred, or a settings file was written.
 
-The adapter can inspect only `Settings` values that are available in memory. Current decode and load paths validate with lowercase-only uniqueness before returning settings. Malformed entries and existing lowercase-conflicting collections may therefore be rejected before the preflight can run. The API does not bypass those checks and cannot inspect or recover every on-disk JSON file. A raw-file recovery path would require separate security and schema review.
+The adapter can inspect only `Settings` values that are available in memory. The settings service now has a narrowly scoped, bounded review path for schema-v1 files rejected solely for a Unicode 18 duplicate-source conflict; malformed fields, unsupported versions, and other invalid content remain rejected. This path preserves original text and file bytes until an explicitly reviewed candidate is saved. It is not a general raw-file recovery API.
 
 Run the focused settings coverage and printable synthetic summary from the repository root:
 
@@ -193,7 +199,7 @@ This fixture does not satisfy the outstanding requirements for trusted source-po
 
 ## Read-only proposed migration planning report (Task 51)
 
-[crates/settings/tests/vocabulary_schema_v2_migration_plan.rs](../crates/settings/tests/vocabulary_schema_v2_migration_plan.rs) adds a pure planner inside integration-test scope. It accepts a Settings value decoded through the existing schema-v1 pathway, a synthetic proposed-v2 JSON contract, and an explicit VocabularySourcePolicy. The parser validates the proposed schema version, exact marker identifier, and partial vocabulary field shape by reusing inspect_vocabulary_policy_marker; the planner then delegates source readiness to preflight_vocabulary_compatibility. It does not define a production v2 DTO or change settings code.
+[crates/settings/tests/vocabulary_schema_v2_migration_plan.rs](../crates/settings/tests/vocabulary_schema_v2_migration_plan.rs) adds a pure planner inside integration-test scope. It accepts a synthetic schema-v1-shaped Settings value, a synthetic proposed-v2 JSON contract, and an explicit VocabularySourcePolicy. Conflict-bearing DTOs are constructed in memory because the production decoder now rejects them; separate tests continue to prove strict decoding. The parser validates the proposed schema version, exact marker identifier, and partial vocabulary field shape by reusing inspect_vocabulary_policy_marker; the planner then delegates source readiness to preflight_vocabulary_compatibility. It does not define a production v2 DTO or change persisted settings.
 
 The two policy inputs remain independent. The exact target declaration is unicode18-canonical-caseless-v1; it identifies the proposed target matching policy only. Source provenance is supplied separately as Unknown, VerifiedLegacyLowercase, or VerifiedUnicode18CanonicalCaselessV1. Verified values in this fixture are explicit synthetic assumptions. Neither schema v1, schema v2, a recognized target marker, nor conflict-free content proves how source settings were historically validated.
 
@@ -207,7 +213,7 @@ The report includes schema versions, the recognized target-policy identifier, th
 | CompatibleForExplicitMigration | CompatibleForFutureMigrationReview | Verified legacy entries are compatible for a future explicit decision, not approved to write. |
 | AlreadyCurrent | AlreadyCurrentForReview | Verified current-policy entries need no vocabulary-key migration; this does not approve a schema rewrite. |
 
-The planner does not mutate source or target values, read or write settings files, or apply a migration. Invalid source phrases, existing lowercase conflicts, and a 501-entry collection are rejected by the current schema-v1 decoder before planning can run. The tests verify that boundary rather than bypassing it. The 500-entry accepted case and Unicode 18 collisions that pass lowercase validation are assessed through the planner.
+The planner does not mutate source or target values, read or write settings files, or apply a migration. Invalid source phrases and 501-entry collections are rejected by the strict schema-v1 decoder; conflict-bearing planner inputs are now synthetic in-memory DTOs. The 500-entry accepted case and Unicode 18 collisions are assessed through the planner without bypassing the production service's review requirements.
 
 Run the focused test and its content-free summary from the repository root:
 
@@ -218,7 +224,7 @@ RUSTUP_TOOLCHAIN=stable cargo test \
   --locked -- --nocapture
 ~~~
 
-Production still supports schema v1 only, retains lowercase-only settings validation, and rejects schema v2. Any future persistent migration still needs trusted provenance, a reviewed complete target schema, explicit manual conflict decisions, complete target validation, cross-platform atomic-write behavior, recoverable last-known-good state, and tested interruption/rollback. Windows owner-only ACL support and end-to-end rollback verification remain outstanding. T-017, T-018, T-038, T-039, and AC-08 remain incomplete; repository T-051 is unrelated tray/settings navigation and was not changed.
+Production still supports schema v1 only and rejects schema v2. The service persists only Unicode 18-valid candidates after explicit review; this does not record policy provenance or migrate schema. Any future schema migration still needs trusted provenance, a reviewed complete target schema, explicit manual conflict decisions, complete target validation, cross-platform atomic-write behavior, recoverable last-known-good state, and tested interruption/rollback. Windows owner-only ACL support and end-to-end rollback verification remain outstanding. This milestone's service and 500/501 persistence tests provide partial T-038/AC-08 evidence only; T-017, T-018, T-038, T-039, and AC-08 remain incomplete, and repository T-051 was not changed.
 
 ## Manual conflict review grouping contract (Task 52)
 

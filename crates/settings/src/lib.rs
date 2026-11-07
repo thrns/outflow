@@ -1,8 +1,8 @@
 //! Typed model, JSON codec, and validation for Outflow's local settings schema v1.
 //!
 //! This crate owns configuration values, an in-memory schema v1 JSON codec,
-//! read-only settings loading and initialization, user-directed settings reset,
-//! and an explicit-path atomic file writer. It performs no migration,
+//! read-only settings loading and initialization, a transactional settings service,
+//! user-directed settings reset, and an explicit-path atomic file writer. It performs no migration,
 //! networking, or operating system integration. Its reader accepts schema v1
 //! only, rejects unknown fields, and validates decoded values. Schema v0 is
 //! unsupported because no historical v0 shape exists; every other unknown
@@ -11,15 +11,19 @@
 //! confirms the separate reset operation. The data model follows C-08 and
 //! `docs/ARCHITECTURE.md` §7.
 
+use outflow_core::vocabulary::{
+    VocabularyCollectionError, VocabularyEntryRef, validate_vocabulary_collection,
+};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 
 /// Maps persisted cleanup preferences to the core text pipeline's filler flag.
 pub mod cleanup_policy;
+/// Transactional in-memory settings management over the atomic storage API.
+pub mod service;
 pub mod storage;
 /// In-memory operations for stable-ID vocabulary entries.
 pub mod vocabulary_crud;
@@ -27,6 +31,10 @@ pub mod vocabulary_policy_marker;
 pub mod vocabulary_preflight;
 
 pub use cleanup_policy::process_transcript_with_filler_preference;
+pub use service::{
+    SettingsChanges, SettingsSaveOutcome, SettingsService, SettingsServiceError,
+    SettingsServiceOpenStatus,
+};
 pub use vocabulary_crud::{
     VocabularyManagementError, add_vocabulary_entry, delete_vocabulary_entry, edit_vocabulary_entry,
 };
@@ -141,22 +149,23 @@ impl Settings {
     /// particular, they never include vocabulary phrases or shortcut values.
     /// This check does not parse, migrate, save, or apply settings.
     pub fn validate(&self) -> Result<(), SettingsError> {
+        self.validate_non_vocabulary_fields()?;
+        validate_vocabulary(&self.vocabulary)
+    }
+
+    fn validate_non_vocabulary_fields(&self) -> Result<(), SettingsError> {
         if self.schema_version != CURRENT_SCHEMA_VERSION {
             return Err(SettingsError::UnsupportedSchemaVersion {
                 found: self.schema_version,
             });
         }
-
         if self.language != MVP_LANGUAGE {
             return Err(SettingsError::UnsupportedLanguage);
         }
-
         if !self.updates.user_initiated_only {
             return Err(SettingsError::AutomaticUpdateChecksNotAllowed);
         }
-
-        validate_shortcuts(&self.recording)?;
-        validate_vocabulary(&self.vocabulary)
+        validate_shortcuts(&self.recording)
     }
 
     /// Encodes valid schema v1 settings as compact JSON.
@@ -201,8 +210,52 @@ impl Settings {
         Self::from_wire(wire).map_err(SettingsJsonError::InvalidSettings)
     }
 
+    /// Decodes a schema-v1 document for read-only vocabulary conflict review.
+    ///
+    /// Unlike [`Self::from_json`], this method accepts a collection whose
+    /// spoken phrases conflict under the current Unicode 18 policy. It still
+    /// rejects malformed documents, unsupported versions, invalid settings,
+    /// oversized collections, and invalid phrases. Only the settings service
+    /// uses it after the strict loader reports a vocabulary conflict, so the
+    /// original values can be shown for explicit review without rewriting
+    /// legacy data. Callers must not treat this as a validated writable
+    /// snapshot.
+    pub(crate) fn from_json_for_vocabulary_review(json: &str) -> Result<Self, SettingsJsonError> {
+        let header: SettingsSchemaVersionHeader =
+            serde_json::from_str(json).map_err(|error| SettingsJsonError::InvalidDocument {
+                line: error.line(),
+                column: error.column(),
+            })?;
+        if header.schema_version != CURRENT_SCHEMA_VERSION {
+            return Err(SettingsJsonError::InvalidSettings(
+                SettingsError::UnsupportedSchemaVersion {
+                    found: header.schema_version,
+                },
+            ));
+        }
+        let wire: SettingsWire =
+            serde_json::from_str(json).map_err(|error| SettingsJsonError::InvalidDocument {
+                line: error.line(),
+                column: error.column(),
+            })?;
+        Self::from_wire_for_vocabulary_review(wire).map_err(SettingsJsonError::InvalidSettings)
+    }
+
     fn from_wire(wire: SettingsWire) -> Result<Self, SettingsError> {
-        let settings = Self {
+        let settings = Self::from_wire_fields(wire);
+        settings.validate()?;
+        Ok(settings)
+    }
+
+    fn from_wire_for_vocabulary_review(wire: SettingsWire) -> Result<Self, SettingsError> {
+        let settings = Self::from_wire_fields(wire);
+        settings.validate_non_vocabulary_fields()?;
+        validate_vocabulary_allowing_conflicts(&settings.vocabulary)?;
+        Ok(settings)
+    }
+
+    fn from_wire_fields(wire: SettingsWire) -> Self {
+        Self {
             schema_version: wire.schema_version,
             language: wire.language,
             recording: wire.recording,
@@ -210,9 +263,7 @@ impl Settings {
             startup: wire.startup,
             updates: wire.updates,
             vocabulary: wire.vocabulary,
-        };
-        settings.validate()?;
-        Ok(settings)
+        }
     }
 }
 
@@ -469,7 +520,7 @@ pub enum SettingsError {
         field: VocabularyPhraseField,
         max_chars: usize,
     },
-    /// Two vocabulary entries have the same source phrase ignoring case.
+    /// Two vocabulary entries have the same Unicode 18 canonical-caseless source key.
     DuplicateVocabularySource {
         first_index: usize,
         duplicate_index: usize,
@@ -516,7 +567,7 @@ impl Display for SettingsError {
                 duplicate_index,
             } => write!(
                 formatter,
-                "vocabulary source phrases at entries {first_index} and {duplicate_index} are duplicates ignoring case"
+                "vocabulary source phrases at entries {first_index} and {duplicate_index} conflict under Unicode 18 canonical-caseless matching"
             ),
         }
     }
@@ -585,50 +636,74 @@ fn validate_shortcuts(recording: &RecordingSettings) -> Result<(), SettingsError
 }
 
 fn validate_vocabulary(entries: &[VocabularyEntry]) -> Result<(), SettingsError> {
-    if entries.len() > MAX_VOCABULARY_ENTRIES {
-        return Err(SettingsError::TooManyVocabularyEntries {
-            max_entries: MAX_VOCABULARY_ENTRIES,
-        });
-    }
-
-    let mut source_indexes = HashMap::with_capacity(entries.len());
-    for (entry_index, entry) in entries.iter().enumerate() {
-        validate_phrase(entry_index, VocabularyPhraseField::Spoken, &entry.spoken)?;
-        validate_phrase(entry_index, VocabularyPhraseField::Written, &entry.written)?;
-
-        // Lowercasing provides Unicode-aware case-insensitive matching for
-        // supported source phrases while keeping user text out of errors.
-        let normalized_source = entry.spoken.to_lowercase();
-        if let Some(first_index) = source_indexes.get(&normalized_source) {
-            return Err(SettingsError::DuplicateVocabularySource {
-                first_index: *first_index,
-                duplicate_index: entry_index,
-            });
-        }
-        source_indexes.insert(normalized_source, entry_index);
-    }
-
-    Ok(())
+    validate_vocabulary_collection(&borrow_vocabulary(entries)).map_err(map_vocabulary_error)
 }
 
-fn validate_phrase(
-    entry_index: usize,
-    field: VocabularyPhraseField,
-    phrase: &str,
+/// Lets the service inspect only the conflicting legacy data needed for a
+/// manual decision. All size and per-entry checks remain the core authority.
+fn validate_vocabulary_allowing_conflicts(
+    entries: &[VocabularyEntry],
 ) -> Result<(), SettingsError> {
-    if phrase.trim().is_empty() {
-        return Err(SettingsError::EmptyVocabularyPhrase { entry_index, field });
+    match validate_vocabulary_collection(&borrow_vocabulary(entries)) {
+        Ok(()) | Err(VocabularyCollectionError::DuplicateSpoken { .. }) => Ok(()),
+        Err(error) => Err(map_vocabulary_error(error)),
     }
+}
 
-    if phrase.chars().count() > MAX_VOCABULARY_PHRASE_CHARS {
-        return Err(SettingsError::VocabularyPhraseTooLong {
-            entry_index,
-            field,
-            max_chars: MAX_VOCABULARY_PHRASE_CHARS,
-        });
+fn borrow_vocabulary(entries: &[VocabularyEntry]) -> Vec<VocabularyEntryRef<'_>> {
+    entries
+        .iter()
+        .map(|entry| VocabularyEntryRef {
+            spoken: &entry.spoken,
+            written: &entry.written,
+        })
+        .collect()
+}
+
+fn map_vocabulary_error(error: VocabularyCollectionError) -> SettingsError {
+    match error {
+        VocabularyCollectionError::TooManyEntries { maximum, .. } => {
+            SettingsError::TooManyVocabularyEntries {
+                max_entries: maximum,
+            }
+        }
+        VocabularyCollectionError::InvalidEntry { index, source } => match source {
+            outflow_core::vocabulary::VocabularyValidationError::Empty(field) => {
+                SettingsError::EmptyVocabularyPhrase {
+                    entry_index: index,
+                    field: match field {
+                        outflow_core::vocabulary::VocabularyField::Spoken => {
+                            VocabularyPhraseField::Spoken
+                        }
+                        outflow_core::vocabulary::VocabularyField::Written => {
+                            VocabularyPhraseField::Written
+                        }
+                    },
+                }
+            }
+            outflow_core::vocabulary::VocabularyValidationError::TooLong(field) => {
+                SettingsError::VocabularyPhraseTooLong {
+                    entry_index: index,
+                    field: match field {
+                        outflow_core::vocabulary::VocabularyField::Spoken => {
+                            VocabularyPhraseField::Spoken
+                        }
+                        outflow_core::vocabulary::VocabularyField::Written => {
+                            VocabularyPhraseField::Written
+                        }
+                    },
+                    max_chars: MAX_VOCABULARY_PHRASE_CHARS,
+                }
+            }
+        },
+        VocabularyCollectionError::DuplicateSpoken {
+            first_index,
+            duplicate_index,
+        } => SettingsError::DuplicateVocabularySource {
+            first_index,
+            duplicate_index,
+        },
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -770,6 +845,27 @@ mod tests {
                 .to_string()
                 .contains("Über")
         );
+    }
+
+    #[test]
+    fn schema_v1_validation_uses_the_core_unicode18_canonical_caseless_policy() {
+        for (first, second) in [("straße", "STRASSE"), ("café", "cafe\u{301}")] {
+            let settings = Settings {
+                vocabulary: vec![
+                    vocabulary_entry(0, first, "First replacement"),
+                    vocabulary_entry(1, second, "Second replacement"),
+                ],
+                ..Settings::default()
+            };
+
+            assert_eq!(
+                settings.validate(),
+                Err(SettingsError::DuplicateVocabularySource {
+                    first_index: 0,
+                    duplicate_index: 1,
+                })
+            );
+        }
     }
 
     #[test]

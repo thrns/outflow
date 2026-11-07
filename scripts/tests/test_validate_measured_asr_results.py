@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -22,6 +23,12 @@ from scripts.run_native_asr_benchmark import (
 from scripts.score_wer import NORMALIZATION_POLICY_VERSION
 from scripts.validate_fixture_manifest import assess_corpus_coverage
 from scripts.compare_native_asr_candidates import ComparisonBlocked, compare_candidate_results
+from scripts.validate_hardware_evidence import (
+    MAX_HARDWARE_EVIDENCE_BYTES,
+    HardwareEvidenceError,
+    load_hardware_evidence,
+    validate_hardware_evidence,
+)
 from scripts.validate_measured_asr_results import MeasuredResultsError, main, validate_measured_results
 
 
@@ -30,6 +37,8 @@ def valid_result() -> dict[str, Any]:
         name: hashlib.sha256(name.encode("ascii")).hexdigest()
         for name in ("native_runner", "moonshine_library", "onnxruntime_library")
     }
+
+
     fixture = {
         "fixture_id": "speech_001",
         "category": "short_speech",
@@ -169,6 +178,144 @@ def valid_result() -> dict[str, Any]:
     }
 
 
+
+
+def complete_result(candidate: str) -> dict[str, Any]:
+    """Build a complete but synthetic measurement only for comparison tests."""
+
+    result = copy.deepcopy(valid_result())
+    if candidate == "tiny":
+        result["source"].update(
+            candidate="tiny", model_architecture=MODEL_CANDIDATES["tiny"]["architecture"]
+        )
+        result["model"].update(
+            candidate="tiny",
+            model_identity=MODEL_CANDIDATES["tiny"]["identity"],
+            catalog_path="tiny-streaming-en/quantized_26_08_21",
+            architecture=MODEL_CANDIDATES["tiny"]["architecture"],
+        )
+
+    base_fixture = result["fixtures"][0]
+    rows: list[dict[str, Any]] = []
+    for index in range(150):
+        row = copy.deepcopy(base_fixture)
+        is_short = index < 100
+        row["fixture_id"] = f"synthetic_{index:03d}"
+        row["duration_class"] = "short" if is_short else "long"
+        row["category"] = "short_speech" if is_short else "long_speech"
+        seconds = 1.0 if is_short else 6.0
+        row["audio_metadata"]["duration_seconds"] = seconds
+        row["audio_metadata"]["frame_count"] = int(seconds * row["audio_metadata"]["sample_rate_hz"])
+        row["real_time_factor"] = row["recognition_ms"] / (seconds * 1000)
+        row["coverage_attributes"] = []
+        row["speaker_variety"] = None
+        if index == 0:
+            row["category"] = "quiet_environment"
+            row["coverage_attributes"] = [
+                "quiet_environment", "proper_nouns", "technical_vocabulary", "numbers", "abbreviations"
+            ]
+        elif index == 1:
+            row["category"] = "noisy_environment"
+            row["coverage_attributes"] = ["noisy_environment"]
+        elif index in (2, 3):
+            row["category"] = "accented_english"
+            row["coverage_attributes"] = ["accented_english"]
+            row["speaker_variety"] = f"synthetic variety {index}"
+        rows.append(row)
+
+    silence = copy.deepcopy(base_fixture)
+    silence.update(
+        fixture_id="synthetic_silence",
+        category="silence",
+        duration_class="silence_control",
+        coverage_attributes=[],
+        speaker_variety=None,
+        wer=None,
+        error_counts=None,
+        no_speech_detected=True,
+        partial_calls=0,
+        partial_nonempty=False,
+        final_line_count=0,
+    )
+    rows.append(silence)
+    result["fixtures"] = rows
+    result["corpus"] = assess_corpus_coverage([
+        {
+            "status": "ready",
+            "duration_class": row["duration_class"],
+            "coverage_attributes": row["coverage_attributes"],
+            "speaker_variety": row["speaker_variety"],
+            "provenance_verified": True,
+            "human_reference_verified": True,
+        }
+        for row in rows
+    ])
+    result["corpus"]["collection_status"] = "complete"
+    result["aggregate"].update(
+        speech_fixtures_scored=150,
+        reference_words=300,
+        substitutions=0,
+        deletions=0,
+        insertions=0,
+        wer=0.0,
+    )
+    result["timing"] = {
+        "recognition_p50_ms": 40.0,
+        "recognition_p95_ms": 40.0,
+        "stop_to_final_p50_ms": 4.0,
+        "stop_to_final_p95_ms": 4.0,
+        "real_time_factor_p50": 0.04,
+        "real_time_factor_p95": 0.04,
+    }
+    result["release_gates"].update(
+        verified_corpus_coverage="PASS",
+        wer_at_or_below_12_percent="PASS",
+        rtf_p95_below_1="PASS",
+        stop_to_final_p95_below_1500_ms="PASS",
+        physical_4gb_eligibility="INELIGIBLE",
+        physical_4gb_gate="BLOCKED",
+    )
+    return result
+
+
+def result_sha256(result: dict[str, Any]) -> str:
+    raw = json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def hardware_evidence(result: dict[str, Any], digest: str) -> dict[str, Any]:
+    machine = result["machine"]
+    return {
+        "schema_version": 1,
+        "evidence_type": "outflow_hardware_review",
+        "comparison_permission": "approved_for_candidate_comparison_only",
+        "measured_result_sha256": digest,
+        "measurement": {
+            "candidate": result["model"]["candidate"],
+            "created_at_utc": result["created_at_utc"],
+            "fixture_manifest_sha256": result["fixture_manifest_sha256"],
+            "machine": {
+                field: machine[field]
+                for field in (
+                    "machine_label", "machine_identifier", "os", "os_release", "architecture",
+                    "physical_memory_bytes", "physical_memory_source", "cpu_label",
+                )
+            },
+        },
+        "review": {
+            "reviewer_id": "synthetic-reviewer",
+            "approval_reference": "synthetic-approval-record",
+            "machine_identity_verified": True,
+            "machine_identity_evidence_reference": "synthetic-machine-identity-evidence",
+            "physical_hardware_status": "verified_physical",
+            "physical_hardware_evidence_reference": "synthetic-physical-hardware-evidence",
+            "physical_memory_evidence_reference": "synthetic-physical-memory-evidence",
+            "reference_hardware_class": "synthetic-reference-class",
+            "reference_class_evidence_reference": "synthetic-class-approval-evidence",
+            "real_hardware_measurements_completed": True,
+            "cpu_only_inference_exercised": True,
+        },
+    }
 class MeasuredResultsValidatorTests(unittest.TestCase):
     def test_valid_measured_result_is_accepted(self) -> None:
         summary = validate_measured_results(valid_result())
@@ -194,6 +341,107 @@ class MeasuredResultsValidatorTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ComparisonBlocked, "complete approved corpus"):
             compare_candidate_results(small, tiny)
+
+    def test_complete_candidate_comparison_uses_separate_human_review_evidence(self) -> None:
+        small = complete_result("small")
+        tiny = complete_result("tiny")
+        small_before = copy.deepcopy(small)
+        tiny_before = copy.deepcopy(tiny)
+        small_hash = result_sha256(small)
+        tiny_hash = result_sha256(tiny)
+        summary = compare_candidate_results(
+            small,
+            tiny,
+            small_result_sha256=small_hash,
+            tiny_result_sha256=tiny_hash,
+            small_hardware_evidence=hardware_evidence(small, small_hash),
+            tiny_hardware_evidence=hardware_evidence(tiny, tiny_hash),
+        )
+
+        self.assertEqual(summary["comparison_status"], "READY_FOR_REVIEW_ONLY")
+        self.assertEqual(
+            summary["comparison_permission"],
+            "approved_for_candidate_comparison_only",
+        )
+        self.assertEqual(
+            summary["physical_4gb_certification"], "NOT_ESTABLISHED_BY_COMPARISON"
+        )
+        self.assertEqual(summary["release_decision"], "NOT_APPROVED")
+        self.assertEqual(small, small_before)
+        self.assertEqual(tiny, tiny_before)
+        self.assertEqual(small["machine"]["physical_hardware_status"], "unknown")
+        self.assertFalse(small["machine"]["real_hardware_measurements_completed"])
+        self.assertEqual(small["release_gates"]["physical_4gb_gate"], "BLOCKED")
+
+    def test_candidate_comparison_rejects_missing_mismatched_and_altered_evidence(self) -> None:
+        small = complete_result("small")
+        tiny = complete_result("tiny")
+        small_hash = result_sha256(small)
+        tiny_hash = result_sha256(tiny)
+        small_evidence = hardware_evidence(small, small_hash)
+        tiny_evidence = hardware_evidence(tiny, tiny_hash)
+
+        with self.assertRaisesRegex(ComparisonBlocked, "evidence is required"):
+            compare_candidate_results(small, tiny)
+
+        mismatched = copy.deepcopy(small_evidence)
+        mismatched["measured_result_sha256"] = "0" * 64
+        with self.assertRaisesRegex(HardwareEvidenceError, "does not bind"):
+            validate_hardware_evidence(
+                small, mismatched, measured_result_sha256=small_hash
+            )
+
+        altered_result = copy.deepcopy(small)
+        altered_result["machine"]["machine_label"] = "ALTERED-MACHINE"
+        with self.assertRaisesRegex(HardwareEvidenceError, "does not bind|does not match"):
+            validate_hardware_evidence(
+                altered_result,
+                small_evidence,
+                measured_result_sha256=result_sha256(altered_result),
+            )
+
+        altered_evidence = copy.deepcopy(small_evidence)
+        altered_evidence["measurement"]["machine"]["machine_label"] = "OTHER-MACHINE"
+        with self.assertRaisesRegex(HardwareEvidenceError, "machine identity"):
+            validate_hardware_evidence(
+                small, altered_evidence, measured_result_sha256=small_hash
+            )
+
+        incomplete = copy.deepcopy(tiny_evidence)
+        incomplete["review"]["physical_hardware_evidence_reference"] = "  "
+        with self.assertRaisesRegex(ComparisonBlocked, "evidence is missing, altered"):
+            compare_candidate_results(
+                small,
+                tiny,
+                small_result_sha256=small_hash,
+                tiny_result_sha256=tiny_hash,
+                small_hardware_evidence=small_evidence,
+                tiny_hardware_evidence=incomplete,
+            )
+
+    def test_hardware_evidence_cannot_claim_4gb_from_result_ram_or_machine_label(self) -> None:
+        result = complete_result("small")
+        digest = result_sha256(result)
+        evidence = hardware_evidence(result, digest)
+        evidence["review"]["reference_hardware_class"] = ""
+        with self.assertRaisesRegex(HardwareEvidenceError, "does not approve physical CPU"):
+            validate_hardware_evidence(result, evidence, measured_result_sha256=digest)
+
+        evidence = hardware_evidence(result, digest)
+        evidence["review"]["physical_memory_evidence_reference"] = ""
+        with self.assertRaisesRegex(HardwareEvidenceError, "approval record is incomplete|does not approve"):
+            validate_hardware_evidence(result, evidence, measured_result_sha256=digest)
+
+    def test_hardware_evidence_file_loader_rejects_oversized_and_duplicate_key_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "hardware-review.json"
+            path.write_text('{"schema_version":1,"schema_version":1}', encoding="utf-8")
+            with self.assertRaisesRegex(HardwareEvidenceError, "not valid JSON"):
+                load_hardware_evidence(path)
+
+            path.write_bytes(b" " * (MAX_HARDWARE_EVIDENCE_BYTES + 1))
+            with self.assertRaisesRegex(HardwareEvidenceError, "size limit"):
+                load_hardware_evidence(path)
 
     def test_malformed_root_and_unsupported_result_types_are_rejected(self) -> None:
         with self.assertRaisesRegex(MeasuredResultsError, "root fields"):

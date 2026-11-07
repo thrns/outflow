@@ -340,6 +340,8 @@ UPDATE-001 INVALID_SIG     => reject package, old stays installed
 
 Shortcuts above are **example serialization only**, not universal defaults: actual defaults must avoid conflicts and be registered on each OS; use platform-specific defaults at first launch. `language` remains `en` for MVP; no model UI. Validate `schema_version` and migrate unknown versions safely. Store app license/attribution notices as read-only shipped files.
 
+The `outflow-settings` library also exposes a small explicit-path service: missing files yield validated in-memory defaults without a write; supported preference and vocabulary changes are applied to a candidate snapshot and committed through the atomic writer before replacing live state. Vocabulary operations reuse the stable-ID CRUD functions and the Unicode 18 core validator. Schema v1 contains no matching-policy provenance, so every nonempty collection loaded from disk is reported as `Unknown` and requires an explicit review acknowledgment in that service instance before writes. The acknowledgment is not persisted or inferred from a schema version or marker; opening again requires review again. A conflict-only review decode preserves original strings and order for manual repair while the ordinary loader remains strict. The service changes the stored run-at-login preference only; OS registration remains a shell/platform responsibility. Windows owner-only ACL persistence remains unimplemented.
+
 **Bundled model manifest** (generated in CI, signed by signed installer; hashes validated at app launch):
 
 ```json

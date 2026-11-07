@@ -114,6 +114,13 @@ fn settings_with_vocabulary(entries: &[(&str, &str)]) -> Settings {
     }
 }
 
+// These tests intentionally construct a settings DTO containing a Unicode 18
+// conflict to exercise the read-only preflight. Bypass the validating codec
+// only when comparing the unchanged synthetic in-memory value before/after.
+fn raw_settings_json_for_test(settings: &Settings) -> String {
+    serde_json::to_string(settings).expect("synthetic settings serialize for read-only comparison")
+}
+
 fn group_indices(groups: &[ConflictReviewGroup]) -> Vec<Vec<usize>> {
     groups
         .iter()
@@ -221,7 +228,7 @@ fn groups_are_ordered_by_smallest_entry_index() {
 #[test]
 fn legacy_conflict_classification_is_preserved() {
     // The core checker accepts this read-only report input even though the
-    // production schema-v1 settings decoder rejects lowercase duplicates.
+    // production schema-v1 settings validator rejects duplicate sources.
     let conflicts = conflicts_for(&[("Café", "First"), ("CAFÉ", "Second")]);
     assert_eq!(conflicts.len(), 1);
     assert_eq!(
@@ -434,9 +441,7 @@ fn production_settings_decoder_continues_rejecting_schema_v2() {
 fn review_projection_has_no_persistence_or_migration_side_effects() {
     let settings = settings_with_vocabulary(&[("straße", "Street"), ("STRASSE", "Avenue")]);
     let original = settings.clone();
-    let before = settings
-        .to_json()
-        .expect("valid schema-v1 settings serialize in memory");
+    let before = raw_settings_json_for_test(&settings);
 
     let readiness = preflight_vocabulary_compatibility(&settings, VocabularySourcePolicy::Unknown)
         .expect("in-memory preflight succeeds");
@@ -445,9 +450,7 @@ fn review_projection_has_no_persistence_or_migration_side_effects() {
         _ => panic!("unknown provenance must remain review-required"),
     };
     let groups = group_conflicts_for_review(&conflicts);
-    let after = settings
-        .to_json()
-        .expect("settings remain valid schema v1 after read-only grouping");
+    let after = raw_settings_json_for_test(&settings);
 
     assert_eq!(groups.len(), 1);
     assert!(settings == original, "in-memory settings changed");
@@ -520,9 +523,7 @@ fn prints_conflict_review_contract_summary_from_real_reports() {
 
     let settings = settings_with_vocabulary(&[("straße", "Street"), ("STRASSE", "Avenue")]);
     let settings_snapshot = settings.clone();
-    let settings_before = settings
-        .to_json()
-        .expect("synthetic settings encode in memory");
+    let settings_before = raw_settings_json_for_test(&settings);
     let settings_readiness =
         preflight_vocabulary_compatibility(&settings, VocabularySourcePolicy::Unknown)
             .expect("read-only settings preflight succeeds");
@@ -533,9 +534,7 @@ fn prints_conflict_review_contract_summary_from_real_reports() {
     let settings_groups = group_conflicts_for_review(&settings_conflicts);
     assert_eq!(settings_groups.len(), 1);
     assert!(settings_groups[0].manual_review_required);
-    let settings_after = settings
-        .to_json()
-        .expect("synthetic settings still encode after read-only assessment");
+    let settings_after = raw_settings_json_for_test(&settings);
     let settings_state_unchanged =
         settings == settings_snapshot && settings_before == settings_after;
     assert!(settings_state_unchanged);

@@ -169,28 +169,14 @@ fn existing_lowercase_conflicts_are_classified_without_choosing_a_winner() {
 }
 
 #[test]
-fn a_decoded_schema_v1_fixture_can_reach_preflight_with_a_unicode_18_collision() {
-    let mut document: serde_json::Value = serde_json::from_str(
-        &Settings::default()
-            .to_json()
-            .expect("synthetic defaults serialize"),
-    )
-    .expect("settings encode as JSON");
-    document["vocabulary"] = serde_json::json!([
-        { "id": "one", "spoken": "straße", "written": "Street" },
-        { "id": "two", "spoken": "STRASSE", "written": "Road" }
+fn in_memory_preflight_reports_unicode18_collision_without_inferring_provenance() {
+    let settings = settings_with_vocabulary(vec![
+        entry(0, "straße", "Street"),
+        entry(1, "STRASSE", "Road"),
     ]);
-
-    let settings = Settings::from_json(&document.to_string())
-        .expect("legacy lowercase validation permits this Unicode 18 collision");
-    assert_eq!(settings.schema_version, 1);
-    assert!(settings.validate().is_ok());
     assert_eq!(
-        preflight_vocabulary_compatibility(
-            &settings,
-            VocabularySourcePolicy::VerifiedLegacyLowercase
-        ),
-        Ok(VocabularyMigrationReadiness::ManualResolutionRequired {
+        preflight_vocabulary_compatibility(&settings, VocabularySourcePolicy::Unknown),
+        Ok(VocabularyMigrationReadiness::SourcePolicyUnknown {
             conflicts: vec![VocabularyMigrationConflict {
                 original_index: 0,
                 conflicting_index: 1,
@@ -204,7 +190,7 @@ fn a_decoded_schema_v1_fixture_can_reach_preflight_with_a_unicode_18_collision()
 }
 
 #[test]
-fn current_settings_decoder_still_rejects_a_legacy_lowercase_conflict() {
+fn current_settings_decoder_rejects_unicode18_conflicts_in_schema_v1() {
     let mut document: serde_json::Value = serde_json::from_str(
         &Settings::default()
             .to_json()
@@ -212,8 +198,8 @@ fn current_settings_decoder_still_rejects_a_legacy_lowercase_conflict() {
     )
     .expect("settings encode as JSON");
     document["vocabulary"] = serde_json::json!([
-        { "id": "one", "spoken": "Hello", "written": "First" },
-        { "id": "two", "spoken": "hello", "written": "Second" }
+        { "id": "one", "spoken": "straße", "written": "First" },
+        { "id": "two", "spoken": "STRASSE", "written": "Second" }
     ]);
 
     assert!(matches!(

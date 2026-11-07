@@ -1,6 +1,8 @@
 # Vocabulary Unicode Matching Policy
 
-**Status: APPROVED AND IMPLEMENTED IN TASK 45.** The maintainer approved Unicode 18.0.0 canonical-caseless matching and the exact ICU4X 2.4.0 dependencies; focused and full local verification passed as recorded in the Task 45 evidence. This policy changes spoken-phrase uniqueness only; it does not implement vocabulary persistence, CRUD, transcript replacement, or frontend integration. AC-08, T-017, T-018, T-038, and T-039 remain incomplete.
+**Status: APPROVED AND IMPLEMENTED IN TASK 45; SETTINGS VALIDATION ALIGNED IN MILESTONE 3.** The maintainer approved Unicode 18.0.0 canonical-caseless matching and the exact ICU4X 2.4.0 dependencies; focused and full local verification passed as recorded in the Task 45 evidence. Milestone 3 aligns schema-v1 settings validation and adds a Rust persistence service, while leaving schema migration, transcript replacement, and frontend integration out of scope. AC-08, T-017, T-018, T-038, and T-039 remain incomplete.
+
+The Task 45 implementation notes below record the core-only scope at that time. The current settings-service behavior is documented in [the migration compatibility note](VOCABULARY_MATCHING_MIGRATION.md#milestone-3-settings-service-update-2026-11-06); schema v1 still does not record matching-policy provenance.
 
 ## Selected policy
 
@@ -75,7 +77,7 @@ The same `vocabulary_validation` release example grew from 457,104 bytes before 
 ## Key migration and release considerations
 
 - Do not persist comparison keys in this task. If keys are persisted in a later schema, persist their policy version and derive them from unchanged original strings.
-- The Unicode 18 key is currently integrated into the `outflow-core` collection validator. `crates/settings/src/lib.rs` still performs its existing lowercase-only uniqueness check while validating serialized settings. That C-08 path is intentionally unchanged here; connect it to this policy in a separately scoped settings-integration task before relying on it for stored vocabulary conflicts.
+- At the Task 45 snapshot, the Unicode 18 key was integrated into the `outflow-core` collection validator while `crates/settings/src/lib.rs` still used lowercase uniqueness. Milestone 3 now uses this key for schema-v1 decode, validation, and persistence. The schema still has no trusted source-policy marker; nonempty existing collections require explicit service-level review before writes.
 - Before loading or migrating persisted vocabulary under a new key version, scan for newly colliding pairs. Report conflicts and require recoverable user resolution; never discard, rewrite, trim, or silently select an entry.
 - Any Unicode data or algorithm update requires a new reviewed matching version, updated UCD regression vectors, a collision migration plan, and new cross-platform and size measurements.
 - Cross-platform behavior follows the pinned compiled data rather than host Unicode libraries, but native macOS, Windows, and Linux builds still need normal release verification.

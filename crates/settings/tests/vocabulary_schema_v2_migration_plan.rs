@@ -156,9 +156,10 @@ fn parse_proposed_target(
     serde_json::from_value(value).map_err(|_| ProposedTargetContractError::MalformedEnvelopeFields)
 }
 
-/// Plans only against a decoded schema-v1 source and a synthetic schema-v2
-/// target contract. Source-policy provenance is an explicit test assumption;
-/// it is never inferred from the target marker or from conflict-free content.
+/// Plans against a synthetic schema-v1 DTO and proposed schema-v2 target
+/// contract. Conflicting DTOs are constructed in memory because strict schema
+/// decoding now rejects them; source-policy provenance remains an explicit
+/// test assumption and is never inferred from the target marker or content.
 fn plan_synthetic_vocabulary_migration(
     source: &Settings,
     proposed_target_document: &str,
@@ -233,11 +234,20 @@ fn decoded_source(vocabulary: &[(String, String)]) -> Result<Settings, SettingsJ
 }
 
 fn source(vocabulary: &[(&str, &str)]) -> Settings {
-    let owned = vocabulary
-        .iter()
-        .map(|(spoken, written)| ((*spoken).to_owned(), (*written).to_owned()))
-        .collect::<Vec<_>>();
-    decoded_source(&owned).expect("synthetic source decodes through schema v1")
+    Settings {
+        vocabulary: vocabulary
+            .iter()
+            .enumerate()
+            .map(
+                |(index, (spoken, written))| outflow_settings::VocabularyEntry {
+                    id: format!("synthetic-{index}"),
+                    spoken: (*spoken).to_owned(),
+                    written: (*written).to_owned(),
+                },
+            )
+            .collect(),
+        ..Settings::default()
+    }
 }
 
 fn target_document(source: &Settings) -> String {
