@@ -12,9 +12,10 @@ use outflow_coordinator::{
     PrivatePreview, ResultPanel, SessionCoordinator, SessionSettingsSnapshot,
 };
 use outflow_core::session_engine::{
-    AdapterQueueError, CopyOutcome, EventKind, HoldReleaseCapability, InsertionOutcome,
-    OpaqueTargetId, RecordingMode, SessionId, SpeechBackend, SpeechCommand, TargetCommand,
-    TargetEditability, TargetSecurity, TargetService, TargetSnapshot, TargetVerification,
+    AdapterQueueError, CopyAttemptId, CopyOutcome, EventKind, HoldReleaseCapability,
+    InsertionOutcome, MicrophoneStopOutcome, OpaqueTargetId, RecordingMode, SessionId,
+    SpeechBackend, SpeechCommand, StopOperationId, TargetCommand, TargetEditability,
+    TargetSecurity, TargetService, TargetSnapshot, TargetSubmissionError, TargetVerification,
 };
 use outflow_settings::Settings;
 
@@ -23,7 +24,10 @@ struct MockBus {
     callbacks: VecDeque<CoordinatorCallback>,
     effects: Vec<&'static str>,
     target_results: VecDeque<TargetVerification>,
+    target_submission_errors: VecDeque<TargetSubmissionError>,
     copy_results: VecDeque<CopyOutcome>,
+    pending_stop: Option<(SessionId, StopOperationId)>,
+    last_copy_attempt: Option<(SessionId, CopyAttemptId)>,
 }
 
 #[derive(Clone, Default)]
@@ -42,6 +46,21 @@ impl Shared {
             .borrow_mut()
             .callbacks
             .push_back(CoordinatorCallback::SpeechResourcesClosed { session_id });
+    }
+
+    fn acknowledge_stop(&self) -> bool {
+        let Some((session_id, operation_id)) = self.0.borrow_mut().pending_stop.take() else {
+            return false;
+        };
+        self.0
+            .borrow_mut()
+            .callbacks
+            .push_back(CoordinatorCallback::MicrophoneStopCompleted {
+                session_id,
+                operation_id,
+                outcome: MicrophoneStopOutcome::Stopped,
+            });
+        true
     }
 
     fn take_effects(&self) -> Vec<&'static str> {
@@ -82,7 +101,12 @@ impl SpeechBackend for Speech {
                     text: "revised synthetic partial".to_owned(),
                 });
             }
-            SpeechCommand::StopMicrophone { .. } => {}
+            SpeechCommand::StopMicrophone {
+                session_id,
+                operation_id,
+            } => {
+                self.0.0.borrow_mut().pending_stop = Some((session_id, operation_id));
+            }
             SpeechCommand::FinalizeRecognition { session_id } => {
                 self.0.event(EventKind::FinalTranscript {
                     session_id,
@@ -97,7 +121,7 @@ impl SpeechBackend for Speech {
 }
 
 impl TargetService for Target {
-    fn submit(&mut self, command: TargetCommand) -> Result<(), AdapterQueueError> {
+    fn submit(&mut self, command: TargetCommand) -> Result<(), TargetSubmissionError> {
         match command {
             TargetCommand::VerifyCurrent {
                 session_id,
@@ -114,6 +138,9 @@ impl TargetService for Target {
                     .event(EventKind::TargetVerified { session_id, result });
             }
             TargetCommand::InsertOnce { session_id, .. } => {
+                if let Some(error) = self.0.0.borrow_mut().target_submission_errors.pop_front() {
+                    return Err(error);
+                }
                 self.0.event(EventKind::InsertionCompleted {
                     session_id,
                     outcome: InsertionOutcome::Inserted,
@@ -163,6 +190,8 @@ impl ResultPanel for Panel {
 
 impl CopyAdapter for Copy {
     fn submit(&mut self, request: CopyRequest) -> Result<(), AdapterQueueError> {
+        self.0.0.borrow_mut().last_copy_attempt =
+            Some((request.session_id(), request.attempt_id()));
         let outcome = self
             .0
             .0
@@ -252,85 +281,122 @@ fn run() -> Result<(), Box<dyn Error>> {
     let ptt = start(&mut coordinator, RecordingMode::PushToTalk)?;
     pump(&mut coordinator, &shared)?;
     coordinator.dispatch(EventKind::KeyReleased { session_id: ptt })?;
-    pump(&mut coordinator, &shared)?;
-    let insertion_effects = shared.take_effects();
+    let stop_effects = shared.take_effects();
     println!(
-        "Push-to-talk: {}; outcome=guarded_insertion_succeeded",
-        coordinator.status().session.state.label()
+        "Push-to-talk before stop ack: {}; finalization_submitted={}; outcome=waiting_for_capture_release",
+        coordinator.status().session.state.label(),
+        stop_effects.contains(&"RequestAsrFinalization")
     );
-    print_trace("effects", &insertion_effects);
+    print_trace("submitted", &stop_effects);
+    if !shared.acknowledge_stop() {
+        return Err("synthetic stop acknowledgment was not pending".into());
+    }
+    pump(&mut coordinator, &shared)?;
+    let finalized_effects = shared.take_effects();
+    println!(
+        "Push-to-talk after stop ack: {}; finalization_submitted={}; outcome=guarded_insertion_succeeded",
+        coordinator.status().session.state.label(),
+        finalized_effects.contains(&"RequestAsrFinalization")
+    );
+    print_trace("after acknowledgment", &finalized_effects);
+
+    let cancelled = start(&mut coordinator, RecordingMode::PushToTalk)?;
+    pump(&mut coordinator, &shared)?;
+    coordinator.dispatch(EventKind::KeyReleased {
+        session_id: cancelled,
+    })?;
+    let before_cancel = shared.take_effects();
+    coordinator.dispatch(EventKind::Cancel {
+        session_id: cancelled,
+    })?;
+    pump(&mut coordinator, &shared)?;
+    let late_stop_delivered = shared.acknowledge_stop();
+    let late_stop_rejected = late_stop_delivered && pump(&mut coordinator, &shared)? > 0;
+    println!(
+        "Cancel before stop ack: {}; finalization_submitted={}; late_stop_ack_rejected={}; outcome=cancelled_without_finalization",
+        coordinator.status().session.state.label(),
+        before_cancel.contains(&"RequestAsrFinalization"),
+        late_stop_rejected
+    );
+    print_trace("operations", &shared.take_effects());
+    coordinator.dispatch(EventKind::Dismiss {
+        session_id: Some(cancelled),
+    })?;
+
+    shared
+        .0
+        .borrow_mut()
+        .target_submission_errors
+        .push_back(TargetSubmissionError::OutcomeUnknown);
+    let uncertain = start(&mut coordinator, RecordingMode::PushToTalk)?;
+    pump(&mut coordinator, &shared)?;
+    coordinator.dispatch(EventKind::KeyReleased {
+        session_id: uncertain,
+    })?;
+    shared.acknowledge_stop();
+    pump(&mut coordinator, &shared)?;
+    let state_before_review = coordinator.status().session.state;
+    let copy_blocked = coordinator
+        .dispatch(EventKind::CopyResultRequested {
+            session_id: uncertain,
+        })
+        .is_err();
+    coordinator.dispatch(EventKind::UncertaintyReviewed {
+        session_id: uncertain,
+    })?;
+    println!(
+        "Unknown insertion submission: {} -> {}; copy_before_review_blocked={}; outcome=manual_review_required",
+        state_before_review.label(),
+        coordinator.status().session.state.label(),
+        copy_blocked
+    );
+    print_trace("operations", &shared.take_effects());
+    coordinator.dispatch(EventKind::Dismiss {
+        session_id: Some(uncertain),
+    })?;
 
     shared
         .0
         .borrow_mut()
         .target_results
         .push_back(TargetVerification::Changed);
-    let changed = start(&mut coordinator, RecordingMode::PushToTalk)?;
-    pump(&mut coordinator, &shared)?;
-    coordinator.dispatch(EventKind::KeyReleased {
-        session_id: changed,
-    })?;
-    pump(&mut coordinator, &shared)?;
-    let before_copy = coordinator.status().session.state;
-    coordinator.dispatch(EventKind::CopyResultRequested {
-        session_id: changed,
-    })?;
-    pump(&mut coordinator, &shared)?;
-    let changed_effects = shared.take_effects();
-    println!(
-        "Changed target: {} -> {}; outcome=explicit_copy_succeeded",
-        before_copy.label(),
-        coordinator.status().session.state.label()
-    );
-    print_trace("effects", &changed_effects);
-
-    shared
-        .0
-        .borrow_mut()
-        .target_results
-        .push_back(TargetVerification::Unsupported);
-    shared
-        .0
-        .borrow_mut()
-        .copy_results
-        .extend([CopyOutcome::Failed, CopyOutcome::Succeeded]);
-    let retry = start(&mut coordinator, RecordingMode::Toggle)?;
+    let copy_ready = start(&mut coordinator, RecordingMode::Toggle)?;
     pump(&mut coordinator, &shared)?;
     coordinator.dispatch(EventKind::ShortcutActivated {
         mode: RecordingMode::Toggle,
         target: target(),
     })?;
+    shared.acknowledge_stop();
     pump(&mut coordinator, &shared)?;
-    let first_copy = coordinator.status().session.state;
-    coordinator.dispatch(EventKind::CopyResultRequested { session_id: retry })?;
-    pump(&mut coordinator, &shared)?;
-    let after_failure = coordinator.status().session.state;
-    coordinator.dispatch(EventKind::CopyResultRequested { session_id: retry })?;
-    pump(&mut coordinator, &shared)?;
-    let retry_effects = shared.take_effects();
-    println!(
-        "Copy retry: {} -> {} -> {}; outcome=first_failed_text_retained_then_retry_succeeded",
-        first_copy.label(),
-        after_failure.label(),
-        coordinator.status().session.state.label()
-    );
-    print_trace("effects", &retry_effects);
-
-    let cancelled = start(&mut coordinator, RecordingMode::PushToTalk)?;
-    coordinator.dispatch(EventKind::Cancel {
-        session_id: cancelled,
+    coordinator.dispatch(EventKind::CopyResultRequested {
+        session_id: copy_ready,
     })?;
-    let rejected = pump(&mut coordinator, &shared)?;
-    println!(
-        "Pending cancellation: {}; outcome=late_ack_rejected:{}; cleanup={}",
-        coordinator.status().session.state.label(),
-        rejected > 0,
-        match coordinator.status().cleanup {
-            outflow_coordinator::ResourceCleanupStatus::Resolved => "RESOLVED",
-            outflow_coordinator::ResourceCleanupStatus::Unresolved { .. } => "UNRESOLVED",
-        }
+    let (expected_session, expected_attempt) = shared
+        .0
+        .borrow()
+        .last_copy_attempt
+        .ok_or("explicit Copy operation did not submit")?;
+    let copy_ack = shared
+        .0
+        .borrow_mut()
+        .callbacks
+        .pop_front()
+        .ok_or("explicit Copy acknowledgment was not queued")?;
+    let matching_copy_ack = matches!(
+        &copy_ack,
+        CoordinatorCallback::Session(EventKind::CopyCompleted {
+            session_id,
+            attempt_id,
+            outcome: CopyOutcome::Succeeded,
+        }) if *session_id == expected_session && *attempt_id == expected_attempt
     );
-    print_trace("effects", &shared.take_effects());
+    coordinator.accept_callback(copy_ack)?;
+    println!(
+        "Explicit Copy from CopyReady: {}; copy_ack=matching_attempt:{}; outcome=success",
+        coordinator.status().session.state.label(),
+        matching_copy_ack
+    );
+    print_trace("operations", &shared.take_effects());
     println!(
         "Native microphone, model, insertion, clipboard, UI shell, network, persistence: NOT USED"
     );

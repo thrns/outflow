@@ -72,6 +72,26 @@ impl Debug for CopyAttemptId {
     }
 }
 
+/// Checked identifier for one microphone-stop operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StopOperationId(NonZeroU64);
+
+impl StopOperationId {
+    /// One-based operation number, used only for callback correlation.
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+/// Result of the actual microphone-stop operation, separate from queue acceptance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MicrophoneStopOutcome {
+    /// Capture callbacks have ceased and the microphone stream is released.
+    Stopped,
+    /// The adapter cannot confirm that capture has stopped.
+    Failed,
+}
+
 /// Strictly increasing order shared by user and adapter events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventSequence(pub u64);
@@ -373,7 +393,10 @@ pub enum SpeechCommand {
     /// Start capture after model readiness and permission checks.
     StartMicrophone { session_id: SessionId },
     /// Stop capture; fence off an outstanding start if necessary.
-    StopMicrophone { session_id: SessionId },
+    StopMicrophone {
+        session_id: SessionId,
+        operation_id: StopOperationId,
+    },
     /// Stop input and drain the final recognition result.
     FinalizeRecognition { session_id: SessionId },
     /// Cancel recognition and release session-owned audio/model state.
@@ -503,6 +526,12 @@ impl Debug for Effect {
 /// not synchronously depend on worker or microphone success.
 pub trait SpeechBackend {
     /// Queues one speech request without blocking the reducer.
+    ///
+    /// Accepting `StopMicrophone` is not a stop acknowledgment. The adapter
+    /// must later report `CoordinatorCallback::MicrophoneStopCompleted` only
+    /// after capture callbacks have ceased and the microphone stream is
+    /// released. That fact does not confirm that other session resources are
+    /// closed; those require a separate `SpeechResourcesClosed` acknowledgment.
     fn submit(&mut self, command: SpeechCommand) -> Result<(), AdapterQueueError>;
 }
 
@@ -510,14 +539,37 @@ pub trait SpeechBackend {
 ///
 /// InsertOnce must revalidate the captured target immediately before mutation.
 /// It must not paste blindly into the currently focused control. Clipboard
-/// behavior is deliberately outside this interface. A queue error guarantees
-/// that the request was not accepted. After acceptance, the adapter must report
-/// `UncertainOrPartial` whenever it cannot prove success or a harmless failure;
-/// it must never label an unknown side effect as definitely harmless.
+/// behavior is deliberately outside this interface. Submission errors
+/// distinguish work rejected before dispatch from an outcome that may already
+/// have reached a native API. The adapter must classify ambiguity
+/// conservatively: a failed native API call does not prove that no text was
+/// inserted. After acceptance, it must report `UncertainOrPartial` whenever it
+/// cannot prove success or a harmless failure.
 pub trait TargetService {
     /// Queues one target request without blocking the reducer.
-    fn submit(&mut self, command: TargetCommand) -> Result<(), AdapterQueueError>;
+    fn submit(&mut self, command: TargetCommand) -> Result<(), TargetSubmissionError>;
 }
+
+/// Certainty available when target submission does not return acceptance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetSubmissionError {
+    /// The adapter guarantees rejection before dispatch, with no target
+    /// mutation attempt.
+    DefinitelyNotDispatched,
+    /// The request may have reached a native API or produced a partial effect.
+    OutcomeUnknown,
+}
+
+impl Display for TargetSubmissionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::DefinitelyNotDispatched => "target request was rejected before dispatch",
+            Self::OutcomeUnknown => "target request outcome is unknown",
+        })
+    }
+}
+
+impl std::error::Error for TargetSubmissionError {}
 
 /// Content-free failure to enqueue adapter work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -538,7 +590,7 @@ impl std::error::Error for AdapterQueueError {}
 ///
 /// Debug prints only the event kind and sequence. Transcript strings are never
 /// formatted into logs or diagnostics.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum EventKind {
     /// Local startup is ready.
     InitializationSucceeded,
@@ -674,6 +726,8 @@ pub enum ReducerError {
     SessionIdExhausted,
     /// Event sequence counter reached its checked limit.
     EventSequenceExhausted,
+    /// Microphone stop operation counter reached its checked limit.
+    StopOperationIdExhausted,
     /// Event belongs to an old or unknown session.
     StaleSession,
     /// Current session has been cancelled or faulted.
@@ -702,6 +756,7 @@ impl Display for ReducerError {
             Self::NonMonotonicEventSequence => "event sequence is stale or duplicated",
             Self::SessionIdExhausted => "session identifier space is exhausted",
             Self::EventSequenceExhausted => "event sequence space is exhausted",
+            Self::StopOperationIdExhausted => "microphone stop operation space is exhausted",
             Self::StaleSession => "event belongs to a stale or unknown session",
             Self::SessionClosed => "session is already closed",
             Self::InvalidTransition => "event is invalid for the current session state",
@@ -811,6 +866,7 @@ pub struct SessionReducer {
     hold_release_capability: HoldReleaseCapability,
     shortcut_registration: ShortcutRegistration,
     last_event_sequence: Option<EventSequence>,
+    next_stop_operation: Option<u64>,
     current_session_id: Option<SessionId>,
     session: Option<SessionData>,
     failure: Option<FailureCode>,
@@ -824,6 +880,7 @@ impl SessionReducer {
             hold_release_capability,
             shortcut_registration: ShortcutRegistration::NotImplemented,
             last_event_sequence: None,
+            next_stop_operation: Some(1),
             current_session_id: None,
             session: None,
             failure: None,
@@ -843,6 +900,20 @@ impl SessionReducer {
             shortcut_registration: self.shortcut_registration,
             failure: self.failure,
         }
+    }
+
+    fn stop_microphone_effect(&mut self, session_id: SessionId) -> Result<Effect, ReducerError> {
+        let raw_id = self
+            .next_stop_operation
+            .ok_or(ReducerError::StopOperationIdExhausted)?;
+        self.next_stop_operation = raw_id.checked_add(1);
+        let operation_id = NonZeroU64::new(raw_id)
+            .map(StopOperationId)
+            .ok_or(ReducerError::StopOperationIdExhausted)?;
+        Ok(Effect::Speech(SpeechCommand::StopMicrophone {
+            session_id,
+            operation_id,
+        }))
     }
 
     /// Applies a sequenced event and returns effects in execution order.
@@ -990,12 +1061,18 @@ impl SessionReducer {
                 self.cancel_active(id, false)
             }
             SessionState::Listening => {
-                let session = self.session.as_mut().ok_or(ReducerError::SessionClosed)?;
-                if session.input_captured {
+                let input_captured = self
+                    .session
+                    .as_ref()
+                    .ok_or(ReducerError::SessionClosed)?
+                    .input_captured;
+                if input_captured {
+                    let stop_effect = self.stop_microphone_effect(id)?;
+                    let session = self.session.as_mut().ok_or(ReducerError::SessionClosed)?;
                     session.microphone_open = false;
                     self.state = SessionState::Finalizing;
                     Ok(DispatchResult::applied(vec![
-                        Effect::Speech(SpeechCommand::StopMicrophone { session_id: id }),
+                        stop_effect,
                         Effect::Speech(SpeechCommand::FinalizeRecognition { session_id: id }),
                     ]))
                 } else {
@@ -1030,19 +1107,26 @@ impl SessionReducer {
         if self.state != SessionState::Loading {
             return Err(ReducerError::InvalidTransition);
         }
-        let session = self.session.as_mut().ok_or(ReducerError::SessionClosed)?;
+        let session = self.session.as_ref().ok_or(ReducerError::SessionClosed)?;
         if !session.microphone_start_pending {
             return Err(ReducerError::InvalidTransition);
         }
+        let release_pending = session.release_pending;
+        let captured = session.input_captured;
+        let stop_effect = if release_pending && captured {
+            Some(self.stop_microphone_effect(id)?)
+        } else {
+            None
+        };
+        let session = self.session.as_mut().ok_or(ReducerError::SessionClosed)?;
         session.microphone_start_pending = false;
         session.microphone_open = true;
-        if session.release_pending {
-            let captured = session.input_captured;
-            if captured {
+        if release_pending {
+            if let Some(stop_effect) = stop_effect {
                 session.microphone_open = false;
                 self.state = SessionState::Finalizing;
                 return Ok(DispatchResult::applied(vec![
-                    Effect::Speech(SpeechCommand::StopMicrophone { session_id: id }),
+                    stop_effect,
                     Effect::Speech(SpeechCommand::FinalizeRecognition { session_id: id }),
                 ]));
             }
@@ -1371,7 +1455,7 @@ impl SessionReducer {
         ) {
             return Err(ReducerError::InvalidTransition);
         }
-        let mut effects = self.cancel_effects(id);
+        let mut effects = self.cancel_effects(id)?;
         effects.push(Effect::ReportFailure {
             session_id: Some(id),
             code,
@@ -1389,9 +1473,7 @@ impl SessionReducer {
     ) -> Result<DispatchResult, ReducerError> {
         let mut effects = Vec::new();
         if stop_microphone {
-            effects.push(Effect::Speech(SpeechCommand::StopMicrophone {
-                session_id: id,
-            }));
+            effects.push(self.stop_microphone_effect(id)?);
         }
         effects.push(Effect::Speech(SpeechCommand::CancelRecognition {
             session_id: id,
@@ -1421,9 +1503,7 @@ impl SessionReducer {
             .is_some_and(|s| s.microphone_open || s.microphone_start_pending);
         let mut effects = Vec::new();
         if stop {
-            effects.push(Effect::Speech(SpeechCommand::StopMicrophone {
-                session_id: id,
-            }));
+            effects.push(self.stop_microphone_effect(id)?);
         }
         effects.push(Effect::Speech(SpeechCommand::CancelRecognition {
             session_id: id,
@@ -1439,22 +1519,20 @@ impl SessionReducer {
         Ok(DispatchResult::applied(effects))
     }
 
-    fn cancel_effects(&self, id: SessionId) -> Vec<Effect> {
+    fn cancel_effects(&mut self, id: SessionId) -> Result<Vec<Effect>, ReducerError> {
         let mut effects = Vec::new();
         if self
             .session
             .as_ref()
             .is_some_and(|s| s.microphone_open || s.microphone_start_pending)
         {
-            effects.push(Effect::Speech(SpeechCommand::StopMicrophone {
-                session_id: id,
-            }));
+            effects.push(self.stop_microphone_effect(id)?);
         }
         effects.push(Effect::Speech(SpeechCommand::CancelRecognition {
             session_id: id,
         }));
         effects.push(Effect::ClearPrivateResult { session_id: id });
-        effects
+        Ok(effects)
     }
 
     fn make_copy_ready(&mut self, id: SessionId) -> DispatchResult {

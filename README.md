@@ -33,39 +33,57 @@ bash -n scripts/build_macos_mic_probe.sh scripts/run_macos_mic_probe.sh scripts/
 git diff --check
 ```
 
-### Rust session effect coordinator (MVP-05)
+### Rust session coordinator: asynchronous safety boundary (MVP-06)
 
-From the repository root, run the deterministic, platform-independent coordinator example:
-
-```sh
-cargo run -p outflow-coordinator --example session_coordinator --locked
-```
-
-The coordinator routes user actions, mock speech callbacks, guarded target outcomes, deterministic Clean-mode cleanup, private previews, Copy Result, and explicit Copy acknowledgments. The example covers push-to-talk insertion, a changed-target Copy success, Copy failure followed by a new explicit retry, and cancellation with a rejected late callback. Its output is content-free:
-
-```text
-Outflow session coordinator example (synthetic)
-Push-to-talk: Idle; outcome=guarded_insertion_succeeded
-  effects: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, AttemptInsertionOnce, ClearPrivateResult
-Changed target: CopyReady -> Idle; outcome=explicit_copy_succeeded
-  effects: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, ShowCopyResult, ExplicitCopyRequested, DismissAndClearResult
-Copy retry: CopyReady -> CopyReady -> Idle; outcome=first_failed_text_retained_then_retry_succeeded
-  effects: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, ShowCopyResult, ExplicitCopyRequested, CopyFailed, ExplicitCopyRequested, DismissAndClearResult
-Pending cancellation: Cancelled; outcome=late_ack_rejected:true; cleanup=RESOLVED
-  effects: RequestModelPreparation, RequestAsrCancellation, ClearPrivateResult
-Native microphone, model, insertion, clipboard, UI shell, network, persistence: NOT USED
-```
-
-Run focused coordinator and reducer coverage with:
+From the repository root, run the focused coordinator tests and deterministic example:
 
 ```sh
 cargo test -p outflow-coordinator --locked
-cargo test -p outflow-core --test session_engine --locked
+cargo run -p outflow-coordinator --example session_coordinator --locked
 ```
 
-The coordinator suite covers ordered PTT/toggle effects, failure routing, stale callbacks, Copy attempt correlation, immutable settings snapshots, uncertain insertion review, content-free status, cleanup acknowledgments, and 100 repeated mock sessions. The example's Copy and insertion adapters are deterministic in-memory mocks; they do not touch the system clipboard or any target app. No microphone, Moonshine, model assets, Tauri shell, OS shortcut, native insertion, network or persistence is used. T-010 remains blocked, and T-023, T-031, T-034, T-042 and mapped acceptance criteria remain open.
+The example demonstrates that final recognition is not submitted until a distinct microphone-stop acknowledgment confirms capture release. It also covers cancellation before that acknowledgment, an unknown insertion submission outcome that requires manual review, and a separate CopyReady result with a correlated explicit Copy acknowledgment. The output contains only state names, operation labels, and sanitized results:
 
-Troubleshooting: run from the checkout root with the repository's pinned Rust toolchain installed. The example needs no Tauri runtime, model files, microphone permission or desktop session.
+```text
+Outflow session coordinator example (synthetic)
+Push-to-talk before stop ack: Finalizing; finalization_submitted=false; outcome=waiting_for_capture_release
+  submitted: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop
+Push-to-talk after stop ack: Idle; finalization_submitted=true; outcome=guarded_insertion_succeeded
+  after acknowledgment: RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, AttemptInsertionOnce, ClearPrivateResult
+Cancel before stop ack: Cancelled; finalization_submitted=false; late_stop_ack_rejected=true; outcome=cancelled_without_finalization
+  operations: RequestAsrCancellation, ClearPrivateResult
+Unknown insertion submission: Uncertain -> CopyReady; copy_before_review_blocked=true; outcome=manual_review_required
+  operations: ClearPrivateResult, RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, AttemptInsertionOnce, RequireManualReview, ShowCopyResult
+Explicit Copy from CopyReady: Idle; copy_ack=matching_attempt:true; outcome=success
+  operations: DismissAndClearResult, RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, ShowCopyResult, ExplicitCopyRequested, DismissAndClearResult
+Native microphone, model, insertion, clipboard, UI shell, network, persistence: NOT USED
+```
+
+The full local verification commands for this checkout are:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+cargo fmt --all -- --check
+cargo check --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+cargo run -p outflow-coordinator --example session_coordinator --locked
+git diff --check
+```
+
+The coordinator suite checks delayed, failed, duplicate, and stale stop callbacks; separation of capture release from full speech-resource closure; cancellation and device-fault races; definite versus unknown insertion submission; delayed/duplicate insertion callbacks; Copy attempt correlation; content-free diagnostics; and 100 completed synthetic sessions with no remaining callbacks or open capture. Adapter tests are synthetic only: they do not open a microphone, run Moonshine, call Tauri, insert into an OS target, or access the clipboard. No model assets, network, or transcript persistence are used. Mock evidence does not complete T-010, T-011, T-023, T-031, T-034, T-042, T-048, or mapped acceptance criteria.
+
+Troubleshooting:
+
+- If the example remains in `Finalizing` before the stop acknowledgment, the coordinator is intentionally holding recognition finalization. A native adapter must send the matching session and stop-operation IDs only after capture callbacks have ceased and the stream is released; never force finalization based on queue acceptance or elapsed time.
+- If another recording is rejected while cleanup is unresolved, the adapter has not confirmed that all session-owned speech resources were released. Deliver the real matching `SpeechResourcesClosed` acknowledgment after closure; a microphone-stop acknowledgment alone is insufficient.
+- If insertion status is `Uncertain`, the request may have reached a native API. Manual review is required before CopyReady; automatic retry and Copy are blocked. Classify a failed OS call as definitely harmless only when the adapter can prove no target mutation was attempted.
+- Run these commands from the checkout root with the pinned Rust and Node toolchains installed. The example needs no Tauri runtime, model assets, microphone permission, clipboard access, or desktop session.
 
 ### Native macOS probe limits and recovery
 

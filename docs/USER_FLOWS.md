@@ -191,13 +191,14 @@ stateDiagram-v2
 1. Platform adapter checks target window/control is still current and editable, not password/secure or elevated/protected.
 2. Prefer supported direct text mutation where safe. Otherwise a permitted keyboard injection mechanism may insert Unicode at cursor.
 3. Success is returned only when a verifiable effect is observed; uncertain partial side effects go to `Uncertain`, not auto retry.
-4. On definite unsupported target or mismatch, do not insert; go to UF-08. No restoring old focus by stealing user focus automatically.
+4. A submission rejected before native dispatch is a definite no-side-effect failure and may go to UF-08. If dispatch or effect is uncertain, require manual review before CopyReady; do not offer Copy or retry while uncertain.
+5. On definite unsupported target or mismatch, do not insert; go to UF-08. No restoring old focus by stealing user focus automatically.
 
 **Hard cases:** target app closed during dictation; switching tabs; modal dialog; remote desktop; app hangs; composer lost focus; emoji/combining Unicode; clipboard manager; Windows UIPI; Wayland without portal. **AC:** AC-09.
 
 ### UF-08 — Copy-ready fallback (F-10)
 
-**Trigger:** direct injection denied/unsafe/unsupported, target changed, or uncertainty. **Navigation:** Mini Result panel → Copy or Dismiss.
+**Trigger:** direct insertion is denied/unsafe/unsupported, the target changed, a definite no-side-effect failure occurred, or the user completed manual review of an uncertain result. **Navigation:** Mini Result panel → Copy or Dismiss.
 
 1. Present final text in a selectable, screen-reader-labeled in-memory panel, along with reason.
 2. Clipboard is unchanged on panel open. User explicitly clicks Copy/keyboard shortcut; app writes text to clipboard once.

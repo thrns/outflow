@@ -8,9 +8,9 @@ use outflow_coordinator::{
 };
 use outflow_core::session_engine::{
     AdapterQueueError, CopyAttemptId, CopyOutcome, EventKind, HoldReleaseCapability,
-    InsertionOutcome, OpaqueTargetId, RecordingMode, SessionId, SessionState, SpeechBackend,
-    SpeechCommand, TargetCommand, TargetEditability, TargetSecurity, TargetService, TargetSnapshot,
-    TargetVerification,
+    InsertionOutcome, MicrophoneStopOutcome, OpaqueTargetId, RecordingMode, SessionId,
+    SessionState, SpeechBackend, SpeechCommand, StopOperationId, TargetCommand, TargetEditability,
+    TargetSecurity, TargetService, TargetSnapshot, TargetSubmissionError, TargetVerification,
 };
 use outflow_settings::{CleanupMode, CleanupSettings, Settings, VocabularyEntry};
 
@@ -38,16 +38,32 @@ pub enum Operation {
 #[derive(Default)]
 struct Shared {
     callbacks: VecDeque<CoordinatorCallback>,
+    deferred_callbacks: VecDeque<CoordinatorCallback>,
     labels: Vec<&'static str>,
     failures: VecDeque<Operation>,
     verification_results: VecDeque<TargetVerification>,
     insertion_results: VecDeque<InsertionOutcome>,
+    target_submission_errors: VecDeque<TargetSubmissionError>,
+    stop_outcomes: VecDeque<MicrophoneStopOutcome>,
     copy_results: VecDeque<CopyOutcome>,
     copied_attempts: Vec<CopyAttemptId>,
     inserted_text: Vec<String>,
+    insertion_attempts: usize,
+    last_stop: Option<(SessionId, StopOperationId)>,
+    delay_stop_acks: usize,
+    suppress_stop_acks: usize,
+    duplicate_stop_acks: usize,
+    delay_finalization_acks: usize,
+    suppress_finalization_acks: usize,
+    fail_finalization_acks: usize,
+    duplicate_finalization_acks: usize,
+    delay_insertion_acks: usize,
+    duplicate_insertion_acks: usize,
     preview_text: Option<String>,
     panel_text: Option<String>,
+    delay_close_acks: usize,
     suppress_close_acks: usize,
+    duplicate_close_acks: usize,
 }
 
 #[derive(Clone, Default)]
@@ -66,6 +82,61 @@ impl MockHandle {
         self.0.borrow_mut().insertion_results.push_back(result);
     }
 
+    pub fn unknown_next_insertion_submission(&self) {
+        self.0
+            .borrow_mut()
+            .target_submission_errors
+            .push_back(TargetSubmissionError::OutcomeUnknown);
+    }
+
+    pub fn stop_next(&self, outcome: MicrophoneStopOutcome) {
+        self.0.borrow_mut().stop_outcomes.push_back(outcome);
+    }
+
+    pub fn delay_next_stop_ack(&self) {
+        self.0.borrow_mut().delay_stop_acks += 1;
+    }
+
+    pub fn suppress_next_stop_ack(&self) {
+        self.0.borrow_mut().suppress_stop_acks += 1;
+    }
+
+    pub fn duplicate_next_stop_ack(&self) {
+        self.0.borrow_mut().duplicate_stop_acks += 1;
+    }
+
+    pub fn last_stop(&self) -> Option<(SessionId, StopOperationId)> {
+        self.0.borrow().last_stop
+    }
+
+    pub fn delay_next_finalization_ack(&self) {
+        self.0.borrow_mut().delay_finalization_acks += 1;
+    }
+
+    pub fn suppress_next_finalization_ack(&self) {
+        self.0.borrow_mut().suppress_finalization_acks += 1;
+    }
+
+    pub fn fail_next_finalization_ack(&self) {
+        self.0.borrow_mut().fail_finalization_acks += 1;
+    }
+
+    pub fn duplicate_next_finalization_ack(&self) {
+        self.0.borrow_mut().duplicate_finalization_acks += 1;
+    }
+
+    pub fn delay_next_insertion_ack(&self) {
+        self.0.borrow_mut().delay_insertion_acks += 1;
+    }
+
+    pub fn duplicate_next_insertion_ack(&self) {
+        self.0.borrow_mut().duplicate_insertion_acks += 1;
+    }
+
+    pub fn delay_next_close_ack(&self) {
+        self.0.borrow_mut().delay_close_acks += 1;
+    }
+
     pub fn copy_next(&self, result: CopyOutcome) {
         self.0.borrow_mut().copy_results.push_back(result);
     }
@@ -74,12 +145,33 @@ impl MockHandle {
         self.0.borrow_mut().suppress_close_acks += 1;
     }
 
+    pub fn duplicate_next_close_ack(&self) {
+        self.0.borrow_mut().duplicate_close_acks += 1;
+    }
+
     pub fn pop_callback(&self) -> Option<CoordinatorCallback> {
         self.0.borrow_mut().callbacks.pop_front()
     }
 
     pub fn pending_callbacks(&self) -> usize {
         self.0.borrow().callbacks.len()
+    }
+
+    pub fn pending_deferred_callbacks(&self) -> usize {
+        self.0.borrow().deferred_callbacks.len()
+    }
+
+    pub fn release_next_deferred_callback(&self) -> bool {
+        let mut shared = self.0.borrow_mut();
+        let Some(callback) = shared.deferred_callbacks.pop_front() else {
+            return false;
+        };
+        shared.callbacks.push_back(callback);
+        true
+    }
+
+    pub fn enqueue_callback(&self, callback: CoordinatorCallback) {
+        self.enqueue(callback);
     }
 
     pub fn labels(&self) -> Vec<&'static str> {
@@ -96,6 +188,10 @@ impl MockHandle {
 
     pub fn inserted_text(&self) -> Vec<String> {
         self.0.borrow().inserted_text.clone()
+    }
+
+    pub fn insertion_attempts(&self) -> usize {
+        self.0.borrow().insertion_attempts
     }
 
     pub fn has_preview(&self) -> bool {
@@ -120,14 +216,38 @@ impl MockHandle {
         self.0.borrow_mut().callbacks.push_back(callback);
     }
 
+    fn enqueue_controlled(&self, callback: CoordinatorCallback, delay: bool, duplicate: bool) {
+        let mut shared = self.0.borrow_mut();
+        let queue = if delay {
+            &mut shared.deferred_callbacks
+        } else {
+            &mut shared.callbacks
+        };
+        queue.push_back(callback.clone());
+        if duplicate {
+            queue.push_back(callback);
+        }
+    }
+
     fn enqueue_close(&self, session_id: SessionId) {
         let mut shared = self.0.borrow_mut();
         if shared.suppress_close_acks > 0 {
             shared.suppress_close_acks -= 1;
         } else {
-            shared
-                .callbacks
-                .push_back(CoordinatorCallback::SpeechResourcesClosed { session_id });
+            let delay = shared.delay_close_acks > 0;
+            let duplicate = shared.duplicate_close_acks > 0;
+            shared.delay_close_acks = shared.delay_close_acks.saturating_sub(1);
+            shared.duplicate_close_acks = shared.duplicate_close_acks.saturating_sub(1);
+            let callback = CoordinatorCallback::SpeechResourcesClosed { session_id };
+            let queue = if delay {
+                &mut shared.deferred_callbacks
+            } else {
+                &mut shared.callbacks
+            };
+            queue.push_back(callback.clone());
+            if duplicate {
+                queue.push_back(callback);
+            }
         }
     }
 }
@@ -139,6 +259,15 @@ pub struct MockPanel(MockHandle);
 pub struct MockCopy(MockHandle);
 
 pub struct MockObserver(MockHandle);
+
+fn take_flag(counter: &mut usize) -> bool {
+    if *counter == 0 {
+        false
+    } else {
+        *counter -= 1;
+        true
+    }
+}
 
 impl EffectObserver for MockObserver {
     fn observe(&mut self, label: &'static str) {
@@ -187,13 +316,59 @@ impl SpeechBackend for MockSpeech {
                         text: "um, revised synthetic partial".to_owned(),
                     }));
             }
-            SpeechCommand::StopMicrophone { .. } => {}
+            SpeechCommand::StopMicrophone {
+                session_id,
+                operation_id,
+            } => {
+                let (outcome, suppressed, delayed, duplicate) = {
+                    let mut shared = self.0.0.borrow_mut();
+                    shared.last_stop = Some((session_id, operation_id));
+                    let outcome = shared
+                        .stop_outcomes
+                        .pop_front()
+                        .unwrap_or(MicrophoneStopOutcome::Stopped);
+                    let suppressed = take_flag(&mut shared.suppress_stop_acks);
+                    let delayed = take_flag(&mut shared.delay_stop_acks);
+                    let duplicate = take_flag(&mut shared.duplicate_stop_acks);
+                    (outcome, suppressed, delayed, duplicate)
+                };
+                if !suppressed {
+                    self.0.enqueue_controlled(
+                        CoordinatorCallback::MicrophoneStopCompleted {
+                            session_id,
+                            operation_id,
+                            outcome,
+                        },
+                        delayed,
+                        duplicate,
+                    );
+                }
+            }
             SpeechCommand::FinalizeRecognition { session_id } => {
-                self.0
-                    .enqueue(CoordinatorCallback::Session(EventKind::FinalTranscript {
-                        session_id,
-                        text: "um, alpha sample".to_owned(),
-                    }));
+                let (suppressed, delayed, failed, duplicate) = {
+                    let mut shared = self.0.0.borrow_mut();
+                    (
+                        take_flag(&mut shared.suppress_finalization_acks),
+                        take_flag(&mut shared.delay_finalization_acks),
+                        take_flag(&mut shared.fail_finalization_acks),
+                        take_flag(&mut shared.duplicate_finalization_acks),
+                    )
+                };
+                if !suppressed {
+                    let event = if failed {
+                        EventKind::RecognitionFailed { session_id }
+                    } else {
+                        EventKind::FinalTranscript {
+                            session_id,
+                            text: "um, alpha sample".to_owned(),
+                        }
+                    };
+                    self.0.enqueue_controlled(
+                        CoordinatorCallback::Session(event),
+                        delayed,
+                        duplicate,
+                    );
+                }
                 self.0.enqueue_close(session_id);
             }
             SpeechCommand::CancelRecognition { session_id } => self.0.enqueue_close(session_id),
@@ -203,14 +378,14 @@ impl SpeechBackend for MockSpeech {
 }
 
 impl TargetService for MockTarget {
-    fn submit(&mut self, command: TargetCommand) -> Result<(), AdapterQueueError> {
+    fn submit(&mut self, command: TargetCommand) -> Result<(), TargetSubmissionError> {
         match command {
             TargetCommand::VerifyCurrent {
                 session_id,
                 captured,
             } => {
                 if self.0.fails(Operation::VerifyTarget) {
-                    return Err(AdapterQueueError::Unavailable);
+                    return Err(TargetSubmissionError::DefinitelyNotDispatched);
                 }
                 let result = self
                     .0
@@ -228,23 +403,41 @@ impl TargetService for MockTarget {
             TargetCommand::InsertOnce {
                 session_id, text, ..
             } => {
+                self.0.0.borrow_mut().insertion_attempts += 1;
                 if self.0.fails(Operation::InsertOnce) {
-                    return Err(AdapterQueueError::Unavailable);
+                    return Err(TargetSubmissionError::DefinitelyNotDispatched);
                 }
-                self.0.0.borrow_mut().inserted_text.push(text);
-                let outcome = self
-                    .0
-                    .0
-                    .borrow_mut()
-                    .insertion_results
-                    .pop_front()
-                    .unwrap_or(InsertionOutcome::Inserted);
-                self.0.enqueue(CoordinatorCallback::Session(
-                    EventKind::InsertionCompleted {
+                let (submission_error, outcome, delayed, duplicate) = {
+                    let mut shared = self.0.0.borrow_mut();
+                    let submission_error = shared.target_submission_errors.pop_front();
+                    let outcome = shared
+                        .insertion_results
+                        .pop_front()
+                        .unwrap_or(InsertionOutcome::Inserted);
+                    let delayed = take_flag(&mut shared.delay_insertion_acks);
+                    let duplicate = take_flag(&mut shared.duplicate_insertion_acks);
+                    if submission_error == Some(TargetSubmissionError::OutcomeUnknown)
+                        || submission_error.is_none()
+                            && matches!(
+                                outcome,
+                                InsertionOutcome::Inserted | InsertionOutcome::UncertainOrPartial
+                            )
+                    {
+                        shared.inserted_text.push(text.clone());
+                    }
+                    (submission_error, outcome, delayed, duplicate)
+                };
+                if let Some(error) = submission_error {
+                    return Err(error);
+                }
+                self.0.enqueue_controlled(
+                    CoordinatorCallback::Session(EventKind::InsertionCompleted {
                         session_id,
                         outcome,
-                    },
-                ));
+                    }),
+                    delayed,
+                    duplicate,
+                );
             }
         }
         Ok(())

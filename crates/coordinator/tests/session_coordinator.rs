@@ -1,11 +1,13 @@
 mod support;
 
 use outflow_coordinator::{
-    CoordinatorCallback, CoordinatorError, ResourceCleanupStatus, SessionSettingsSnapshot,
+    CaptureStatus, CoordinatorCallback, CoordinatorError, ResourceCleanupStatus,
+    SessionSettingsSnapshot,
 };
 use outflow_core::session_engine::{
     CopyOutcome, DispatchOutcome, EventKind, FailureCode, IgnoredEvent, InsertionOutcome,
-    RecordingMode, ReducerError, SessionState, TargetSecurity, TargetVerification,
+    MicrophoneStopOutcome, RecordingMode, ReducerError, SessionState, TargetSecurity,
+    TargetVerification,
 };
 use outflow_settings::{CleanupMode, CleanupSettings, VocabularyEntry};
 use support::{
@@ -55,6 +57,14 @@ fn push_to_talk_routes_full_ordered_effects_and_cleans_once() {
 
     assert_eq!(current_state(&coordinator), SessionState::Idle);
     assert_eq!(
+        handle
+            .labels()
+            .iter()
+            .filter(|&&l| l == "PrepareFinalText")
+            .count(),
+        1
+    );
+    assert_eq!(
         handle.labels(),
         [
             "RequestModelPreparation",
@@ -68,14 +78,6 @@ fn push_to_talk_routes_full_ordered_effects_and_cleans_once() {
             "AttemptInsertionOnce",
             "ClearPrivateResult",
         ]
-    );
-    assert_eq!(
-        handle
-            .labels()
-            .iter()
-            .filter(|&&l| l == "PrepareFinalText")
-            .count(),
-        1
     );
     assert_eq!(
         handle
@@ -139,6 +141,21 @@ fn toggle_workflow_ignores_key_up_and_stops_on_second_activation() {
             .filter(|&&l| l == "AttemptInsertionOnce")
             .count(),
         1
+    );
+    assert_eq!(
+        handle.labels(),
+        [
+            "RequestModelPreparation",
+            "RequestMicrophoneStart",
+            "PublishPrivatePartial",
+            "PublishPrivatePartial",
+            "RequestMicrophoneStop",
+            "RequestAsrFinalization",
+            "PrepareFinalText",
+            "RequestTargetVerification",
+            "AttemptInsertionOnce",
+            "ClearPrivateResult",
+        ]
     );
 }
 
@@ -224,6 +241,282 @@ fn failed_microphone_stop_prevents_finalization_and_reports_failure() {
     );
     assert!(!handle.labels().contains(&"RequestAsrFinalization"));
     assert!(!handle.labels().contains(&"AttemptInsertionOnce"));
+    assert!(matches!(
+        coordinator.status().capture,
+        CaptureStatus::Unconfirmed {
+            session_id: pending_id,
+            ..
+        } if pending_id == id
+    ));
+}
+
+#[test]
+fn delayed_stop_ack_holds_finalization_and_reports_capture_separately_from_cleanup() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.delay_next_stop_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+
+    assert_eq!(current_state(&coordinator), SessionState::Finalizing);
+    assert!(handle.labels().contains(&"RequestMicrophoneStop"));
+    assert!(!handle.labels().contains(&"RequestAsrFinalization"));
+    assert_eq!(
+        coordinator.status().capture,
+        CaptureStatus::StopPending {
+            session_id: id,
+            operation_id: handle.last_stop().unwrap().1,
+        }
+    );
+    assert_eq!(
+        coordinator.status().cleanup,
+        ResourceCleanupStatus::Unresolved { session_id: id }
+    );
+    assert_eq!(handle.pending_deferred_callbacks(), 1);
+
+    assert!(handle.release_next_deferred_callback());
+    pump(&mut coordinator, &handle);
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+    assert_eq!(
+        handle
+            .labels()
+            .iter()
+            .filter(|&&label| label == "RequestAsrFinalization")
+            .count(),
+        1
+    );
+    assert_eq!(
+        handle.labels(),
+        [
+            "RequestModelPreparation",
+            "RequestMicrophoneStart",
+            "PublishPrivatePartial",
+            "PublishPrivatePartial",
+            "RequestMicrophoneStop",
+            "RequestAsrFinalization",
+            "PrepareFinalText",
+            "RequestTargetVerification",
+            "AttemptInsertionOnce",
+            "ClearPrivateResult",
+        ]
+    );
+}
+
+#[test]
+fn duplicate_stop_acknowledgment_submits_exactly_one_finalization() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.duplicate_next_stop_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    let summary = pump(&mut coordinator, &handle);
+
+    assert!(
+        summary.rejected >= 1,
+        "duplicate stop acknowledgment is stale"
+    );
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+    assert_eq!(
+        handle
+            .labels()
+            .iter()
+            .filter(|&&label| label == "RequestAsrFinalization")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn stale_stop_ack_cannot_satisfy_a_later_sessions_stop_operation() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+
+    handle.delay_next_stop_ack();
+    let first = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, first);
+    let (_, stale_operation_id) = handle.last_stop().unwrap();
+    coordinator
+        .dispatch(EventKind::Cancel { session_id: first })
+        .unwrap();
+    pump(&mut coordinator, &handle);
+    coordinator
+        .dispatch(EventKind::Dismiss {
+            session_id: Some(first),
+        })
+        .unwrap();
+
+    handle.delay_next_stop_ack();
+    let second = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, second);
+    let (_, current_operation_id) = handle.last_stop().unwrap();
+    assert_ne!(stale_operation_id, current_operation_id);
+    handle.enqueue_callback(CoordinatorCallback::MicrophoneStopCompleted {
+        session_id: second,
+        operation_id: stale_operation_id,
+        outcome: MicrophoneStopOutcome::Stopped,
+    });
+    assert_eq!(pump(&mut coordinator, &handle).rejected, 1);
+    handle.enqueue_callback(CoordinatorCallback::MicrophoneStopCompleted {
+        session_id: first,
+        operation_id: current_operation_id,
+        outcome: MicrophoneStopOutcome::Stopped,
+    });
+    assert_eq!(pump(&mut coordinator, &handle).rejected, 1);
+    assert_eq!(current_state(&coordinator), SessionState::Finalizing);
+    assert!(!handle.labels().contains(&"RequestAsrFinalization"));
+
+    assert!(
+        handle.release_next_deferred_callback(),
+        "old stop callback exists"
+    );
+    let stale = pump(&mut coordinator, &handle);
+    assert_eq!(stale.rejected, 1);
+    assert_eq!(current_state(&coordinator), SessionState::Finalizing);
+    assert!(!handle.labels().contains(&"RequestAsrFinalization"));
+
+    assert!(
+        handle.release_next_deferred_callback(),
+        "current stop callback exists"
+    );
+    pump(&mut coordinator, &handle);
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+    assert_eq!(
+        handle
+            .labels()
+            .iter()
+            .filter(|&&label| label == "RequestAsrFinalization")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn cancel_while_stop_is_pending_invalidates_finalization_and_rejects_late_ack() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.delay_next_stop_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    coordinator
+        .dispatch(EventKind::Cancel { session_id: id })
+        .unwrap();
+    pump(&mut coordinator, &handle);
+    assert!(handle.release_next_deferred_callback());
+    let late = pump(&mut coordinator, &handle);
+
+    assert_eq!(current_state(&coordinator), SessionState::Cancelled);
+    assert_eq!(late.rejected, 1);
+    assert!(!handle.labels().contains(&"RequestAsrFinalization"));
+    assert!(!handle.labels().contains(&"RequestTargetVerification"));
+    assert!(!handle.labels().contains(&"AttemptInsertionOnce"));
+    assert_eq!(
+        handle.labels(),
+        [
+            "RequestModelPreparation",
+            "RequestMicrophoneStart",
+            "PublishPrivatePartial",
+            "PublishPrivatePartial",
+            "RequestMicrophoneStop",
+            "RequestAsrCancellation",
+            "ClearPrivateResult",
+        ]
+    );
+}
+
+#[test]
+fn device_loss_and_overflow_during_pending_stop_abort_finalization_until_resource_close() {
+    for overflow in [false, true] {
+        let (mut coordinator, handle) = coordinator(default_settings());
+        initialize(&mut coordinator);
+        handle.delay_next_stop_ack();
+        let id = start(&mut coordinator, RecordingMode::PushToTalk);
+        pump(&mut coordinator, &handle);
+        finish_ptt(&mut coordinator, id);
+        handle.delay_next_close_ack();
+        let event = if overflow {
+            EventKind::AudioBufferOverflow { session_id: id }
+        } else {
+            EventKind::AudioDeviceLost { session_id: id }
+        };
+        coordinator.dispatch(event).unwrap();
+
+        assert_eq!(current_state(&coordinator), SessionState::Cancelled);
+        assert_eq!(
+            coordinator.status().cleanup,
+            ResourceCleanupStatus::Unresolved { session_id: id }
+        );
+        assert!(
+            handle.release_next_deferred_callback(),
+            "stop ack is delayed"
+        );
+        pump(&mut coordinator, &handle);
+        assert!(!handle.labels().contains(&"RequestAsrFinalization"));
+        assert_eq!(
+            coordinator.status().cleanup,
+            ResourceCleanupStatus::Unresolved { session_id: id }
+        );
+        assert!(
+            handle.release_next_deferred_callback(),
+            "close ack is delayed"
+        );
+        pump(&mut coordinator, &handle);
+        assert_eq!(
+            coordinator.status().cleanup,
+            ResourceCleanupStatus::Resolved
+        );
+    }
+}
+
+#[test]
+fn failed_or_suppressed_stop_ack_never_starts_finalization() {
+    let (mut failed, failed_handle) = coordinator(default_settings());
+    initialize(&mut failed);
+    failed_handle.stop_next(MicrophoneStopOutcome::Failed);
+    let failed_id = start(&mut failed, RecordingMode::PushToTalk);
+    pump(&mut failed, &failed_handle);
+    finish_ptt(&mut failed, failed_id);
+    pump(&mut failed, &failed_handle);
+    assert_eq!(current_state(&failed), SessionState::Faulted);
+    assert!(failed_handle.labels().contains(&"RequestAsrCancellation"));
+    assert!(!failed_handle.labels().contains(&"RequestAsrFinalization"));
+    assert_eq!(
+        failed_handle.labels(),
+        [
+            "RequestModelPreparation",
+            "RequestMicrophoneStart",
+            "PublishPrivatePartial",
+            "PublishPrivatePartial",
+            "RequestMicrophoneStop",
+            "RequestAsrCancellation",
+            "ClearPrivateResult",
+            "ReportFailure",
+        ]
+    );
+
+    let (mut suppressed, suppressed_handle) = coordinator(default_settings());
+    initialize(&mut suppressed);
+    suppressed_handle.suppress_next_stop_ack();
+    let suppressed_id = start(&mut suppressed, RecordingMode::PushToTalk);
+    pump(&mut suppressed, &suppressed_handle);
+    finish_ptt(&mut suppressed, suppressed_id);
+    pump(&mut suppressed, &suppressed_handle);
+    assert_eq!(current_state(&suppressed), SessionState::Finalizing);
+    assert_eq!(
+        suppressed.status().cleanup,
+        ResourceCleanupStatus::Unresolved {
+            session_id: suppressed_id
+        }
+    );
+    assert!(
+        !suppressed_handle
+            .labels()
+            .contains(&"RequestAsrFinalization")
+    );
 }
 
 #[test]
@@ -234,11 +527,138 @@ fn failed_recognition_finalize_never_verifies_or_inserts() {
     pump(&mut coordinator, &handle);
     handle.fail_next(Operation::FinalizeRecognition);
     finish_ptt(&mut coordinator, id);
+    pump(&mut coordinator, &handle);
     assert_eq!(current_state(&coordinator), SessionState::Faulted);
     assert!(handle.labels().contains(&"RequestAsrCancellation"));
     assert!(handle.labels().contains(&"ReportFailure"));
     assert!(!handle.labels().contains(&"RequestTargetVerification"));
     assert!(!handle.labels().contains(&"AttemptInsertionOnce"));
+}
+
+#[test]
+fn finalization_ack_is_independent_and_delayed_without_starting_target_work() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.delay_next_finalization_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    pump(&mut coordinator, &handle);
+
+    assert_eq!(current_state(&coordinator), SessionState::Finalizing);
+    assert!(handle.labels().contains(&"RequestAsrFinalization"));
+    assert!(!handle.labels().contains(&"RequestTargetVerification"));
+    assert!(!handle.labels().contains(&"AttemptInsertionOnce"));
+    assert_eq!(handle.pending_deferred_callbacks(), 1);
+
+    assert!(handle.release_next_deferred_callback());
+    pump(&mut coordinator, &handle);
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+}
+
+#[test]
+fn microphone_stop_ack_does_not_confirm_all_speech_resources_are_released() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.delay_next_close_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    pump(&mut coordinator, &handle);
+
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+    assert_eq!(
+        coordinator.status().capture,
+        CaptureStatus::Stopped {
+            session_id: id,
+            operation_id: handle.last_stop().unwrap().1,
+        }
+    );
+    assert_eq!(
+        coordinator.status().cleanup,
+        ResourceCleanupStatus::Unresolved { session_id: id }
+    );
+    assert_eq!(handle.pending_deferred_callbacks(), 1);
+    assert!(handle.release_next_deferred_callback());
+    pump(&mut coordinator, &handle);
+    assert_eq!(coordinator.status().capture, CaptureStatus::NotOpen);
+    assert_eq!(
+        coordinator.status().cleanup,
+        ResourceCleanupStatus::Resolved
+    );
+}
+
+#[test]
+fn duplicate_finalization_ack_cannot_request_a_second_insertion() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.duplicate_next_finalization_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    let summary = pump(&mut coordinator, &handle);
+
+    assert!(summary.rejected >= 1);
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+    assert_eq!(
+        handle
+            .labels()
+            .iter()
+            .filter(|&&label| label == "AttemptInsertionOnce")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn finalization_failure_and_missing_ack_never_reach_target_insertion() {
+    let (mut failed, failed_handle) = coordinator(default_settings());
+    initialize(&mut failed);
+    failed_handle.fail_next_finalization_ack();
+    let failed_id = start(&mut failed, RecordingMode::PushToTalk);
+    pump(&mut failed, &failed_handle);
+    finish_ptt(&mut failed, failed_id);
+    pump(&mut failed, &failed_handle);
+    assert_eq!(current_state(&failed), SessionState::Faulted);
+    assert!(
+        !failed_handle
+            .labels()
+            .contains(&"RequestTargetVerification")
+    );
+    assert!(!failed_handle.labels().contains(&"AttemptInsertionOnce"));
+
+    let (mut suppressed, suppressed_handle) = coordinator(default_settings());
+    initialize(&mut suppressed);
+    suppressed_handle.suppress_next_finalization_ack();
+    let suppressed_id = start(&mut suppressed, RecordingMode::PushToTalk);
+    pump(&mut suppressed, &suppressed_handle);
+    finish_ptt(&mut suppressed, suppressed_id);
+    pump(&mut suppressed, &suppressed_handle);
+    assert_eq!(current_state(&suppressed), SessionState::Finalizing);
+    assert!(
+        !suppressed_handle
+            .labels()
+            .contains(&"RequestTargetVerification")
+    );
+    assert!(!suppressed_handle.labels().contains(&"AttemptInsertionOnce"));
+}
+
+#[test]
+fn duplicate_resource_closure_ack_is_rejected_without_resetting_session_state() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.duplicate_next_close_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    let summary = pump(&mut coordinator, &handle);
+
+    assert!(summary.rejected >= 1);
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+    assert_eq!(
+        coordinator.status().cleanup,
+        ResourceCleanupStatus::Resolved
+    );
 }
 
 #[test]
@@ -276,6 +696,108 @@ fn failed_insert_enqueue_is_definite_fallback_and_never_retried() {
     );
     assert_eq!(handle.inserted_text().len(), 0);
     assert!(handle.copied_attempts().is_empty());
+    assert_eq!(
+        handle.labels(),
+        [
+            "RequestModelPreparation",
+            "RequestMicrophoneStart",
+            "PublishPrivatePartial",
+            "PublishPrivatePartial",
+            "RequestMicrophoneStop",
+            "RequestAsrFinalization",
+            "PrepareFinalText",
+            "RequestTargetVerification",
+            "AttemptInsertionOnce",
+            "ShowCopyResult",
+        ]
+    );
+}
+
+#[test]
+fn unknown_insert_submission_outcome_requires_manual_review_without_retry_or_copy() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.unknown_next_insertion_submission();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    pump(&mut coordinator, &handle);
+
+    assert_eq!(current_state(&coordinator), SessionState::Uncertain);
+    assert!(handle.labels().contains(&"RequireManualReview"));
+    assert!(!handle.labels().contains(&"ShowCopyResult"));
+    assert_eq!(handle.insertion_attempts(), 1);
+    assert!(handle.copied_attempts().is_empty());
+    assert_eq!(
+        handle.labels(),
+        [
+            "RequestModelPreparation",
+            "RequestMicrophoneStart",
+            "PublishPrivatePartial",
+            "PublishPrivatePartial",
+            "RequestMicrophoneStop",
+            "RequestAsrFinalization",
+            "PrepareFinalText",
+            "RequestTargetVerification",
+            "AttemptInsertionOnce",
+            "RequireManualReview",
+        ]
+    );
+    assert_eq!(
+        coordinator.dispatch(EventKind::CopyResultRequested { session_id: id }),
+        Err(CoordinatorError::Reducer(ReducerError::InvalidTransition))
+    );
+    assert_eq!(handle.insertion_attempts(), 1);
+    assert!(handle.copied_attempts().is_empty());
+}
+
+#[test]
+fn explicit_definite_insertion_failure_ack_produces_copy_ready() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.insert_next(InsertionOutcome::FailedWithoutSideEffect);
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    pump(&mut coordinator, &handle);
+
+    assert_eq!(current_state(&coordinator), SessionState::CopyReady);
+    assert!(handle.has_panel_result());
+    assert_eq!(handle.inserted_text().len(), 0);
+    assert_eq!(handle.insertion_attempts(), 1);
+    assert!(handle.copied_attempts().is_empty());
+}
+
+#[test]
+fn delayed_duplicate_insertion_ack_cannot_commit_or_insert_twice() {
+    let (mut coordinator, handle) = coordinator(default_settings());
+    initialize(&mut coordinator);
+    handle.delay_next_insertion_ack();
+    handle.duplicate_next_insertion_ack();
+    let id = start(&mut coordinator, RecordingMode::PushToTalk);
+    pump(&mut coordinator, &handle);
+    finish_ptt(&mut coordinator, id);
+    pump(&mut coordinator, &handle);
+
+    assert_eq!(current_state(&coordinator), SessionState::Committing);
+    assert_eq!(handle.insertion_attempts(), 1);
+    assert_eq!(handle.pending_deferred_callbacks(), 2);
+    assert!(handle.release_next_deferred_callback());
+    pump(&mut coordinator, &handle);
+    assert_eq!(current_state(&coordinator), SessionState::Idle);
+    assert!(handle.release_next_deferred_callback());
+    let duplicate = pump(&mut coordinator, &handle);
+
+    assert_eq!(duplicate.rejected, 1);
+    assert_eq!(handle.insertion_attempts(), 1);
+    assert_eq!(
+        handle
+            .labels()
+            .iter()
+            .filter(|&&label| label == "AttemptInsertionOnce")
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -433,6 +955,10 @@ fn cancellation_rejects_late_recognition_and_cleanup_completions() {
     coordinator
         .dispatch(EventKind::Cancel { session_id: id })
         .unwrap();
+    handle.enqueue_callback(CoordinatorCallback::Session(EventKind::FinalTranscript {
+        session_id: id,
+        text: "late synthetic transcript".to_owned(),
+    }));
     let summary = pump(&mut coordinator, &handle);
     assert!(summary.rejected >= 1, "late final should be rejected");
     assert_eq!(current_state(&coordinator), SessionState::Cancelled);
@@ -487,6 +1013,13 @@ fn missing_speech_closure_ack_is_exposed_as_unresolved_and_blocks_new_session() 
     assert_eq!(
         coordinator.status().cleanup,
         ResourceCleanupStatus::Unresolved { session_id: id }
+    );
+    assert_eq!(
+        coordinator.status().capture,
+        CaptureStatus::Stopped {
+            session_id: id,
+            operation_id: handle.last_stop().unwrap().1,
+        }
     );
     assert_eq!(
         coordinator.dispatch(EventKind::ShortcutActivated {
@@ -569,11 +1102,13 @@ fn one_hundred_complete_mock_sessions_leave_no_pending_state() {
         pump(&mut coordinator, &handle);
         assert_eq!(current_state(&coordinator), SessionState::Idle);
         assert_eq!(coordinator.status().session.session_id, None);
+        assert_eq!(coordinator.status().capture, CaptureStatus::NotOpen);
         assert_eq!(
             coordinator.status().cleanup,
             ResourceCleanupStatus::Resolved
         );
         assert_eq!(handle.pending_callbacks(), 0);
+        assert_eq!(handle.pending_deferred_callbacks(), 0);
         assert!(!handle.has_preview());
         assert!(!handle.has_panel_result());
         handle.take_labels();

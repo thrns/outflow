@@ -23,9 +23,10 @@ use std::fmt::{self, Debug, Display, Formatter};
 
 use outflow_core::session_engine::{
     AdapterQueueError, CopyAttemptId, CopyOutcome, DispatchOutcome, Effect, EventKind,
-    EventSequencer, HoldReleaseCapability, InsertionOutcome, ReducerError, SessionEvent, SessionId,
-    SessionReducer, SessionState, SessionStatus, SpeechBackend, SpeechCommand, TargetCommand,
-    TargetService, TargetVerification,
+    EventSequencer, HoldReleaseCapability, InsertionOutcome, MicrophoneStopOutcome, ReducerError,
+    SessionEvent, SessionId, SessionReducer, SessionState, SessionStatus, SpeechBackend,
+    SpeechCommand, StopOperationId, TargetCommand, TargetService, TargetSubmissionError,
+    TargetVerification,
 };
 use outflow_core::vocabulary::VocabularyEntryRef;
 use outflow_settings::{
@@ -188,10 +189,16 @@ impl Debug for SessionSettingsSnapshot {
 }
 
 /// Callbacks delivered by an adapter or an example event loop.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum CoordinatorCallback {
     /// Session-scoped reducer acknowledgment or failure.
     Session(EventKind),
+    /// Confirms whether the matching stop operation actually released capture.
+    MicrophoneStopCompleted {
+        session_id: SessionId,
+        operation_id: StopOperationId,
+        outcome: MicrophoneStopOutcome,
+    },
     /// Confirms that session-owned speech and capture resources are closed.
     SpeechResourcesClosed { session_id: SessionId },
 }
@@ -200,12 +207,52 @@ impl Debug for CoordinatorCallback {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Session(_) => f.write_str("Session([redacted event payload])"),
+            Self::MicrophoneStopCompleted {
+                session_id,
+                operation_id,
+                outcome,
+            } => f
+                .debug_struct("MicrophoneStopCompleted")
+                .field("session_id", session_id)
+                .field("operation_id", &operation_id.get())
+                .field("outcome", outcome)
+                .finish(),
             Self::SpeechResourcesClosed { session_id } => f
                 .debug_struct("SpeechResourcesClosed")
                 .field("session_id", session_id)
                 .finish(),
         }
     }
+}
+
+/// Capture stop state, independent from full speech-resource closure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureStatus {
+    /// No capture is currently known to be open.
+    NotOpen,
+    /// A matching microphone-start acknowledgment opened capture.
+    Open { session_id: SessionId },
+    /// Stop was submitted but its completion acknowledgment has not arrived.
+    StopPending {
+        session_id: SessionId,
+        operation_id: StopOperationId,
+    },
+    /// The adapter confirmed capture stopped and the microphone stream released.
+    Stopped {
+        session_id: SessionId,
+        operation_id: StopOperationId,
+    },
+    /// Stop submission/completion failed, so capture state is unconfirmed.
+    Unconfirmed {
+        session_id: SessionId,
+        operation_id: StopOperationId,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StopTicket {
+    session_id: SessionId,
+    operation_id: StopOperationId,
 }
 
 /// Content-free resource status. Unresolved remains set until an exact session
@@ -246,6 +293,8 @@ pub struct PresentationStatus {
 pub struct CoordinatorStatus {
     /// Reducer state and content-free session metadata.
     pub session: SessionStatus,
+    /// Microphone capture acknowledgment, separate from full resource closure.
+    pub capture: CaptureStatus,
     /// Speech resource ownership status.
     pub cleanup: ResourceCleanupStatus,
     /// UI adapter state summarized as booleans only.
@@ -265,6 +314,8 @@ pub enum CoordinatorError {
     PresentationUnresolved,
     /// Closure acknowledgment does not match the outstanding resource owner.
     StaleCleanupAcknowledgment,
+    /// Stop completion does not match the pending capture-stop operation.
+    StaleMicrophoneStopAcknowledgment,
 }
 
 impl Display for CoordinatorError {
@@ -275,6 +326,9 @@ impl Display for CoordinatorError {
             Self::VolatileContentUnresolved => "volatile result clearing is unresolved",
             Self::PresentationUnresolved => "result presentation is unresolved",
             Self::StaleCleanupAcknowledgment => "cleanup acknowledgment is stale or mismatched",
+            Self::StaleMicrophoneStopAcknowledgment => {
+                "microphone stop acknowledgment is stale or mismatched"
+            }
         })
     }
 }
@@ -306,6 +360,9 @@ pub struct SessionCoordinator<S, T, P, R, C> {
     observer: Box<dyn EffectObserver>,
     current_settings: SessionSettingsSnapshot,
     active_settings: Option<SessionSettingsSnapshot>,
+    capture: CaptureStatus,
+    pending_stop: Option<StopTicket>,
+    pending_finalization: Option<StopTicket>,
     cleanup: ResourceCleanupStatus,
     presentation: PresentationStatus,
 }
@@ -350,6 +407,9 @@ where
             observer,
             current_settings: settings,
             active_settings: None,
+            capture: CaptureStatus::NotOpen,
+            pending_stop: None,
+            pending_finalization: None,
             cleanup: ResourceCleanupStatus::Resolved,
             presentation: PresentationStatus::default(),
         }
@@ -364,6 +424,7 @@ where
     pub fn status(&self) -> CoordinatorStatus {
         CoordinatorStatus {
             session: self.reducer.status(),
+            capture: self.capture,
             cleanup: self.cleanup,
             presentation: self.presentation,
         }
@@ -373,6 +434,10 @@ where
     pub fn dispatch(&mut self, kind: EventKind) -> Result<DispatchOutcome, CoordinatorError> {
         let starting = self.reducer.status().state == SessionState::Idle
             && matches!(&kind, EventKind::ShortcutActivated { .. });
+        let microphone_started = match &kind {
+            EventKind::MicrophoneStarted { session_id } => Some(*session_id),
+            _ => None,
+        };
         if starting {
             self.require_clean_boundary()?;
         }
@@ -386,6 +451,10 @@ where
 
         let captured_settings = starting.then(|| self.current_settings.clone());
         let result = self.apply_event(kind)?;
+        if let Some(session_id) = microphone_started {
+            self.capture = CaptureStatus::Open { session_id };
+        }
+        self.clear_inactive_finalization();
         if self.reducer.status().state == SessionState::Loading
             && let Some(snapshot) = captured_settings
         {
@@ -403,13 +472,81 @@ where
     ) -> Result<Option<DispatchOutcome>, CoordinatorError> {
         match callback {
             CoordinatorCallback::Session(kind) => self.dispatch(kind).map(Some),
+            CoordinatorCallback::MicrophoneStopCompleted {
+                session_id,
+                operation_id,
+                outcome,
+            } => self.microphone_stop_completed(session_id, operation_id, outcome),
             CoordinatorCallback::SpeechResourcesClosed { session_id } => {
                 if self.cleanup != (ResourceCleanupStatus::Unresolved { session_id }) {
                     return Err(CoordinatorError::StaleCleanupAcknowledgment);
                 }
                 self.cleanup = ResourceCleanupStatus::Resolved;
+                self.capture = CaptureStatus::NotOpen;
+                self.pending_stop = None;
+                self.pending_finalization = None;
                 Ok(None)
             }
+        }
+    }
+
+    fn microphone_stop_completed(
+        &mut self,
+        session_id: SessionId,
+        operation_id: StopOperationId,
+        outcome: MicrophoneStopOutcome,
+    ) -> Result<Option<DispatchOutcome>, CoordinatorError> {
+        let ticket = StopTicket {
+            session_id,
+            operation_id,
+        };
+        if self.pending_stop != Some(ticket) {
+            return Err(CoordinatorError::StaleMicrophoneStopAcknowledgment);
+        }
+        self.pending_stop = None;
+        self.capture = match outcome {
+            MicrophoneStopOutcome::Stopped => CaptureStatus::Stopped {
+                session_id,
+                operation_id,
+            },
+            MicrophoneStopOutcome::Failed => CaptureStatus::Unconfirmed {
+                session_id,
+                operation_id,
+            },
+        };
+
+        let should_finalize = self.pending_finalization == Some(ticket)
+            && self.reducer.status().state == SessionState::Finalizing
+            && self.reducer.status().session_id == Some(session_id);
+        if self.pending_finalization == Some(ticket) {
+            self.pending_finalization = None;
+        }
+        if !should_finalize {
+            return Ok(None);
+        }
+
+        if outcome == MicrophoneStopOutcome::Stopped && self.submit_finalization(session_id).is_ok()
+        {
+            return Ok(None);
+        }
+        self.dispatch(EventKind::RecognitionFailed { session_id })
+            .map(Some)
+    }
+
+    fn submit_finalization(&mut self, session_id: SessionId) -> Result<(), AdapterQueueError> {
+        self.observer.observe("RequestAsrFinalization");
+        self.speech
+            .submit(SpeechCommand::FinalizeRecognition { session_id })
+    }
+
+    fn clear_inactive_finalization(&mut self) {
+        let Some(ticket) = self.pending_finalization else {
+            return;
+        };
+        let status = self.reducer.status();
+        if status.state != SessionState::Finalizing || status.session_id != Some(ticket.session_id)
+        {
+            self.pending_finalization = None;
         }
     }
 
@@ -437,9 +574,35 @@ where
     fn route_effects(&mut self, effects: Vec<Effect>) -> Result<(), CoordinatorError> {
         let mut pending = VecDeque::from(effects);
         while let Some(effect) = pending.pop_front() {
-            self.observer.observe(effect.label());
+            let finalization_is_waiting = matches!(
+                &effect,
+                Effect::Speech(SpeechCommand::FinalizeRecognition { .. })
+            );
+            if !finalization_is_waiting {
+                self.observer.observe(effect.label());
+            }
             match effect {
                 Effect::Speech(command) => {
+                    let command = match command {
+                        SpeechCommand::FinalizeRecognition { session_id } => {
+                            let current = self.pending_stop.filter(|ticket| {
+                                ticket.session_id == session_id
+                                    && self.reducer.status().state == SessionState::Finalizing
+                            });
+                            if let Some(ticket) = current {
+                                // Keep the reducer's simple Stop→Finalize effects, but defer the
+                                // adapter submission until this exact stop operation acknowledges.
+                                self.pending_finalization = Some(ticket);
+                            } else {
+                                self.prepend_effects(
+                                    &mut pending,
+                                    EventKind::RecognitionFailed { session_id },
+                                )?;
+                            }
+                            continue;
+                        }
+                        command => command,
+                    };
                     let session_id = speech_session_id(&command);
                     let stop_in_finalizing =
                         matches!(&command, SpeechCommand::StopMicrophone { .. })
@@ -449,11 +612,37 @@ where
                     } else {
                         speech_queue_failure_event(&command)
                     };
+                    if let SpeechCommand::StopMicrophone {
+                        session_id,
+                        operation_id,
+                    } = &command
+                    {
+                        let ticket = StopTicket {
+                            session_id: *session_id,
+                            operation_id: *operation_id,
+                        };
+                        self.capture = CaptureStatus::StopPending {
+                            session_id: *session_id,
+                            operation_id: *operation_id,
+                        };
+                        self.pending_stop = Some(ticket);
+                    }
                     self.cleanup = ResourceCleanupStatus::Unresolved { session_id };
                     if self.speech.submit(command).is_err() {
+                        if let Some(ticket) = self
+                            .pending_stop
+                            .filter(|ticket| ticket.session_id == session_id)
+                        {
+                            self.pending_stop = None;
+                            self.capture = CaptureStatus::Unconfirmed {
+                                session_id,
+                                operation_id: ticket.operation_id,
+                            };
+                        }
                         if stop_in_finalizing {
+                            self.pending_finalization = None;
                             // Do not drain recognition until the microphone
-                            // stop request has been accepted.
+                            // stop request has actually completed.
                             pending.retain(|effect| {
                                 !matches!(
                                     effect,
@@ -469,22 +658,31 @@ where
                     }
                 }
                 Effect::Target(command) => {
-                    let queue_failure = match &command {
-                        TargetCommand::VerifyCurrent { session_id, .. } => {
+                    let failure_context = match &command {
+                        TargetCommand::VerifyCurrent { session_id, .. } => (*session_id, false),
+                        TargetCommand::InsertOnce { session_id, .. } => (*session_id, true),
+                    };
+                    if let Err(error) = self.target.submit(command) {
+                        let (session_id, insertion) = failure_context;
+                        let failure = if insertion {
+                            EventKind::InsertionCompleted {
+                                session_id,
+                                outcome: match error {
+                                    TargetSubmissionError::DefinitelyNotDispatched => {
+                                        InsertionOutcome::FailedWithoutSideEffect
+                                    }
+                                    TargetSubmissionError::OutcomeUnknown => {
+                                        InsertionOutcome::UncertainOrPartial
+                                    }
+                                },
+                            }
+                        } else {
                             EventKind::TargetVerified {
-                                session_id: *session_id,
+                                session_id,
                                 result: TargetVerification::Unavailable,
                             }
-                        }
-                        TargetCommand::InsertOnce { session_id, .. } => {
-                            EventKind::InsertionCompleted {
-                                session_id: *session_id,
-                                outcome: InsertionOutcome::FailedWithoutSideEffect,
-                            }
-                        }
-                    };
-                    if self.target.submit(command).is_err() {
-                        self.prepend_effects(&mut pending, queue_failure)?;
+                        };
+                        self.prepend_effects(&mut pending, failure)?;
                     }
                 }
                 Effect::PublishPrivatePartial {
@@ -621,7 +819,7 @@ fn speech_session_id(command: &SpeechCommand) -> SessionId {
     match command {
         SpeechCommand::PrepareModel { session_id }
         | SpeechCommand::StartMicrophone { session_id }
-        | SpeechCommand::StopMicrophone { session_id }
+        | SpeechCommand::StopMicrophone { session_id, .. }
         | SpeechCommand::FinalizeRecognition { session_id }
         | SpeechCommand::CancelRecognition { session_id } => *session_id,
     }

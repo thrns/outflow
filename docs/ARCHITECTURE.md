@@ -201,7 +201,8 @@ sequenceDiagram
   end
   U->>H: Key up
   H->>C: End(session_id)
-  C->>A: Stop/close stream
+  C->>A: StopMicrophone(session_id, stop_operation_id)
+  A-->>C: MicrophoneStopCompleted(Stopped) after stream release
   C->>M: stop stream, drain final transcript
   M-->>C: Final text
   C->>T: Clean deterministic text
@@ -212,10 +213,15 @@ sequenceDiagram
   else Unsupported or target changed
     I-->>C: CopyReady
   end
+  M-->>C: SpeechResourcesClosed asynchronously after all session resources release
   C-->>U: Feedback, then clear transient state
 ```
 
 **Callback discipline:** Microphone callback must do O(frame) sample copy into bounded queue and return; cannot call `moonshine_transcribe_stream` in audio callback. ASR worker consumes, appends audio, asks for transcript approximately every 250–500 ms based on load. The Moonshine API's default caching window is ~200 ms; final stop forces drain. An external VAD may improve empty-input gating but should not be inserted until measured.
+
+The reducer keeps its existing `StopMicrophone` then `FinalizeRecognition` effect order. The coordinator submits Stop, holds Finalize, and submits it only after the matching `MicrophoneStopCompleted(Stopped)` callback confirms capture callbacks have ceased and the microphone stream has been released. Queue acceptance alone never opens this barrier. Cancellation, device loss, overflow, or stop failure discards the pending finalization. A missing stop acknowledgment may remain unresolved without a timer; do not infer success from elapsed time.
+
+Capture-stop acknowledgment and full speech-resource closure are separate facts. `SpeechResourcesClosed(session_id)` is still required after finalization or cancellation to confirm ASR/session resources are released and permit a later session. Stop callbacks carry both the session ID and checked stop-operation ID; stale, duplicate, and mismatched callbacks cannot satisfy another operation.
 
 ### 5.2 Toggle happy path
 
@@ -275,6 +281,12 @@ trait TargetService {
 **Opaque handle lifecycle:** For Moonshine C ABI, call `moonshine_load_transcriber_from_files`, `moonshine_create_stream`, `moonshine_start_stream`, `moonshine_transcribe_add_audio_to_stream`, `moonshine_transcribe_stream`, `moonshine_stop_stream`, drain final transcript, `moonshine_free_stream`, then `moonshine_free_transcriber` on unload. Use the header `MOONSHINE_HEADER_VERSION` of the pinned checkout; validate at runtime via the available library version function. Do not copy the example's nonstreaming architecture constant when loading a streaming model. [Official C API](https://moonshine-voice.readthedocs.io/en/stable/api/c-api/).
 
 **Moonshine ownership:** Each returned native transcript/buffer has C ownership semantics: wrapper must invoke the corresponding API release function, and never hold native data beyond its valid lifetime. Convert to owned Rust `String` after bounds checking. No unsafe calls from UI or capture callback.
+
+### Asynchronous adapter acknowledgment contracts
+
+`SpeechBackend::submit(StopMicrophone)` reports only whether the request entered the bounded adapter queue. The adapter later returns the correlated stop-completion callback after capture has stopped and the stream is released. Finalization remains pending until that callback succeeds. Stop failure follows content-free cancellation/failure handling, and later full-resource closure is acknowledged independently. If closure is never confirmed, the coordinator blocks another session.
+
+`TargetService::submit(InsertOnce)` classifies submission failure as either **DefinitelyNotDispatched** or **OutcomeUnknown**. DefinitelyNotDispatched guarantees that no native mutation was attempted and yields CopyReady. OutcomeUnknown means a native API may have seen the request or partially changed the target and yields Uncertain with manual review required; it never retries or offers Copy before review. A successful submit means only that work was accepted and still needs an insertion-completion callback. Completion must be Inserted, a definite no-side-effect failure, or UncertainOrPartial. Adapters classify uncertainty conservatively: a failed OS call is not proof that no text was inserted.
 
 ### 6.1 Tauri command surface (internal only)
 
