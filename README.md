@@ -4,7 +4,7 @@ Outflow is an offline desktop dictation application in development. This reposit
 
 ## Current MVP baseline — 2026-11-08
 
-This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home, Welcome, Privacy, Permissions, Shortcuts, Try Dictation, Tray and App Status, and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Settings → General includes a browser-only permission readiness checklist with separate fixed development scenarios; it does not check or request permissions or connect native capabilities. The Recording state is not an active microphone session, and Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home, six-screen setup preview, and Settings; each setup screen has a read-only position label that identifies its place in the preview without tracking completion. It does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Settings → General includes a browser-only permission readiness checklist with separate fixed development scenarios; it does not check or request permissions or connect native capabilities. The Recording state is not an active microphone session, and Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
 
 This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
@@ -184,6 +184,27 @@ The planned native core and tray must remain active when a Settings window close
 Use **Back to Try Dictation** or **Return to Home**. Each destination heading receives focus. Leaving Try Dictation discards its fixed synthetic example, so returning to it starts with the example hidden. Home stays unmounted through setup; its volatile Copy Result and simulated acknowledgment are discarded, returning Home restores the unavailable default, and the App-owned lifecycle counter continues issuing distinct result IDs. Settings preferences and vocabulary preview state retain their existing in-memory behavior. **Home** and **Settings** remain the only primary navigation destinations; ordinary Settings opens General, and the explicit shortcut-details action continues to open Shortcuts.
 
 **Troubleshooting:** If **Continue to tray overview** is missing, confirm Vite is running with `npm run dev -- --host 127.0.0.1`, follow the setup steps in order, and reload the local preview. If a tray, background service, recording status, or microphone readiness is expected, that native functionality is not connected; use the page's explicit not-connected statement as the current status. If the Try Dictation sample appears after returning from Tray and App Status, navigate back through the page buttons; the step remounts with its sample hidden. Automated tests and narrow-width checks do not establish genuine 200% zoom or screen-reader behavior.
+
+### Six-step setup preview and position indicator (MVP-18)
+
+Install dependencies, run the frontend checks, and start the browser preview from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Follow **Home → Preview setup → Welcome → Review privacy → Privacy → Continue to permissions → Permissions → Continue to shortcuts → Shortcuts → Continue to Try Dictation → Try Dictation → Continue to tray overview → Tray and App Status**. Each setup page shows text in the form **Setup preview · Step N of 6 · Label** above its heading, with labels Welcome, Privacy, Permissions, Shortcuts, Try Dictation, and Tray and App Status in that order. The text is informational and read-only: it shows the current screen in this walkthrough, does not mark earlier steps complete, and does not save onboarding progress. Home and Settings do not show it. It adds no tab stop; navigation continues to focus the destination heading.
+
+Expected results: each page has one `h1` and one indicator with the matching number and label. Use the existing Back and Continue actions to move between pages; the application navigation remains Home and Settings. The indicator remains plain text, not a progress bar, completion state, or route control. The existing permission and shortcut pages remain previews; Try Dictation uses only its development-only synthetic example, and Tray and App Status continues to state that tray integration is not connected.
+
+At 320 CSS px the indicator text can wrap and should not widen the page. For a manual check, use browser responsive design tools to set the viewport width to 320 CSS px, then follow the same sequence and check for horizontal page overflow. A keyboard check should move focus from the activated navigation action directly to the destination `h1`, without stopping on the indicator. Automated tests cover rendered labels, order, focus, and control semantics; they do not count as spoken screen-reader testing or genuine 200% zoom. Record genuine zoom, reduced-motion, and screen-reader checks as unavailable when the environment does not support them.
+
+**Troubleshooting:** If the indicator is absent, confirm the preview is running and that the current page is one of the six setup screens; it is intentionally absent on Home and Settings. If the number or label is wrong, reload and follow the pages in order; the position is derived from the single static setup definition and is not saved. If native permission, keyboard, microphone, recording, or tray state is expected, those functions are not connected by this informational preview.
 
 ### Permission readiness checklist (MVP-11)
 

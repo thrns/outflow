@@ -1,6 +1,7 @@
 import AppHeader, { type AppView } from "./AppHeader";
 import { PageContainer } from "./PageContainer";
 import PrivacyOverview from "./PrivacyOverview";
+import SetupStepIndicator from "./SetupStepIndicator";
 
 type PrivacyStepPageProps = {
   onNavigate: (view: AppView) => void;
@@ -20,6 +21,7 @@ export default function PrivacyStepPage({
       <PageContainer>
         <AppHeader onNavigate={onNavigate} />
         <div className="home-heading-group">
+          <SetupStepIndicator view="privacy" />
           <h1 id="privacy-step-heading" ref={headingRef} tabIndex={-1}>
             Your privacy with Outflow
           </h1>

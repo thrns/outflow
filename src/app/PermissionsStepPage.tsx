@@ -1,6 +1,7 @@
 import AppHeader, { type AppView } from "./AppHeader";
 import { PageContainer } from "./PageContainer";
 import { PermissionReadinessChecklist } from "./PermissionReadinessChecklist";
+import SetupStepIndicator from "./SetupStepIndicator";
 
 type PermissionsStepPageProps = {
   onNavigate: (view: AppView) => void;
@@ -20,6 +21,7 @@ export default function PermissionsStepPage({
       <PageContainer>
         <AppHeader onNavigate={onNavigate} />
         <div className="home-heading-group">
+          <SetupStepIndicator view="permissions" />
           <h1 id="permissions-step-heading" ref={headingRef} tabIndex={-1}>
             Permissions for Outflow
           </h1>

@@ -1,5 +1,6 @@
 import AppHeader, { type AppView } from "./AppHeader";
 import { PageContainer } from "./PageContainer";
+import SetupStepIndicator from "./SetupStepIndicator";
 
 type WelcomePageProps = {
   onNavigate: (view: AppView) => void;
@@ -15,6 +16,7 @@ export default function WelcomePage({
       <PageContainer>
         <AppHeader onNavigate={onNavigate} />
         <div className="home-heading-group welcome-heading-group">
+          <SetupStepIndicator view="welcome" />
           <h1 id="welcome-heading" ref={headingRef} tabIndex={-1}>
             Welcome to Outflow
           </h1>

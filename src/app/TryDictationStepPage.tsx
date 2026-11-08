@@ -1,5 +1,6 @@
 import AppHeader, { type AppView } from "./AppHeader";
 import { PageContainer } from "./PageContainer";
+import SetupStepIndicator from "./SetupStepIndicator";
 import SyntheticDictationExample from "./SyntheticDictationExample";
 
 type TryDictationStepPageProps = {
@@ -20,6 +21,7 @@ export default function TryDictationStepPage({
       <PageContainer>
         <AppHeader onNavigate={onNavigate} />
         <div className="home-heading-group">
+          <SetupStepIndicator view="try-dictation" />
           <h1 id="try-dictation-heading" ref={headingRef} tabIndex={-1}>
             Try Dictation — preview
           </h1>

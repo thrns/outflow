@@ -1,5 +1,6 @@
 import AppHeader, { type AppView } from "./AppHeader";
 import { PageContainer } from "./PageContainer";
+import SetupStepIndicator from "./SetupStepIndicator";
 
 type TrayStatusStepPageProps = {
   onNavigate: (view: AppView) => void;
@@ -19,6 +20,7 @@ export default function TrayStatusStepPage({
       <PageContainer>
         <AppHeader onNavigate={onNavigate} />
         <div className="home-heading-group">
+          <SetupStepIndicator view="tray-status" />
           <h1 id="tray-status-heading" ref={headingRef} tabIndex={-1}>
             Tray and app status — preview
           </h1>

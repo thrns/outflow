@@ -2,6 +2,7 @@ import AppHeader, { type AppView } from "./AppHeader";
 import { PageContainer } from "./PageContainer";
 import { ShortcutCapabilityPanel } from "./ShortcutCapabilityPanel";
 import { ShortcutScenarioPreview } from "./ShortcutScenarioPreview";
+import SetupStepIndicator from "./SetupStepIndicator";
 
 type ShortcutSetupStepPageProps = {
   onNavigate: (view: AppView) => void;
@@ -23,6 +24,7 @@ export default function ShortcutSetupStepPage({
       <PageContainer>
         <AppHeader onNavigate={onNavigate} />
         <div className="home-heading-group">
+          <SetupStepIndicator view="shortcut-setup" />
           <h1 id="shortcut-setup-heading" ref={headingRef} tabIndex={-1}>
             Choose how dictation starts
           </h1>
