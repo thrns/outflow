@@ -232,6 +232,126 @@ body {
   margin-top: clamp(2rem, 5vw, 2.75rem);
 }
 
+.try-dictation-content {
+  display: grid;
+  min-width: 0;
+  max-width: 48rem;
+  gap: 1.25rem;
+  margin-top: clamp(2rem, 5vw, 2.75rem);
+}
+
+.try-dictation-workflow {
+  min-width: 0;
+}
+
+.try-dictation-workflow > h2,
+.synthetic-dictation-example > h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.try-dictation-stages {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding-inline-start: 1.5rem;
+}
+
+.try-dictation-stages li {
+  min-width: 0;
+  padding-inline-start: 0.25rem;
+  color: var(--card-foreground);
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.try-dictation-safety-note {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--foreground);
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.synthetic-dictation-example {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: clamp(1.125rem, 3vw, 1.5rem);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 1px 2px oklch(0.145 0 0 / 4%);
+}
+
+.synthetic-example-disclaimer {
+  margin: 0;
+  border-inline-start: 3px solid var(--primary);
+  padding: 0.625rem 0.75rem;
+  background: var(--muted);
+  color: var(--foreground);
+  line-height: 1.5;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.synthetic-example-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.synthetic-example-result {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.synthetic-example-result > label {
+  color: var(--card-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.synthetic-example-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 3.5rem;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font: inherit;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.synthetic-example-text:focus-visible {
+  border-color: var(--focus-strong);
+  outline: 2px solid var(--focus-strong);
+  outline-offset: 2px;
+}
+
+.synthetic-example-announcement {
+  min-height: 1.5em;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
 .shortcut-setup-capabilities {
   min-width: 0;
 }

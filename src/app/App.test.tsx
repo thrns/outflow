@@ -1641,6 +1641,22 @@ describe("Welcome setup introduction preview", () => {
     expect(screen.queryByRole("heading", { level: 1, name: "Home" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to Permissions" }));
     expect(screen.getByRole("heading", { level: 1, name: "Permissions for Outflow" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to shortcuts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to Try Dictation" }));
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Home" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show example text" }));
+    expect(screen.getByRole("textbox", { name: "Example text (read-only, selectable)" })).toHaveValue(
+      "So I met North Parkade at three.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Back to Shortcuts" }));
+    expect(screen.queryByRole("textbox", { name: /example text/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Choose how dictation starts" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to Try Dictation" }));
+    expect(screen.queryByRole("textbox", { name: /example text/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Shortcuts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Permissions" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Privacy" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Home" }));
@@ -1903,7 +1919,7 @@ describe("Shortcut setup explanation preview", () => {
     ).toBeVisible();
     expect(screen.getByRole("region", { name: "Global shortcut capability" })).toBeVisible();
     expect(screen.queryByRole("term", { name: /assigned shortcut/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /finish setup|start recording|enable shortcut|try dictation/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /finish setup|start recording|start dictation|enable shortcut/i })).not.toBeInTheDocument();
   });
 
   it("starts unconnected and unverified and marks all seven development scenarios simulated", () => {

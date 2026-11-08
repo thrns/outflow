@@ -6,6 +6,7 @@ import WelcomePage from "./WelcomePage";
 import PrivacyStepPage from "./PrivacyStepPage";
 import PermissionsStepPage from "./PermissionsStepPage";
 import ShortcutSetupStepPage from "./ShortcutSetupStepPage";
+import TryDictationStepPage from "./TryDictationStepPage";
 import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -73,6 +74,7 @@ export default function App() {
   const privacyHeading = useRef<HTMLHeadingElement | null>(null);
   const permissionsHeading = useRef<HTMLHeadingElement | null>(null);
   const shortcutSetupHeading = useRef<HTMLHeadingElement | null>(null);
+  const tryDictationHeading = useRef<HTMLHeadingElement | null>(null);
   const [selectedSection, setSelectedSection] =
     useState<SettingsSectionId>("general");
   const [startup, setStartup] = useState({ run_at_login: false });
@@ -111,7 +113,9 @@ export default function App() {
               ? privacyHeading.current
               : activeView === "permissions"
                 ? permissionsHeading.current
-                : shortcutSetupHeading.current;
+                : activeView === "shortcut-setup"
+                  ? shortcutSetupHeading.current
+                  : tryDictationHeading.current;
     heading?.focus();
   }, [activeView]);
 
@@ -387,6 +391,17 @@ export default function App() {
         }}
         onNavigate={navigateTo}
         onOpenShortcuts={() => navigateTo("settings", "shortcuts")}
+      />
+    );
+  }
+
+  if (activeView === "try-dictation") {
+    return (
+      <TryDictationStepPage
+        headingRef={(heading) => {
+          tryDictationHeading.current = heading;
+        }}
+        onNavigate={navigateTo}
       />
     );
   }

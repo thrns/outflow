@@ -5,7 +5,8 @@ export type AppView =
   | "welcome"
   | "privacy"
   | "permissions"
-  | "shortcut-setup";
+  | "shortcut-setup"
+  | "try-dictation";
 
 type AppHeaderProps = {
   currentPage?: AppPage;

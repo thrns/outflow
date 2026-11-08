@@ -75,6 +75,13 @@ export default function ShortcutSetupStepPage({
             >
               View shortcut details in Settings
             </button>
+            <button
+              className="home-open-settings-button"
+              onClick={() => onNavigate("try-dictation")}
+              type="button"
+            >
+              Continue to Try Dictation
+            </button>
           </div>
         </div>
       </PageContainer>

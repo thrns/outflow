@@ -141,6 +141,27 @@ For a manual check, use keyboard navigation to focus the scenario selector and m
 
 **Troubleshooting:** If the scenario selector is missing, confirm Vite is running in development mode; its absence in a production build is expected. If status checking is disabled, no native shortcut adapter is connected, which is the expected browser-preview state. Simulated capability values are not operating-system observations.
 
+### Try Dictation preview (MVP-16)
+
+Install dependencies, run the browser preview, and run the frontend checks from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Follow **Home → Preview setup → Review privacy → Continue to permissions → Continue to shortcuts → Continue to Try Dictation**. The page explains the intended **Start → Speak → Stop → Review** workflow. The browser preview cannot execute those native steps: it does not record audio, recognize speech, inspect a destination, insert text, or access the clipboard. Protected controls, changed focus, and uncertain insertion outcomes block insertion; an uncertain outcome must be reviewed and is never retried automatically.
+
+In Vite development mode only, **Show example text** reveals the fixed local sample “So I met North Parkade at three.” in a read-only, selectable field. The page labels it **Synthetic example — no speech was recorded or transcribed.** **Clear example** removes it. Neither action inserts, copies, sends, stores, or logs the sample. Navigating away discards the sample, and returning to the page starts empty. Production builds omit the fixture and both development controls and explain that native dictation is not connected.
+
+Use **Back to Shortcuts** to return and focus the Shortcut setup heading. **Return to Home** focuses Home and restores its unavailable default. **Home** and **Settings** remain the only primary navigation destinations; ordinary Settings navigation opens General, while **View shortcut details in Settings** opens Shortcuts.
+
+**Troubleshooting:** If Show example text is absent, confirm that Vite is running with `npm run dev`; the fixture and controls are intentionally absent from production assets. If the sample is not visible, activate **Show example text**. If native status, recording, or insertion is expected, those capabilities are not connected in this browser preview. Automated tests do not establish screen-reader, 200% zoom, or native desktop behavior.
+
 ### Permission readiness checklist (MVP-11)
 
 Run the browser preview from the repository root:
