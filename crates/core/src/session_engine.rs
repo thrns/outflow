@@ -37,6 +37,41 @@ impl Debug for SessionId {
     }
 }
 
+/// Checked attempt identifier scoped to one session's explicit Copy actions.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CopyAttemptId {
+    session_id: SessionId,
+    sequence: NonZeroU64,
+}
+
+impl CopyAttemptId {
+    fn new(session_id: SessionId, sequence: NonZeroU64) -> Self {
+        Self {
+            session_id,
+            sequence,
+        }
+    }
+
+    /// Session that issued this explicit Copy attempt.
+    pub const fn session_id(self) -> SessionId {
+        self.session_id
+    }
+
+    /// One-based attempt number within the session.
+    pub const fn sequence(self) -> u64 {
+        self.sequence.get()
+    }
+}
+
+impl Debug for CopyAttemptId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CopyAttemptId")
+            .field("session_id", &self.session_id)
+            .field("sequence", &self.sequence())
+            .finish()
+    }
+}
+
 /// Strictly increasing order shared by user and adapter events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventSequence(pub u64);
@@ -415,8 +450,13 @@ pub enum Effect {
     ShowCopyResult { session_id: SessionId, text: String },
     /// Clear a private preview.
     ClearPrivateResult { session_id: SessionId },
-    /// Ask for copy only after an explicit user action.
-    ExplicitCopyRequested { session_id: SessionId, text: String },
+    /// Ask for copy only after an explicit user action, with a checked
+    /// session-scoped attempt ID for matching the completion.
+    ExplicitCopyRequested {
+        session_id: SessionId,
+        attempt_id: CopyAttemptId,
+        text: String,
+    },
     /// Require manual review after uncertain insertion.
     RequireManualReview { session_id: SessionId },
     /// Dismiss a result and clear its volatile buffer.
@@ -470,7 +510,10 @@ pub trait SpeechBackend {
 ///
 /// InsertOnce must revalidate the captured target immediately before mutation.
 /// It must not paste blindly into the currently focused control. Clipboard
-/// behavior is deliberately outside this interface.
+/// behavior is deliberately outside this interface. A queue error guarantees
+/// that the request was not accepted. After acceptance, the adapter must report
+/// `UncertainOrPartial` whenever it cannot prove success or a harmless failure;
+/// it must never label an unknown side effect as definitely harmless.
 pub trait TargetService {
     /// Queues one target request without blocking the reducer.
     fn submit(&mut self, command: TargetCommand) -> Result<(), AdapterQueueError>;
@@ -552,11 +595,14 @@ pub enum EventKind {
     },
     /// User confirms the uncertainty warning was reviewed.
     UncertaintyReviewed { session_id: SessionId },
-    /// Explicit user action on the Copy button.
+    /// Explicit user action on the Copy button. A repeated request while one
+    /// attempt is pending is ignored and emits no second Copy effect.
     CopyResultRequested { session_id: SessionId },
-    /// Result of that explicit Copy action.
+    /// Result of that explicit Copy action. The attempt ID must match the
+    /// outstanding effect; stale and unsolicited acknowledgments are rejected.
     CopyCompleted {
         session_id: SessionId,
+        attempt_id: CopyAttemptId,
         outcome: CopyOutcome,
     },
     /// Explicit result, cancellation, or fault dismissal.
@@ -644,6 +690,10 @@ pub enum ReducerError {
     CancellationTooLate,
     /// Session state violated the one-attempt insertion invariant.
     InsertionAlreadyAttempted,
+    /// A Copy acknowledgment does not match the outstanding explicit attempt.
+    CopyAttemptMismatch,
+    /// The checked Copy attempt counter reached its limit.
+    CopyAttemptExhausted,
 }
 
 impl Display for ReducerError {
@@ -660,6 +710,10 @@ impl Display for ReducerError {
             Self::NonMonotonicPartialRevision => "partial revision is stale or duplicated",
             Self::CancellationTooLate => "session cancellation is too late",
             Self::InsertionAlreadyAttempted => "insertion was already attempted for this session",
+            Self::CopyAttemptMismatch => {
+                "copy acknowledgment does not match the outstanding attempt"
+            }
+            Self::CopyAttemptExhausted => "copy attempt identifier space is exhausted",
         })
     }
 }
@@ -675,6 +729,8 @@ pub enum IgnoredEvent {
     AlreadyStopping,
     /// Key-up does not stop toggle mode.
     ToggleKeyUp,
+    /// A Copy request arrived while the current explicit attempt is pending.
+    CopyAlreadyPending,
     /// Dismiss was requested while idle.
     AlreadyIdle,
 }
@@ -724,6 +780,8 @@ struct SessionData {
     target_verification_pending: bool,
     final_text: Option<String>,
     insertion_attempted: bool,
+    next_copy_attempt: Option<u64>,
+    outstanding_copy_attempt: Option<CopyAttemptId>,
 }
 
 impl SessionData {
@@ -741,6 +799,8 @@ impl SessionData {
             target_verification_pending: false,
             final_text: None,
             insertion_attempted: false,
+            next_copy_attempt: Some(1),
+            outstanding_copy_attempt: None,
         }
     }
 }
@@ -865,8 +925,9 @@ impl SessionReducer {
             EventKind::CopyResultRequested { session_id } => self.copy_requested(session_id),
             EventKind::CopyCompleted {
                 session_id,
+                attempt_id,
                 outcome,
-            } => self.copy_completed(session_id, outcome),
+            } => self.copy_completed(session_id, attempt_id, outcome),
             EventKind::Dismiss { session_id } => self.dismiss(session_id),
             _ => Err(ReducerError::InvalidTransition),
         }
@@ -1170,14 +1231,27 @@ impl SessionReducer {
         if self.state != SessionState::CopyReady {
             return Err(ReducerError::InvalidTransition);
         }
-        let text = self
-            .session
+        let session = self.session.as_mut().ok_or(ReducerError::SessionClosed)?;
+        if session.outstanding_copy_attempt.is_some() {
+            return Ok(DispatchResult::ignored(IgnoredEvent::CopyAlreadyPending));
+        }
+        let text = session
+            .final_text
             .as_ref()
-            .and_then(|session| session.final_text.clone())
+            .cloned()
             .ok_or(ReducerError::InvalidTransition)?;
+        let sequence = session
+            .next_copy_attempt
+            .ok_or(ReducerError::CopyAttemptExhausted)?;
+        let sequence_nonzero =
+            NonZeroU64::new(sequence).ok_or(ReducerError::CopyAttemptExhausted)?;
+        session.next_copy_attempt = sequence.checked_add(1);
+        let attempt_id = CopyAttemptId::new(id, sequence_nonzero);
+        session.outstanding_copy_attempt = Some(attempt_id);
         Ok(DispatchResult::applied(vec![
             Effect::ExplicitCopyRequested {
                 session_id: id,
+                attempt_id,
                 text,
             },
         ]))
@@ -1186,11 +1260,24 @@ impl SessionReducer {
     fn copy_completed(
         &mut self,
         id: SessionId,
+        attempt_id: CopyAttemptId,
         outcome: CopyOutcome,
     ) -> Result<DispatchResult, ReducerError> {
         self.active_session(id)?;
         if self.state != SessionState::CopyReady {
             return Err(ReducerError::InvalidTransition);
+        }
+        if attempt_id.session_id() != id
+            || self
+                .session
+                .as_ref()
+                .and_then(|session| session.outstanding_copy_attempt)
+                != Some(attempt_id)
+        {
+            return Err(ReducerError::CopyAttemptMismatch);
+        }
+        if let Some(session) = self.session.as_mut() {
+            session.outstanding_copy_attempt = None;
         }
         match outcome {
             CopyOutcome::Succeeded => {

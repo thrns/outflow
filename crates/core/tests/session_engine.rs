@@ -1094,31 +1094,136 @@ fn uncertain_insertion_requires_review_and_has_no_automatic_retry_or_copy() {
 }
 
 #[test]
-fn explicit_copy_is_the_only_copy_effect_and_dismissal_clears_volatile_result() {
+fn explicit_copy_is_correlated_single_flight_and_retryable_after_failure() {
     let mut h = Harness::new(HoldReleaseCapability::Supported);
     let id = h.listen(RecordingMode::PushToTalk);
     make_copy_ready(&mut h, id, InsertionOutcome::Unsupported);
     assert!(!h.executor.trace.contains(&"ExplicitCopyRequested"));
-    let copied = h
+
+    let first = h
         .send(EventKind::CopyResultRequested { session_id: id })
         .unwrap();
-    assert_effect_labels(&copied.effects, &["ExplicitCopyRequested"]);
+    assert_effect_labels(&first.effects, &["ExplicitCopyRequested"]);
+    let first_attempt = match first.effects.as_slice() {
+        [Effect::ExplicitCopyRequested { attempt_id, .. }] => *attempt_id,
+        _ => panic!("one explicit Copy action must issue one correlated attempt"),
+    };
+    let repeated = h
+        .send(EventKind::CopyResultRequested { session_id: id })
+        .unwrap();
+    assert_eq!(
+        repeated.outcome,
+        DispatchOutcome::Ignored(IgnoredEvent::CopyAlreadyPending)
+    );
+    assert!(repeated.effects.is_empty());
+
     let failed = h
         .send(EventKind::CopyCompleted {
             session_id: id,
+            attempt_id: first_attempt,
             outcome: CopyOutcome::Failed,
         })
         .unwrap();
     assert_effect_labels(&failed.effects, &["CopyFailed"]);
     assert_state(&h, SessionState::CopyReady);
-    let dismissed = h
-        .send(EventKind::Dismiss {
-            session_id: Some(id),
+
+    let retry = h
+        .send(EventKind::CopyResultRequested { session_id: id })
+        .unwrap();
+    let second_attempt = match retry.effects.as_slice() {
+        [Effect::ExplicitCopyRequested { attempt_id, .. }] => *attempt_id,
+        _ => panic!("a failed Copy allows a new explicit attempt"),
+    };
+    assert_ne!(first_attempt, second_attempt);
+    assert_eq!(first_attempt.session_id(), id);
+    assert_eq!(second_attempt.sequence(), first_attempt.sequence() + 1);
+    assert_eq!(
+        h.send(EventKind::CopyCompleted {
+            session_id: id,
+            attempt_id: first_attempt,
+            outcome: CopyOutcome::Succeeded,
+        })
+        .unwrap_err(),
+        ReducerError::CopyAttemptMismatch
+    );
+    assert_state(&h, SessionState::CopyReady);
+    let completed = h
+        .send(EventKind::CopyCompleted {
+            session_id: id,
+            attempt_id: second_attempt,
+            outcome: CopyOutcome::Succeeded,
         })
         .unwrap();
-    assert_effect_labels(&dismissed.effects, &["DismissAndClearResult"]);
+    assert_effect_labels(&completed.effects, &["DismissAndClearResult"]);
     assert_state(&h, SessionState::Idle);
     assert_eq!(h.reducer.status().session_id, None);
+}
+
+#[test]
+fn copy_completion_without_current_request_is_rejected_by_attempt_correlation() {
+    let mut h = Harness::new(HoldReleaseCapability::Supported);
+    let first_id = h.listen(RecordingMode::PushToTalk);
+    make_copy_ready(&mut h, first_id, InsertionOutcome::Unsupported);
+    let first_request = h
+        .send(EventKind::CopyResultRequested {
+            session_id: first_id,
+        })
+        .unwrap();
+    let first_attempt = match first_request.effects.as_slice() {
+        [Effect::ExplicitCopyRequested { attempt_id, .. }] => *attempt_id,
+        _ => panic!("explicit Copy must issue one attempt"),
+    };
+    h.send(EventKind::CopyCompleted {
+        session_id: first_id,
+        attempt_id: first_attempt,
+        outcome: CopyOutcome::Failed,
+    })
+    .unwrap();
+    h.send(EventKind::Dismiss {
+        session_id: Some(first_id),
+    })
+    .unwrap();
+
+    let second_id = h.listen(RecordingMode::PushToTalk);
+    make_copy_ready(&mut h, second_id, InsertionOutcome::Unsupported);
+    assert_eq!(
+        h.send(EventKind::CopyCompleted {
+            session_id: second_id,
+            attempt_id: first_attempt,
+            outcome: CopyOutcome::Succeeded,
+        })
+        .unwrap_err(),
+        ReducerError::CopyAttemptMismatch
+    );
+    assert_state(&h, SessionState::CopyReady);
+}
+
+#[test]
+fn late_copy_acknowledgment_after_dismissal_is_rejected() {
+    let mut h = Harness::new(HoldReleaseCapability::Supported);
+    let id = h.listen(RecordingMode::PushToTalk);
+    make_copy_ready(&mut h, id, InsertionOutcome::Unsupported);
+    let request = h
+        .send(EventKind::CopyResultRequested { session_id: id })
+        .unwrap();
+    let attempt_id = match request.effects.as_slice() {
+        [Effect::ExplicitCopyRequested { attempt_id, .. }] => *attempt_id,
+        _ => panic!("explicit Copy must issue one attempt"),
+    };
+    h.send(EventKind::Dismiss {
+        session_id: Some(id),
+    })
+    .unwrap();
+    assert_eq!(
+        h.send(EventKind::CopyCompleted {
+            session_id: id,
+            attempt_id,
+            outcome: CopyOutcome::Succeeded,
+        })
+        .unwrap_err(),
+        ReducerError::StaleSession
+    );
+    assert_state(&h, SessionState::Idle);
 }
 
 #[test]
@@ -1126,11 +1231,17 @@ fn explicit_copy_success_clears_result_and_returns_idle() {
     let mut h = Harness::new(HoldReleaseCapability::Supported);
     let id = h.listen(RecordingMode::PushToTalk);
     make_copy_ready(&mut h, id, InsertionOutcome::TargetChanged);
-    h.send(EventKind::CopyResultRequested { session_id: id })
+    let request = h
+        .send(EventKind::CopyResultRequested { session_id: id })
         .unwrap();
+    let attempt_id = match request.effects.as_slice() {
+        [Effect::ExplicitCopyRequested { attempt_id, .. }] => *attempt_id,
+        _ => panic!("explicit Copy must issue one attempt"),
+    };
     let result = h
         .send(EventKind::CopyCompleted {
             session_id: id,
+            attempt_id,
             outcome: CopyOutcome::Succeeded,
         })
         .unwrap();

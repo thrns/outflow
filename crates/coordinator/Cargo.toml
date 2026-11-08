@@ -1,0 +1,8 @@
+[package]
+name = "outflow-coordinator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+outflow-core = { path = "../core" }
+outflow-settings = { path = "../settings" }

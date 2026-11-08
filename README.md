@@ -1,10 +1,10 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace with local settings persistence and a platform-independent dictation session reducer, and a development-only native macOS microphone probe. The reducer can be exercised immediately through a synthetic example and mock effects. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
 
 ## Current MVP baseline — 2026-11-07
 
-This checkout is not a shipping desktop app. `npm run dev` opens the browser-only Settings preview; it does not request microphone access or connect the React UI to Rust. The Rust session reducer is platform-independent logic exercised by synthetic events; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+This checkout is not a shipping desktop app. `npm run dev` opens the browser-only Settings preview; it does not request microphone access or connect the React UI to Rust. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
 
 This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
@@ -33,31 +33,39 @@ bash -n scripts/build_macos_mic_probe.sh scripts/run_macos_mic_probe.sh scripts/
 git diff --check
 ```
 
-### Synthetic Rust session engine (MVP-04)
+### Rust session effect coordinator (MVP-05)
 
-From the repository root, run the platform-independent session lifecycle example:
+From the repository root, run the deterministic, platform-independent coordinator example:
 
 ```sh
-cargo run -p outflow-settings --example session_engine --locked
+cargo run -p outflow-coordinator --example session_coordinator --locked
 ```
 
-It demonstrates push-to-talk start, synthetic model/microphone acknowledgments, two private partial revisions, final cleanup and one simulated insertion; then a changed target with explicit mock Copy and dismissal; and a cancelled session whose late final is rejected. The effect trace is deterministic and content-free:
+The coordinator routes user actions, mock speech callbacks, guarded target outcomes, deterministic Clean-mode cleanup, private previews, Copy Result, and explicit Copy acknowledgments. The example covers push-to-talk insertion, a changed-target Copy success, Copy failure followed by a new explicit retry, and cancellation with a rejected late callback. Its output is content-free:
 
 ```text
-Outflow Rust session engine example (synthetic)
-Native shortcuts: NOT INSTALLED
-Session 1: Idle; insertion_attempted=true
+Outflow session coordinator example (synthetic)
+Push-to-talk: Idle; outcome=guarded_insertion_succeeded
   effects: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, AttemptInsertionOnce, ClearPrivateResult
-Session 2: CopyReady -> Idle; target changed; explicit Copy requested
-  effects: RequestModelPreparation, RequestMicrophoneStart, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, ShowCopyResult, ExplicitCopyRequested, DismissAndClearResult
-Session 3: Cancelled; late final rejected=true
+Changed target: CopyReady -> Idle; outcome=explicit_copy_succeeded
+  effects: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, ShowCopyResult, ExplicitCopyRequested, DismissAndClearResult
+Copy retry: CopyReady -> CopyReady -> Idle; outcome=first_failed_text_retained_then_retry_succeeded
+  effects: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, ShowCopyResult, ExplicitCopyRequested, CopyFailed, ExplicitCopyRequested, DismissAndClearResult
+Pending cancellation: Cancelled; outcome=late_ack_rejected:true; cleanup=RESOLVED
   effects: RequestModelPreparation, RequestAsrCancellation, ClearPrivateResult
-Native model, microphone, insertion, clipboard, persistence, network: NOT USED
+Native microphone, model, insertion, clipboard, UI shell, network, persistence: NOT USED
 ```
 
-The mock insertion and Copy effects only record labels; no clipboard is changed and no transcript is printed or persisted. Run `cargo test -p outflow-core --locked` and `cargo test -p outflow-settings --locked` for the reducer, mock-effect executor, cleanup handoff and settings integrity suites. The complete workspace/frontend/script commands are listed above.
+Run focused coordinator and reducer coverage with:
 
-Troubleshooting: run from the checkout root with the repository's pinned Rust toolchain installed. The example does not need Tauri, native model assets, microphone permission or a desktop session. A build failure mentioning a missing package should be resolved through the checked-in lockfile and toolchain; do not install a native runtime or model for this synthetic example.
+```sh
+cargo test -p outflow-coordinator --locked
+cargo test -p outflow-core --test session_engine --locked
+```
+
+The coordinator suite covers ordered PTT/toggle effects, failure routing, stale callbacks, Copy attempt correlation, immutable settings snapshots, uncertain insertion review, content-free status, cleanup acknowledgments, and 100 repeated mock sessions. The example's Copy and insertion adapters are deterministic in-memory mocks; they do not touch the system clipboard or any target app. No microphone, Moonshine, model assets, Tauri shell, OS shortcut, native insertion, network or persistence is used. T-010 remains blocked, and T-023, T-031, T-034, T-042 and mapped acceptance criteria remain open.
+
+Troubleshooting: run from the checkout root with the repository's pinned Rust toolchain installed. The example needs no Tauri runtime, model files, microphone permission or desktop session.
 
 ### Native macOS probe limits and recovery
 
