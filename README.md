@@ -1,10 +1,10 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React Home and Settings preview, including synthetic session-status and Copy Result scenarios, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
 
 ## Current MVP baseline — 2026-11-07
 
-This checkout is not a shipping desktop app. `npm run dev` opens the browser-only Settings preview; it does not request microphone access or connect the React UI to Rust. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Its Recording state is not an active microphone session, and its Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
 
 This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
@@ -15,7 +15,9 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open the local URL printed by Vite. The Home view identifies itself as a **Development preview** and says **Native dictation is not connected**. No microphone prompt or recording control should appear.
+Open the local URL printed by Vite. On Home, use **Inspect synthetic scenarios** → **Scenario** to inspect the status states, CopyReady reasons, uncertain insertion review, and retained-result Copy failure feedback. Every result is fixed synthetic text. Scenario changes discard the prior in-memory result; Dismiss clears it. The Copy action stays disabled because the browser preview has no clipboard adapter. The separately labeled **Simulate Copy action** appears only in the Copy failure scenario and changes preview feedback without touching the system clipboard. The default Home view still says **Native dictation is not connected**; the Recording scenario is explicitly synthetic and does not activate a microphone.
+
+Settings remains available from the existing navigation. Neither view connects to Rust or native dictation.
 
 Run the repository checks from the project root:
 
@@ -75,6 +77,24 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test
 cargo run -p outflow-coordinator --example session_coordinator --locked
 git diff --check
 ```
+
+### MVP-07 Home session status and Copy Result preview
+
+Run the browser preview with:
+
+```sh
+npm run dev -- --host 127.0.0.1
+```
+
+From Home, open **Inspect synthetic scenarios** and select a scenario. Inspect Preparing, Recording, Finalizing, Inserted, No speech, Changed target, Protected target, Uncertain insertion, Copy failure, and Recoverable error. In Uncertain insertion, use **I have reviewed the destination** before the Copy Result panel appears. Try **Select All** and **Dismiss** with the keyboard. In Copy failure, **Simulate Copy action** presents a labeled failure while preserving the result. No scenario requests microphone access, starts a model, registers a shortcut, inserts text, writes a clipboard, or stores result history.
+
+The selector and simulation action exist only in Vite development mode. In production builds, the selector is absent. A disabled Copy action in the browser is expected until an explicitly connected adapter supplies a correlated request handler and acknowledgment.
+
+Troubleshooting:
+
+- If **Inspect synthetic scenarios** is missing, confirm Vite is running with `npm run dev -- --host 127.0.0.1`; production builds intentionally omit the controls.
+- If Copy is disabled, that is expected in this browser-only preview. No browser clipboard API is called.
+- If switching scenarios removes a result, that is expected: only one synthetic scenario is held in memory, and no transcript history is restored after remount.
 
 The coordinator suite checks delayed, failed, duplicate, and stale stop callbacks; separation of capture release from full speech-resource closure; cancellation and device-fault races; definite versus unknown insertion submission; delayed/duplicate insertion callbacks; Copy attempt correlation; content-free diagnostics; and 100 completed synthetic sessions with no remaining callbacks or open capture. Adapter tests are synthetic only: they do not open a microphone, run Moonshine, call Tauri, insert into an OS target, or access the clipboard. No model assets, network, or transcript persistence are used. Mock evidence does not complete T-010, T-011, T-023, T-031, T-034, T-042, T-048, or mapped acceptance criteria.
 

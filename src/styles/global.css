@@ -1012,3 +1012,234 @@ body {
     --ring: oklch(0.556 0 0);
   }
 }
+
+/* Home session and Copy Result preview use the existing neutral card system. */
+.home-scenario-card {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem clamp(1rem, 3vw, 1.5rem);
+  background: var(--muted);
+  color: var(--card-foreground);
+}
+
+.home-scenario-card h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.home-scenario-description {
+  max-width: 68ch;
+  margin: 0.375rem 0 0.5rem;
+  color: var(--muted-foreground);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.home-scenario-label,
+.copy-result-field-label {
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.home-scenario-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+
+.session-status-simulation-note {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.75rem 0 0;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-wrap: pretty;
+}
+
+.copy-result-reason {
+  min-width: 0;
+  margin: 0.75rem 0 1rem;
+  border-inline-start: 3px solid var(--border);
+  padding-inline-start: 0.75rem;
+  color: var(--foreground);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.copy-result-field-label {
+  display: block;
+  margin-bottom: 0.375rem;
+}
+
+.copy-result-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 8rem;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  resize: vertical;
+}
+
+.copy-result-memory-note,
+.copy-result-clipboard-warning,
+.copy-result-unavailable-note,
+.copy-result-feedback {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.copy-result-protected-acknowledgment {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.625rem;
+  margin-top: 1rem;
+  line-height: 1.5;
+}
+
+.copy-result-protected-acknowledgment input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0.1875rem 0 0;
+  accent-color: var(--primary);
+}
+
+.copy-result-clipboard-warning {
+  margin-top: 0.75rem;
+}
+
+.copy-result-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.copy-result-action {
+  display: inline-flex;
+  min-width: 6rem;
+  min-height: 2.5rem;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.875rem;
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.copy-result-action:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.copy-result-action:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.copy-result-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.copy-result-action-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.copy-result-action-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--primary) 88%, var(--background));
+  color: var(--primary-foreground);
+}
+
+.copy-result-simulation {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.copy-result-simulation p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.copy-result-simulation .copy-result-action {
+  flex: none;
+}
+
+.uncertain-review-card {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+}
+
+.uncertain-review-card .home-status-label {
+  margin-bottom: 0;
+}
+
+.home-scenario-select:focus-visible,
+.copy-result-text:focus-visible,
+.copy-result-protected-acknowledgment input:focus-visible,
+.copy-result-action:focus-visible {
+  outline: 2px solid var(--focus-strong);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copy-result-action {
+    transition: none;
+  }
+
+  .copy-result-action:active:not(:disabled) {
+    transform: none;
+  }
+}

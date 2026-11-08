@@ -417,6 +417,9 @@ release gates remain open.
 - [ ] **T-053 — Build vocabulary/settings editor.** Deps: T-038,T-039,T-051. Accessible CRUD, Clean/Verbatim toggle, error feedback and keyboard navigation. [F-08,F-11/C-01,C-08/AC-08]
 - [ ] **T-054 — Implement complete onboarding demo flow.** Deps: T-041,T-048,T-051. First-run test field, offline instructions and recovery; screenshot with synthetic content. [F-01,F-02/C-01/AC-01]
 - [ ] **T-055 — Screen reader and keyboard audit.** Deps: T-046,T-051,T-053,T-054. VoiceOver/Narrator-Orca where available, focus order/200% zoom/contrast/labels. [F-11/C-01/AC-11]
+
+MVP-07 adds a browser-only Home status and Copy Result presentation preview with synthetic fixtures and component tests. It does not complete T-046, T-047, T-050, or T-055: no native UI shell, clipboard adapter, target insertion, or assistive-technology audit is connected. AC-09, AC-10, AC-11, and release gates remain unchecked. See [`evidence/mvp/mvp-07-home-session-ui.md`](../evidence/mvp/mvp-07-home-session-ui.md).
+
 - [ ] **T-056 — Verify failure sequences.** Deps: T-048,T-055. Manual and scripted focus-loss, secure field, mic unplug, model error, collision; no content persistence. [F-13/C-07/AC-13]
 
 ### M4 — Privacy, resource and reliability hardening
@@ -479,7 +482,7 @@ A feature F-xx is **Done** only when: (1) every mapped T-xxx is checked, (2) its
 | M0 feasibility | T-001–T-010 | In progress | Native runtime identity is verified on one macOS arm64 dev build. Prompt 79E's separate development app tree peaked at 919,814,144 bytes on an 18 GB host; older native-only default-thread runs peaked at 1,010,614,272 bytes. No ready WER fixture, approved physical 4 GB reference machine, Tiny run, installed-size result, completed license approval, or full production-app resource evidence. Decimal/binary “4 GB” boundary needs owner clarification; approved class allowlist remains empty. | `evidence/mvp/prompt-79e-detailed-implementation-handoff.md`; `evidence/mvp/prompt-79e-timed-fixture-measurements.json`; `evidence/mvp/prompt-79d-detailed-implementation-handoff.md`; `evidence/model/MODEL_DECISION.md` |
 | M1 foundation | T-011–T-024 | In progress | T-001/T-010 prerequisites and remaining M1 tasks; MVP-06 mock coordination does not unblock production integration | `evidence/build/`; `evidence/mvp/mvp-06-async-safety.md` |
 | M2 local speech | T-025–T-040 | Not started | Production tasks still require M1 and approved Rust/CPAL/Tauri integration. Prompts 79E/F are a separate Objective-C++ feasibility probe; they do not complete T-025–T-034 or AC-06. | `evidence/asr/`; `evidence/mvp/prompt-79e-detailed-implementation-handoff.md`; `evidence/mvp/prompt-79f-detailed-implementation-handoff.md`; `evidence/mvp/prompt-79-macos-dictation.md` |
-| M3 OS UX | T-041–T-056 | Not started | Requires M2 interfaces | `evidence/platform/` |
+| M3 OS UX | T-041–T-056 | In progress (browser presentation preview only) | Native OS UX still requires M2 interfaces and the T-010/T-011 prerequisites. MVP-07 mock UI does not complete the M3 task checkboxes or acceptance criteria. | `evidence/platform/`; `evidence/mvp/mvp-07-home-session-ui.md` |
 | M4 hardening | T-061–T-070 | Not started | Requires E2E | `evidence/perf/` |
 | M5 release | T-071–T-080 | Not started | Requires memory/quality gate | `evidence/release/` |
 | M6 V1 | T-081–T-085 | Deferred | Requires signed MVP release | `evidence/v1/` |
