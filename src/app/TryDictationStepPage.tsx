@@ -82,6 +82,13 @@ export default function TryDictationStepPage({
               Back to Shortcuts
             </button>
             <button
+              className="app-navigation-button"
+              onClick={() => onNavigate("tray-status")}
+              type="button"
+            >
+              Continue to tray overview
+            </button>
+            <button
               className="home-open-settings-button"
               onClick={() => onNavigate("home")}
               type="button"

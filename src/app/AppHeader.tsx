@@ -6,7 +6,8 @@ export type AppView =
   | "privacy"
   | "permissions"
   | "shortcut-setup"
-  | "try-dictation";
+  | "try-dictation"
+  | "tray-status";
 
 type AppHeaderProps = {
   currentPage?: AppPage;

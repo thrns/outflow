@@ -7,6 +7,7 @@ import PrivacyStepPage from "./PrivacyStepPage";
 import PermissionsStepPage from "./PermissionsStepPage";
 import ShortcutSetupStepPage from "./ShortcutSetupStepPage";
 import TryDictationStepPage from "./TryDictationStepPage";
+import TrayStatusStepPage from "./TrayStatusStepPage";
 import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -75,6 +76,7 @@ export default function App() {
   const permissionsHeading = useRef<HTMLHeadingElement | null>(null);
   const shortcutSetupHeading = useRef<HTMLHeadingElement | null>(null);
   const tryDictationHeading = useRef<HTMLHeadingElement | null>(null);
+  const trayStatusHeading = useRef<HTMLHeadingElement | null>(null);
   const [selectedSection, setSelectedSection] =
     useState<SettingsSectionId>("general");
   const [startup, setStartup] = useState({ run_at_login: false });
@@ -115,7 +117,9 @@ export default function App() {
                 ? permissionsHeading.current
                 : activeView === "shortcut-setup"
                   ? shortcutSetupHeading.current
-                  : tryDictationHeading.current;
+                  : activeView === "try-dictation"
+                    ? tryDictationHeading.current
+                    : trayStatusHeading.current;
     heading?.focus();
   }, [activeView]);
 
@@ -400,6 +404,17 @@ export default function App() {
       <TryDictationStepPage
         headingRef={(heading) => {
           tryDictationHeading.current = heading;
+        }}
+        onNavigate={navigateTo}
+      />
+    );
+  }
+
+  if (activeView === "tray-status") {
+    return (
+      <TrayStatusStepPage
+        headingRef={(heading) => {
+          trayStatusHeading.current = heading;
         }}
         onNavigate={navigateTo}
       />

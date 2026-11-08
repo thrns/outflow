@@ -40,6 +40,17 @@ describe("Try Dictation preview", () => {
     ).toBeVisible();
   });
 
+  it("offers Continue to tray overview without removing existing actions", () => {
+    render(<App />);
+    openTryDictation();
+
+    expect(
+      screen.getByRole("button", { name: "Continue to tray overview" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Back to Shortcuts" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Return to Home" })).toBeVisible();
+  });
+
   it("opens the page, focuses its single h1, and keeps Home unmounted", () => {
     render(<App />);
     openTryDictation();

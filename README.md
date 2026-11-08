@@ -1,10 +1,10 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React Home, Welcome, Privacy, Permissions, and Settings preview, including synthetic session-status, Copy Result, and permission readiness scenarios, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React Home, Welcome, Privacy, Permissions, Shortcuts, Try Dictation, Tray and App Status, and Settings preview, including synthetic session-status, Copy Result, and permission readiness scenarios; a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator; and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
 
 ## Current MVP baseline — 2026-11-08
 
-This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home, Welcome, Privacy, and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Settings → General includes a browser-only permission readiness checklist with separate fixed development scenarios; it does not check or request permissions or connect native capabilities. The Recording state is not an active microphone session, and Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home, Welcome, Privacy, Permissions, Shortcuts, Try Dictation, Tray and App Status, and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Settings → General includes a browser-only permission readiness checklist with separate fixed development scenarios; it does not check or request permissions or connect native capabilities. The Recording state is not an active microphone session, and Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
 
 This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
@@ -161,6 +161,29 @@ In Vite development mode only, **Show example text** reveals the fixed local sam
 Use **Back to Shortcuts** to return and focus the Shortcut setup heading. **Return to Home** focuses Home and restores its unavailable default. **Home** and **Settings** remain the only primary navigation destinations; ordinary Settings navigation opens General, while **View shortcut details in Settings** opens Shortcuts.
 
 **Troubleshooting:** If Show example text is absent, confirm that Vite is running with `npm run dev`; the fixture and controls are intentionally absent from production assets. If the sample is not visible, activate **Show example text**. If native status, recording, or insertion is expected, those capabilities are not connected in this browser preview. Automated tests do not establish screen-reader, 200% zoom, or native desktop behavior.
+
+### Tray and app status preview (MVP-17)
+
+From the repository root, install the locked dependencies, run the frontend checks, and start the browser preview:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Follow **Home → Preview setup → Review privacy → Continue to permissions → Continue to shortcuts → Continue to Try Dictation → Continue to tray overview**. This last preview step explains the planned **Tray Ready** stage; reaching it does not finish setup. Its explicit status is **System tray integration is not connected.** The planned Start / Stop, Open Settings, Status / Permissions, and Quit functions are an informational list, not active menu items.
+
+The screen lists the separate native prerequisites: valid bundled offline speech-model assets and working recognition; microphone permission and an available input device; native recording and session lifecycle integration; an implemented recording control; safe target handling or an explicit Copy-only fallback; and successful platform integration and testing. Opening Settings does not prove recording works, and registering a shortcut alone does not establish microphone, device, model, or recognition readiness. Text insertion can remain unavailable while recording works; protected or unsupported destinations must never receive forced insertion.
+
+The planned native core and tray must remain active when a Settings window closes, while resources owned by the Settings window are released. Closing this browser tab does not keep a native service running: this preview creates no background process or tray icon, controls no microphone or native window lifecycle, and performs no readiness checks. It saves no setup progress or tray state.
+
+Use **Back to Try Dictation** or **Return to Home**. Each destination heading receives focus. Leaving Try Dictation discards its fixed synthetic example, so returning to it starts with the example hidden. Home stays unmounted through setup; its volatile Copy Result and simulated acknowledgment are discarded, returning Home restores the unavailable default, and the App-owned lifecycle counter continues issuing distinct result IDs. Settings preferences and vocabulary preview state retain their existing in-memory behavior. **Home** and **Settings** remain the only primary navigation destinations; ordinary Settings opens General, and the explicit shortcut-details action continues to open Shortcuts.
+
+**Troubleshooting:** If **Continue to tray overview** is missing, confirm Vite is running with `npm run dev -- --host 127.0.0.1`, follow the setup steps in order, and reload the local preview. If a tray, background service, recording status, or microphone readiness is expected, that native functionality is not connected; use the page's explicit not-connected statement as the current status. If the Try Dictation sample appears after returning from Tray and App Status, navigate back through the page buttons; the step remounts with its sample hidden. Automated tests and narrow-width checks do not establish genuine 200% zoom or screen-reader behavior.
 
 ### Permission readiness checklist (MVP-11)
 

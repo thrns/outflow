@@ -1650,17 +1650,19 @@ describe("Welcome setup introduction preview", () => {
     expect(screen.getByRole("textbox", { name: "Example text (read-only, selectable)" })).toHaveValue(
       "So I met North Parkade at three.",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Back to Shortcuts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to tray overview" }));
     expect(screen.queryByRole("textbox", { name: /example text/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Choose how dictation starts" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Continue to Try Dictation" }));
-    expect(screen.queryByRole("textbox", { name: /example text/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Back to Shortcuts" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back to Permissions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back to Privacy" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back to Home" }));
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Home" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Try Dictation" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Try Dictation — preview" })).toHaveFocus();
+    expect(screen.queryByRole("textbox", { name: /example text/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to tray overview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Return to Home" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Home" })).toHaveFocus();
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Scenario" })).toHaveValue(
       "unavailable",
     );
@@ -2056,7 +2058,9 @@ describe("Shortcut setup explanation preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Home" }));
 
     openShortcutSetup();
-    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to Try Dictation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to tray overview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Return to Home" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(

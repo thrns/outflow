@@ -240,6 +240,64 @@ body {
   margin-top: clamp(2rem, 5vw, 2.75rem);
 }
 
+.tray-status-content {
+  display: grid;
+  min-width: 0;
+  max-width: 48rem;
+  gap: 1.25rem;
+  margin-top: clamp(2rem, 5vw, 2.75rem);
+}
+
+.tray-status-section {
+  min-width: 0;
+}
+
+.tray-status-section > h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.tray-status-section > p,
+.tray-status-statement,
+.tray-status-list li {
+  max-width: 64ch;
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.tray-status-section > p {
+  margin: 0.75rem 0 0;
+}
+
+.tray-status-statement {
+  margin: 0;
+  border-inline-start: 3px solid var(--border);
+  padding: 0.625rem 0.75rem;
+  color: var(--foreground);
+}
+
+.tray-status-list {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding-inline-start: 1.5rem;
+}
+
+.tray-status-list li {
+  min-width: 0;
+  padding-inline-start: 0.25rem;
+}
+
+.tray-status-boundary {
+  color: var(--muted-foreground);
+}
+
 .try-dictation-workflow {
   min-width: 0;
 }
