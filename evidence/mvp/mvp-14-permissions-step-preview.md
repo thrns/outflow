@@ -11,7 +11,7 @@ owner: Codex coordinator
 branch: feature/mvp-permissions-step-preview
 worktree: /private/tmp/outflow-mvp-permissions-step-preview
 base_commit: 99092009ca8e85b611c9cb35d41c79497d517de4
-implementation_commit: PENDING
+implementation_commit: d2466def1f61056157312231689466115f1d175a (feature source, tests, README, task note, and initial evidence commit)
 platform: macOS 26.6.2 arm64; available RAM NOT_MEASURED
 review: PENDING
 ```
@@ -57,7 +57,7 @@ Environment: Node.js `v22.23.3`, npm `10.9.9`, Rust/Cargo `1.99.1`; macOS `26.6.
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | PASS | No warnings. |
 | `cargo test --workspace --locked` | PASS | Workspace unit, integration, and doctests passed. A separate `cargo test --workspace --locked -- --list` enumerated 591 Rust test cases. No temporary-directory collision occurred, so serialized rerun was not needed. |
 | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v` | PASS | 629 tests ran; 1 skipped. |
-| `git diff --check` | PASS | Final pre-commit whitespace check; repeat after the evidence SHA is recorded. |
+| `git diff --check` | PASS | Final whitespace check after recording the implementation commit SHA. |
 
 Production selector scan command:
 
