@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import AppHeader, { type AppPage } from "./AppHeader";
 import {
   CopyResultPanel,
@@ -105,12 +105,16 @@ function createScenario(id: HomeScenarioId): HomeScenario {
 }
 
 type HomePageProps = {
+  allocateResultLifecycleId: () => number;
   onNavigate: (page: AppPage) => void;
   headingRef: (heading: HTMLHeadingElement | null) => void;
 };
 
-export default function HomePage({ onNavigate, headingRef }: HomePageProps) {
-  const nextResultLifecycleId = useRef(0);
+export default function HomePage({
+  allocateResultLifecycleId,
+  onNavigate,
+  headingRef,
+}: HomePageProps) {
   const [homeState, setHomeState] = useState<HomePresentationState>(() => ({
     scenario: createScenario("unavailable"),
     resultLifecycleId: null,
@@ -129,12 +133,10 @@ export default function HomePage({ onNavigate, headingRef }: HomePageProps) {
       return { scenario: nextScenario, resultLifecycleId: null };
     }
 
-    const nextId = nextResultLifecycleId.current + 1;
-    if (!Number.isSafeInteger(nextId)) {
-      throw new RangeError("Copy Result lifecycle identity is exhausted.");
-    }
-    nextResultLifecycleId.current = nextId;
-    return { scenario: nextScenario, resultLifecycleId: nextId };
+    return {
+      scenario: nextScenario,
+      resultLifecycleId: allocateResultLifecycleId(),
+    };
   }
 
   function handleScenarioChange(event: ChangeEvent<HTMLSelectElement>) {

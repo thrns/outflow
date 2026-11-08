@@ -175,6 +175,36 @@ describe("Home session and Copy Result preview", () => {
     expect(secondLifecycle).not.toBe("copy-failure");
   });
 
+  it("does not reuse a result lifecycle identity after Home unmounts for Settings", () => {
+    render(<App />);
+    selectScenario("copy-failure");
+
+    const firstLifecycle = screen
+      .getByRole("region", { name: "Review finalized text" })
+      .getAttribute("data-result-lifecycle-id");
+    expect(firstLifecycle).toMatch(/^copy-result-[1-9][0-9]*$/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(
+      screen.queryByLabelText("Finalized text (kept in memory until dismissed)"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Home" }),
+    ).toHaveFocus();
+    selectScenario("copy-failure");
+
+    const secondLifecycle = screen
+      .getByRole("region", { name: "Review finalized text" })
+      .getAttribute("data-result-lifecycle-id");
+    expect(secondLifecycle).toMatch(/^copy-result-[1-9][0-9]*$/);
+    expect(secondLifecycle).not.toBe(firstLifecycle);
+  });
+
   it("exercises the real Copy Result request, failure, retry, and success protocol in development", () => {
     const clipboardWrite = vi.fn();
     const getUserMedia = vi.fn();
@@ -320,6 +350,27 @@ describe("Home session and Copy Result preview", () => {
     expect(
       screen.queryByText(/Synthetic preview result:/),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Native dictation is not connected",
+      }),
+    ).toBeVisible();
+  });
+
+  it("does not restore an active result after the application fully remounts", () => {
+    const view = render(<App />);
+    selectScenario("copy-failure");
+    expect(
+      screen.getByLabelText("Finalized text (kept in memory until dismissed)"),
+    ).toBeInTheDocument();
+
+    view.unmount();
+    render(<App />);
+
+    expect(
+      screen.queryByLabelText("Finalized text (kept in memory until dismissed)"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Synthetic preview result:/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
         name: "Native dictation is not connected",

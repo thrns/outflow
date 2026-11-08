@@ -75,6 +75,9 @@ export default function App() {
     VocabularyPreviewEntry[]
   >([]);
   const nextVocabularyEntryId = useRef(0);
+  // Settings unmounts Home, so keep this volatile correlation sequence at App scope.
+  // A native bridge must still validate the Rust coordinator's authoritative IDs.
+  const nextCopyResultLifecycleId = useRef(0);
   const sectionTabs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedIndex = settingsSections.findIndex(
     (section) => section.id === selectedSection,
@@ -108,6 +111,15 @@ export default function App() {
         : [...current, entry],
     );
     setVocabularyDraft({ spoken: "", written: "" });
+  }
+
+  function allocateCopyResultLifecycleId() {
+    const nextId = nextCopyResultLifecycleId.current + 1;
+    if (!Number.isSafeInteger(nextId)) {
+      throw new RangeError("Copy Result lifecycle identity is exhausted.");
+    }
+    nextCopyResultLifecycleId.current = nextId;
+    return nextId;
   }
 
   function saveVocabularyPreviewEntry(id: number, value: VocabularyDraft) {
@@ -310,6 +322,7 @@ export default function App() {
 
   return (
     <HomePage
+      allocateResultLifecycleId={allocateCopyResultLifecycleId}
       headingRef={(heading) => {
         homeHeading.current = heading;
       }}
