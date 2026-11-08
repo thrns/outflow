@@ -63,6 +63,6 @@ Settings → Shortcuts now presents registration state, reliable matching press-
 - Implementation commit: `80566ad2ab212f92f09631f4e2df49a96bc6487b` (evidence is recorded in the following documentation commit).
 - Base commit was verified locally as `b6f3e8a905880a2eabecd67f408dd98a481e871d`; the worktree was created directly from that commit. The original dirty checkout was preserved.
 - Remote base branch verification: BLOCKED. `git ls-remote https://github.com/thrns/outflow.git refs/heads/feature/mvp-microphone-status-ui` failed with `Could not resolve host: github.com`.
-- Task checkboxes remain open. Remote push outcome is recorded by the final handoff after the attempted push.
-
-Next action: complete the evidence documentation commit, attempt the explicitly requested push, and record any network limitation in the task handoff.
+- The requested `git push -u origin feature/mvp-shortcut-status-ui` succeeded and created the remote branch at `49279575229a48de51e89a45b6adb26a1085c705`.
+- A subsequent `git ls-remote` for the old base branch and new feature branch again failed with `Could not resolve host: github.com`, so no independent post-push fetch was possible. The successful push output and updated local tracking ref report `4927957` as the pushed tip.
+- Task checkboxes remain open. T-010 remains blocked.
