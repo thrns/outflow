@@ -1635,6 +1635,12 @@ describe("Welcome setup introduction preview", () => {
     openPermissions();
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
     expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to shortcuts" }));
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Home" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Permissions" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Permissions for Outflow" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Back to Privacy" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Home" }));
@@ -1717,6 +1723,387 @@ describe("Welcome setup introduction preview", () => {
       ).toBe(false);
     } finally {
       addEventListenerSpy.mockRestore();
+      for (const { target, key, prior } of descriptors.reverse()) {
+        if (prior) Object.defineProperty(target, key, prior);
+        else Reflect.deleteProperty(target, key);
+      }
+    }
+  });
+});
+
+describe("Shortcut setup explanation preview", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function openShortcutSetup() {
+    fireEvent.click(screen.getByRole("button", { name: "Preview setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review privacy" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue to permissions" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue to shortcuts" }),
+    );
+  }
+
+  it("adds Continue to shortcuts without removing the existing Permissions actions", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review privacy" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue to permissions" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Back to Privacy" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "View permission details in Settings",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Continue to shortcuts" }),
+    ).toBeVisible();
+  });
+
+  it("opens the single Shortcut setup h1, focuses it, and keeps Home unmounted", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Choose how dictation starts",
+    });
+    expect(heading).toBeVisible();
+    expect(heading).toHaveFocus();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(
+      screen.queryByRole("heading", { level: 1, name: "Home" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("navigation", { name: "Application navigation" }),
+      )
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Home", "Settings"]);
+  });
+
+  it("explains push-to-talk hold and release requirements", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    const pushToTalk = screen.getByRole("article", { name: "Push-to-talk" });
+    expect(pushToTalk).toHaveTextContent(
+      "Hold the configured shortcut to record; release to finalize.",
+    );
+    expect(pushToTalk).toHaveTextContent(
+      "This mode requires reliable matching key-down and key-up events.",
+    );
+    expect(pushToTalk).toHaveTextContent(/Not verified/i);
+  });
+
+  it("explains toggle activation and that key release does not stop recording", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    const toggle = screen.getByRole("article", { name: "Toggle" });
+    expect(toggle).toHaveTextContent(
+      "Activate the configured shortcut to begin; activate it again to stop.",
+    );
+    expect(toggle).toHaveTextContent(
+      "Key release is ignored for recording control.",
+    );
+    expect(toggle).toHaveTextContent(/Not operational/i);
+  });
+
+  it("never enables push-to-talk when release support is unknown or unsupported", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    const pushToTalk = () =>
+      screen.getByRole("article", { name: "Push-to-talk" });
+    expect(within(pushToTalk()).getByText(/^Not verified\./)).toBeVisible();
+    expect(within(pushToTalk()).queryByText(/^Operational\./)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Scenario" }), {
+      target: { value: "available-release-unsupported" },
+    });
+    expect(within(pushToTalk()).getByText(/^Unavailable\./)).toBeVisible();
+    expect(within(pushToTalk()).queryByText(/^Operational\./)).not.toBeInTheDocument();
+  });
+
+  it("presents toggle only as a non-operational fallback when release events are unsupported", () => {
+    render(<App />);
+    openShortcutSetup();
+    fireEvent.change(screen.getByRole("combobox", { name: "Scenario" }), {
+      target: { value: "available-release-unsupported" },
+    });
+
+    const toggle = screen.getByRole("article", { name: "Toggle" });
+    expect(
+      within(toggle).getByText(/^Possible fallback — not operational\./),
+    ).toBeVisible();
+    expect(toggle).toHaveTextContent(
+      /pending actual native registration and microphone readiness/i,
+    );
+    expect(
+      screen.getByText(/no actual recording mode is operational/i),
+    ).toBeVisible();
+  });
+
+  it("keeps shortcut registration separate from microphone readiness", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    const capabilityPanel = screen.getByRole("region", {
+      name: "Global shortcut capability",
+    });
+    expect(capabilityPanel).toHaveTextContent(
+      "Shortcut registration has not been checked.",
+    );
+    expect(capabilityPanel).toHaveTextContent(
+      "Recording readiness, including microphone permission",
+    );
+    expect(capabilityPanel).toHaveTextContent("Not checked");
+    expect(capabilityPanel).toHaveTextContent(
+      /registered shortcut alone does not establish microphone permission or recording readiness/i,
+    );
+  });
+
+  it("keeps conflict and authorization guidance distinct", () => {
+    render(<App />);
+    openShortcutSetup();
+    const selector = screen.getByRole("combobox", { name: "Scenario" });
+
+    fireEvent.change(selector, { target: { value: "conflict" } });
+    expect(screen.getByRole("region", { name: "Global shortcut capability" })).toHaveTextContent(
+      /shortcut conflict, not a permission denial/i,
+    );
+
+    fireEvent.change(selector, { target: { value: "permission-unavailable" } });
+    expect(screen.getByRole("region", { name: "Global shortcut capability" })).toHaveTextContent(
+      /authorization is unavailable/i,
+    );
+    expect(screen.getByRole("region", { name: "Global shortcut capability" })).not.toHaveTextContent(
+      /shortcut conflict, not a permission denial/i,
+    );
+  });
+
+  it("shows no shortcut assignment and reuses the existing capability panel", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    expect(
+      screen.getByText(
+        /no global shortcut is registered, no key combination is assigned or captured/i,
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("region", { name: "Global shortcut capability" })).toBeVisible();
+    expect(screen.queryByRole("term", { name: /assigned shortcut/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /finish setup|start recording|enable shortcut|try dictation/i })).not.toBeInTheDocument();
+  });
+
+  it("starts unconnected and unverified and marks all seven development scenarios simulated", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Global keyboard shortcuts are not connected.",
+    );
+    expect(screen.getByRole("region", { name: "Global shortcut capability" })).toHaveTextContent(
+      "Simulated",
+    );
+    expect(screen.getByRole("combobox", { name: "Scenario" })).toHaveValue("default");
+    expect(screen.getByText("Simulated scenario — these values are fixed presentation examples, not observations from an operating system.")).toBeVisible();
+
+    const scenarios = within(
+      screen.getByRole("combobox", { name: "Scenario" }),
+    ).getAllByRole("option");
+    expect(scenarios).toHaveLength(7);
+    expect(scenarios.every((option) => option.textContent?.includes("(simulated)"))).toBe(true);
+  });
+
+  it("omits the development scenario selector in production and keeps default status unconnected", () => {
+    vi.stubEnv("DEV", false);
+    render(<App />);
+    openShortcutSetup();
+
+    expect(screen.queryByRole("combobox", { name: "Scenario" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Developer scenarios (simulated)")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Global keyboard shortcuts are not connected.",
+    );
+    expect(screen.getByRole("region", { name: "Global shortcut capability" })).toHaveTextContent(
+      "Browser preview — not verified",
+    );
+  });
+
+  it("keeps setup and Settings shortcut scenarios independent", () => {
+    render(<App />);
+    openShortcutSetup();
+    fireEvent.change(screen.getByRole("combobox", { name: "Scenario" }), {
+      target: { value: "conflict" },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "View shortcut details in Settings" }),
+    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Shortcuts" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const settingsScenario = screen.getByRole("combobox", { name: "Scenario" });
+    expect(settingsScenario).toHaveValue("default");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Global keyboard shortcuts are not connected.",
+    );
+
+    fireEvent.change(settingsScenario, {
+      target: { value: "permission-unavailable" },
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /registration is permission or authorization unavailable/i,
+    );
+  });
+
+  it("returns to Permissions and focuses its heading", () => {
+    render(<App />);
+    openShortcutSetup();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Permissions" }));
+
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Permissions for Outflow",
+    });
+    expect(heading).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Continue to shortcuts" })).toBeVisible();
+  });
+
+  it("opens Settings Shortcuts only from the explicit detail action and focuses Settings", () => {
+    render(<App />);
+    openShortcutSetup();
+    fireEvent.click(
+      screen.getByRole("button", { name: "View shortcut details in Settings" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Shortcuts" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("region", { name: "Global shortcut capability" })).toBeVisible();
+  });
+
+  it("keeps ordinary Settings navigation on General", () => {
+    render(<App />);
+    openShortcutSetup();
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Application navigation" }),
+      ).getByRole("button", { name: "Settings" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Shortcuts" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
+  it("preserves preference and vocabulary previews across setup navigation", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Launch at Login" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Text & Vocabulary" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Verbatim" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Spoken phrase" }), {
+      target: { value: "shortcut preview term" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Written replacement" }), {
+      target: { value: "Shortcut Preview Term" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+
+    openShortcutSetup();
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(
+      screen.getByRole("switch", { name: "Launch at Login" }),
+    ).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "Text & Vocabulary" }));
+
+    expect(screen.getByRole("radio", { name: "Verbatim" })).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Spoken phrase" })).toHaveValue(
+      "shortcut preview term",
+    );
+    expect(screen.getByRole("textbox", { name: "Written replacement" })).toHaveValue(
+      "Shortcut Preview Term",
+    );
+  });
+
+  it("does not install keyboard listeners or invoke native, microphone, permission, clipboard, storage, or network APIs", () => {
+    const forbiddenCall = vi.fn(() => {
+      throw new Error("Shortcut setup must remain presentation-only.");
+    });
+    const descriptors: Array<{
+      target: object;
+      key: PropertyKey;
+      prior?: PropertyDescriptor;
+    }> = [];
+    const installTripwire = (target: object, key: PropertyKey, value: unknown) => {
+      descriptors.push({ target, key, prior: Object.getOwnPropertyDescriptor(target, key) });
+      Object.defineProperty(target, key, { configurable: true, value });
+    };
+    const apiTrap = new Proxy({}, { get: forbiddenCall, apply: forbiddenCall });
+    const windowListeners = vi.spyOn(window, "addEventListener");
+    const documentListeners = vi.spyOn(document, "addEventListener");
+    installTripwire(navigator, "mediaDevices", apiTrap);
+    installTripwire(navigator, "permissions", apiTrap);
+    installTripwire(navigator, "keyboard", apiTrap);
+    installTripwire(navigator, "clipboard", apiTrap);
+    installTripwire(navigator, "sendBeacon", forbiddenCall);
+    installTripwire(window, "__TAURI__", apiTrap);
+    installTripwire(window, "__TAURI_INTERNALS__", apiTrap);
+    installTripwire(window, "fetch", forbiddenCall);
+    installTripwire(window, "XMLHttpRequest", apiTrap);
+    installTripwire(window, "WebSocket", apiTrap);
+    installTripwire(window, "EventSource", apiTrap);
+    installTripwire(Storage.prototype, "setItem", forbiddenCall);
+    installTripwire(Storage.prototype, "getItem", forbiddenCall);
+    installTripwire(Storage.prototype, "removeItem", forbiddenCall);
+
+    try {
+      render(<App />);
+      openShortcutSetup();
+      fireEvent.change(screen.getByRole("combobox", { name: "Scenario" }), {
+        target: { value: "available-release-unsupported" },
+      });
+
+      const keyboardEvents = [
+        ...windowListeners.mock.calls,
+        ...documentListeners.mock.calls,
+      ].filter(([type]) => type === "keydown" || type === "keyup" || type === "keypress");
+      expect(keyboardEvents).toHaveLength(0);
+      expect(forbiddenCall).not.toHaveBeenCalled();
+    } finally {
+      windowListeners.mockRestore();
+      documentListeners.mockRestore();
       for (const { target, key, prior } of descriptors.reverse()) {
         if (prior) Object.defineProperty(target, key, prior);
         else Reflect.deleteProperty(target, key);

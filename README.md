@@ -75,6 +75,29 @@ Expected behavior: this is an unconnected browser preview. It does not request, 
 
 **Troubleshooting:** If **Continue to permissions** is missing, reopen Welcome from **Getting started → Preview setup**, choose **Review privacy**, and reload the local page if needed. If development scenarios are absent, confirm Vite is running through `npm run dev`; their absence in a production build is expected. The default unknown status is expected because no native capability provider is connected. Use **View permission details in Settings** or the existing direct Privacy action to inspect the separate Settings checklist. No screen-reader or genuine 200% zoom result is inferred from automated tests or a narrow viewport alone.
 
+### Shortcut setup explanation preview (MVP-15)
+
+Install the locked frontend dependencies, run the checks, and start the browser preview from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Open the local Vite URL and follow **Home → Getting started → Preview setup → Review privacy → Continue to permissions → Continue to shortcuts**. The Shortcut setup screen explains push-to-talk hold/release behavior and toggle behavior, then reuses the existing global shortcut capability panel. Unknown or unsupported release-event support never makes push-to-talk available. A toggle fallback remains only a possibility until native shortcut registration and microphone readiness are both working. Shortcut conflicts and OS authorization problems remain distinct conditions.
+
+The default is unconnected and unverified: no key combination is assigned or captured, no global shortcut is registered, and no recording mode is operational. In Vite development mode, the existing seven fixed shortcut scenarios are marked simulated and only change local presentation state. The production build omits the scenario selector. This screen does not register shortcuts, capture keyboard input, request permission, access the microphone, record speech, connect Tauri/native APIs, use the clipboard, make network requests, or save setup progress.
+
+Use **Back to Permissions** to return and focus the Permissions heading. **View shortcut details in Settings** opens **Settings → Shortcuts** and focuses Settings. The ordinary Settings navigation button still opens **General**. Home remains unmounted through Welcome, Privacy, Permissions, and Shortcut setup, so Copy Result text and any simulated acknowledgment are discarded. The App-owned lifecycle counter stays in memory and gives later results distinct IDs. Setup shortcut scenarios do not change Settings → Shortcuts fixtures; preference and vocabulary preview state remains App-owned.
+
+To test the new interaction, run `npm run test -- --run src/app/App.test.tsx src/app/ShortcutScenarioPreview.test.tsx`. For a visual review, inspect the complete setup flow at desktop width and 320 CSS px, genuine 200% browser zoom, keyboard navigation, visible focus, and reduced motion where available. Automated DOM tests and narrow-viewport checks do not establish zoom, screen-reader, or native platform behavior.
+
+**Troubleshooting:** If **Continue to shortcuts** is missing, follow the setup path above and reload the Vite preview. If the development scenario selector is missing, confirm the app is running through `npm run dev`; its absence from production assets is expected. A “not checked” or “not connected” status is the expected browser-preview state. Use **View shortcut details in Settings** to inspect the independent Settings fixture. There is no key capture or real shortcut available in this preview.
+
 ### Microphone capability preview (MVP-09)
 
 Install the locked frontend dependencies and start Vite from the repository root:

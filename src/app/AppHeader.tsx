@@ -1,6 +1,11 @@
 export type AppPage = "home" | "settings";
 // Setup views are transient Home flow states, not additional primary destinations.
-export type AppView = AppPage | "welcome" | "privacy" | "permissions";
+export type AppView =
+  | AppPage
+  | "welcome"
+  | "privacy"
+  | "permissions"
+  | "shortcut-setup";
 
 type AppHeaderProps = {
   currentPage?: AppPage;

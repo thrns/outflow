@@ -109,6 +109,13 @@ export default function PermissionsStepPage({
             >
               View permission details in Settings
             </button>
+            <button
+              className="home-open-settings-button"
+              onClick={() => onNavigate("shortcut-setup")}
+              type="button"
+            >
+              Continue to shortcuts
+            </button>
           </div>
         </div>
       </PageContainer>

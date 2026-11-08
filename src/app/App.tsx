@@ -5,6 +5,7 @@ import HomePage from "./HomePage";
 import WelcomePage from "./WelcomePage";
 import PrivacyStepPage from "./PrivacyStepPage";
 import PermissionsStepPage from "./PermissionsStepPage";
+import ShortcutSetupStepPage from "./ShortcutSetupStepPage";
 import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -71,6 +72,7 @@ export default function App() {
   const welcomeHeading = useRef<HTMLHeadingElement | null>(null);
   const privacyHeading = useRef<HTMLHeadingElement | null>(null);
   const permissionsHeading = useRef<HTMLHeadingElement | null>(null);
+  const shortcutSetupHeading = useRef<HTMLHeadingElement | null>(null);
   const [selectedSection, setSelectedSection] =
     useState<SettingsSectionId>("general");
   const [startup, setStartup] = useState({ run_at_login: false });
@@ -107,14 +109,21 @@ export default function App() {
             ? welcomeHeading.current
             : activeView === "privacy"
               ? privacyHeading.current
-              : permissionsHeading.current;
+              : activeView === "permissions"
+                ? permissionsHeading.current
+                : shortcutSetupHeading.current;
     heading?.focus();
   }, [activeView]);
 
-  function navigateTo(view: AppView) {
+  function navigateTo(
+    view: AppView,
+    settingsSection?: SettingsSectionId,
+  ) {
     if (view === activeView) return;
 
-    if (view === "settings") setSelectedSection("general");
+    if (view === "settings") {
+      setSelectedSection(settingsSection ?? "general");
+    }
     setActiveView(view);
   }
 
@@ -366,6 +375,18 @@ export default function App() {
           permissionsHeading.current = heading;
         }}
         onNavigate={navigateTo}
+      />
+    );
+  }
+
+  if (activeView === "shortcut-setup") {
+    return (
+      <ShortcutSetupStepPage
+        headingRef={(heading) => {
+          shortcutSetupHeading.current = heading;
+        }}
+        onNavigate={navigateTo}
+        onOpenShortcuts={() => navigateTo("settings", "shortcuts")}
       />
     );
   }
