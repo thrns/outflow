@@ -778,6 +778,146 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.permission-readiness-checklist {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+
+.permission-readiness-header,
+.permission-readiness-item,
+.permission-readiness-scenario {
+  min-width: 0;
+}
+
+.permission-readiness-header h3,
+.permission-readiness-item h4 {
+  margin: 0;
+  color: var(--card-foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.permission-readiness-header p,
+.permission-readiness-item > p,
+.permission-readiness-scenario > p,
+.permission-readiness-preview-note,
+.permission-readiness-simulated-note {
+  max-width: 64ch;
+  margin: 0.375rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.permission-readiness-announcement {
+  min-width: 0;
+  margin: 0;
+  border-inline-start: 3px solid var(--primary);
+  padding: 0.625rem 0.75rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.permission-readiness-scenario {
+  display: grid;
+  justify-items: start;
+  gap: 0.375rem;
+}
+
+.permission-readiness-scenario label {
+  color: var(--card-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+}
+
+.permission-readiness-scenario select {
+  width: min(100%, 32rem);
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.permission-readiness-scenario select:focus-visible {
+  border-color: var(--focus-strong);
+  outline: 2px solid var(--focus-strong);
+  outline-offset: 2px;
+}
+
+.permission-readiness-list {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.permission-readiness-item {
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 1rem;
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.permission-readiness-item dl {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.permission-readiness-value {
+  min-width: 0;
+}
+
+.permission-readiness-value dt {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.permission-readiness-value dd {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.25rem 0 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1875rem 0.625rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+  overflow-wrap: anywhere;
+}
+
+.permission-readiness-item .permission-readiness-target-note {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
 .settings-row {
   display: grid;
   min-width: 0;

@@ -9,7 +9,7 @@ result_commit: 80566ad2ab212f92f09631f4e2df49a96bc6487b
 platform: macOS 26.6.2 (25G83), arm64; Node v22.23.3; npm 10.9.9; Rust 1.99.1; in-app browser preview
 implementation: Browser-only shortcut capability presentation, fixed development scenarios, accessibility coverage, docs and task progress note.
 doc_updates: README.md; docs/TASKS.md; evidence/mvp/mvp-10-shortcut-status-ui.md
-risks: Remote base branch head could not be independently checked because github.com DNS resolution failed. No native shortcut, microphone, OS permission, physical resource, or release gate was exercised. 200% browser zoom was NOT_RUN because the in-app browser exposed no working zoom control.
+risks: At the original MVP-10 evidence run, independent remote verification was blocked by github.com DNS resolution failure. No native shortcut, microphone, OS permission, physical resource, or release gate was exercised. 200% browser zoom was NOT_RUN because the in-app browser exposed no working zoom control.
 review: PENDING
 ---
 
@@ -63,6 +63,7 @@ Settings → Shortcuts now presents registration state, reliable matching press-
 - Implementation commit: `80566ad2ab212f92f09631f4e2df49a96bc6487b` (evidence is recorded in the following documentation commit).
 - Base commit was verified locally as `b6f3e8a905880a2eabecd67f408dd98a481e871d`; the worktree was created directly from that commit. The original dirty checkout was preserved.
 - Remote base branch verification: BLOCKED. `git ls-remote https://github.com/thrns/outflow.git refs/heads/feature/mvp-microphone-status-ui` failed with `Could not resolve host: github.com`.
-- The requested `git push -u origin feature/mvp-shortcut-status-ui` succeeded and created the remote branch at `49279575229a48de51e89a45b6adb26a1085c705`.
-- A subsequent `git ls-remote` for the old base branch and new feature branch again failed with `Could not resolve host: github.com`, so no independent post-push fetch was possible. The successful push output and updated local tracking ref report `4927957` as the pushed tip.
+- The requested `git push -u origin feature/mvp-shortcut-status-ui` succeeded at the time and pushed the intermediate evidence commit `49279575229a48de51e89a45b6adb26a1085c705`.
+- At that original run, later `git ls-remote` checks for the old base and feature branch failed with `Could not resolve host: github.com`; that historical DNS limitation is preserved here.
+- The subsequent documentation commit `3d2063230c1263378d9b876609050bc10faf30a8` is the independently verified MVP-10 final branch SHA. On 2026-11-08, `git ls-remote origin refs/heads/feature/mvp-shortcut-status-ui` returned that exact SHA. This verification distinguishes the earlier intermediate push (`4927957…`) from the final branch tip (`3d20632…`); it does not rewrite the original failed DNS checks.
 - Task checkboxes remain open. T-010 remains blocked.

@@ -10,6 +10,7 @@ import { MicrophoneCapabilityPanel } from "./MicrophoneCapabilityPanel";
 import { MicrophoneScenarioPreview } from "./MicrophoneScenarioPreview";
 import { ShortcutCapabilityPanel } from "./ShortcutCapabilityPanel";
 import { ShortcutScenarioPreview } from "./ShortcutScenarioPreview";
+import { PermissionReadinessChecklist } from "./PermissionReadinessChecklist";
 import TextCleanupModeSelector, {
   type CleanupMode,
 } from "./TextCleanupModeSelector";
@@ -253,6 +254,7 @@ export default function App() {
                     Preview only — this setting does not change your computer&apos;s
                     startup behavior yet.
                   </p>
+                  <PermissionReadinessChecklist />
                 </div>
               ) : selectedSection === "microphone" ? (
                 import.meta.env.DEV ? (

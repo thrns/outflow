@@ -1,10 +1,10 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React Home and Settings preview, including synthetic session-status and Copy Result scenarios, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React Home and Settings preview, including synthetic session-status, Copy Result, and permission readiness scenarios, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
 
-## Current MVP baseline — 2026-11-07
+## Current MVP baseline — 2026-11-08
 
-This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Its Recording state is not an active microphone session, and its Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Settings → General includes a browser-only permission readiness checklist with separate fixed development scenarios; it does not check or request permissions or connect native capabilities. The Recording state is not an active microphone session, and Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
 
 This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
@@ -65,6 +65,40 @@ npm run build
 For a manual check, use keyboard navigation to focus the scenario selector and move through the fixed options. Confirm the selector retains focus, the polite status announcement changes, and no content suggests a real shortcut or active recording. Inspect the view at desktop width and 320 CSS px; at narrow width the cards and selector should stack without horizontal scrolling. Check 200% browser zoom when the browser supports it.
 
 **Troubleshooting:** If the scenario selector is missing, confirm Vite is running in development mode; its absence in a production build is expected. If status checking is disabled, no native shortcut adapter is connected, which is the expected browser-preview state. Simulated capability values are not operating-system observations.
+
+### Permission readiness checklist (MVP-11)
+
+Run the browser preview from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Open the Vite URL and choose **Settings → General**. The checklist appears below **Launch at Login**. The default reads **Permission readiness has not been checked**; microphone permission, input-device availability, shortcut registration and press/release support, and text-insertion capability each remain **Not checked**. This browser preview cannot inspect operating-system permissions or native capabilities. Microphone permission is required for actual recording. Text insertion is separate and is not required for a future Copy-only fallback. Insertion capability never establishes that a specific destination is editable, safe, still focused, or unprotected.
+
+In development mode, choose **Developer scenarios (simulated fixtures)** and inspect these fixed results:
+
+| Scenario | Expected presentation |
+|---|---|
+| All unknown (default) | All five capability values say **Not checked**. |
+| Microphone permission denied | Permission says **Denied (simulated)**; guidance says to grant microphone access through operating-system settings. |
+| Microphone available, no input device | Permission says available while input availability says **No available input device**; guidance says to connect or enable a device. |
+| Shortcut conflict | Registration says **Conflict detected** and explains that another assignment may be needed; conflict is distinct from authorization denial. |
+| Shortcut release events unsupported | Release says **Unsupported**; push-to-talk is unavailable, while toggle is only a possible fallback after native registration and microphone readiness. |
+| Text insertion permission denied | Insertion says **Denied** and explains the future explicit Copy Result fallback. The browser preview has no clipboard integration. |
+| Text insertion unsupported or limited | Insertion says **Not supported or limited**. Wayland portal capabilities remain unverified and limited until native checks confirm them. |
+| All capabilities hypothetically available | Every shown value is labeled **(simulated)**. This is not a verified or overall **Ready** state. |
+
+Changing scenarios only changes this checklist's temporary React state. The fixtures do not change the Microphone or Shortcuts tabs, persist after unmount, inspect permissions, register shortcuts, capture audio, or operate on a text target. No Retry, System Settings, Start Dictation, Copy, or Continue action is provided.
+
+For keyboard inspection, Tab to the scenario selector and use its native select controls. Focus stays on the selector while the polite status announcement changes. The checklist uses text statuses without checkmarks or color-only meaning. Reduced motion is respected because the component adds no animated transitions. The checklist was inspected in Brave at 200% zoom and at a 320 CSS-pixel responsive viewport. At 320px, the cards remained in one column and DevTools measured `window.innerWidth`, `document.documentElement.clientWidth`, `document.documentElement.scrollWidth`, and `document.body.scrollWidth` as 320; no horizontal page overflow was present. See the MVP-11 evidence file for exact visual results and limitations.
+
+**Troubleshooting:** The selector is absent in a production build by design; use `npm run dev -- --host 127.0.0.1` to inspect fixtures. If statuses remain **Not checked**, that is expected: this preview has no native permission or capability adapter. A denied or unsupported insertion fixture only describes the future Copy Result fallback; it cannot copy text because clipboard integration is not connected. Treat Wayland portal support as unverified until native integration checks it.
 
 Run the repository checks from the project root:
 

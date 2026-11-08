@@ -483,6 +483,43 @@ describe("Outflow Home and Settings preview", () => {
     );
   });
 
+  it("places the permission checklist below Launch at Login without adding a settings tab", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    const launchSwitch = screen.getByRole("switch", { name: "Launch at Login" });
+    const checklist = screen.getByRole("region", { name: "Permission readiness" });
+    const tabList = screen.getByRole("tablist");
+
+    expect(launchSwitch.compareDocumentPosition(checklist) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(within(tabList).getAllByRole("tab")).toHaveLength(6);
+    expect(launchSwitch).toBeVisible();
+  });
+
+  it("keeps permission fixtures local to General and independent from Microphone and Shortcuts", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "Developer scenarios (simulated fixtures)",
+      }),
+      { target: { value: "microphone-denied" } },
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Microphone" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Microphone status has not been checked.",
+    );
+    expect(screen.queryByText("Denied (simulated)")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Shortcuts" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Global keyboard shortcuts are not connected.",
+    );
+  });
+
   it("toggles Launch at Login with Space and ignores a repeated keydown", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
