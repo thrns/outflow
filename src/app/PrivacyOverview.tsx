@@ -106,21 +106,24 @@ export default function PrivacyOverview({
           <h3 id="privacy-boundaries-heading">
             Clipboard, operating system, and updates
           </h3>
-          <p>
-            Clipboard copying is intended to happen only after an explicit user
-            action. The destination application, operating system swap, and
-            clipboard managers may retain content outside Outflow&apos;s control.
-            Outflow cannot guarantee cryptographic erasure of data from system
-            memory.
-          </p>
           {setupDisclosure ? (
             <p>
               If you explicitly choose Copy Result, the intended behavior is to
-              place that text on the system clipboard. The operating system and
-              clipboard managers may retain it. Outflow cannot promise
-              cryptographic erasure from memory or operating-system swap.
+              place that text on the system clipboard. The destination
+              application, operating system swap, and clipboard managers may
+              retain content outside Outflow&apos;s control. Outflow cannot
+              promise cryptographic erasure from memory or operating-system
+              swap.
             </p>
-          ) : null}
+          ) : (
+            <p>
+              Clipboard copying is intended to happen only after an explicit
+              user action. The destination application, operating system swap,
+              and clipboard managers may retain content outside Outflow&apos;s
+              control. Outflow cannot guarantee cryptographic erasure of data
+              from system memory.
+            </p>
+          )}
           <p>
             The intended update mechanism is an optional, explicit,
             user-initiated check for signed full-application updates. Normal
