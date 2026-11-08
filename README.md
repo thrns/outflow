@@ -23,6 +23,21 @@ Open the local URL printed by Vite. On Home, use **Inspect synthetic scenarios**
 
 Settings remains available from the existing navigation. Neither view connects to Rust or native dictation.
 
+### Microphone capability preview (MVP-09)
+
+Install the locked frontend dependencies and start Vite from the repository root:
+
+```sh
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open the local URL, choose **Settings → Microphone**, and check the default: **Microphone status has not been checked.** Permission, input-device availability, and native integration are reported separately. The preview does not request permission, inspect operating-system settings, enumerate devices, or capture audio. **Check again** is disabled until a connected native permission callback exists; **Open System Settings** appears for denied or action-required states and is disabled without a native callback.
+
+In Vite development mode, use **Developer scenarios (simulated) → Scenario** to inspect Unknown / default, Permission available with device present, Permission denied, User action required, Unsupported capability, No device detected, and Device disconnected. Every non-default fixture is marked simulated; even the available/device-present fixture keeps native integration disconnected and audio inactive. Selection changes only temporary React state. The production build removes the scenario selector and fixture labels from its assets.
+
+**Troubleshooting:** If the selector is missing, confirm the app was launched with `npm run dev`; its absence in a production build is expected. If permission says it has not been checked or the recovery actions are disabled, that is the expected browser-preview state: no native permission adapter is connected. A simulated “available” result is not a real device or permission observation.
+
 Run the repository checks from the project root:
 
 ```sh

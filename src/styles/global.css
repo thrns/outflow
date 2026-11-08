@@ -1232,3 +1232,205 @@ body {
     transform: none;
   }
 }
+
+.microphone-capability-panel {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  margin-block-start: 2rem;
+}
+
+.microphone-capability-panel > h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.microphone-status-announcement {
+  min-width: 0;
+  margin: 0;
+  border-inline-start: 3px solid var(--primary);
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.microphone-simulation-label,
+.microphone-preview-note {
+  margin: 0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.microphone-status-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.microphone-status-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 0.875rem;
+  background: var(--card);
+}
+
+.microphone-status-item dt {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.microphone-status-item dd {
+  margin: 0.375rem 0 0;
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.microphone-guidance {
+  min-width: 0;
+}
+
+.microphone-guidance h4 {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.microphone-guidance h4:first-child {
+  margin-block-start: 0;
+}
+
+.microphone-guidance p {
+  margin: 0.25rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.microphone-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.microphone-actions button {
+  min-width: 0;
+  min-height: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.microphone-actions button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.microphone-actions button:disabled {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  cursor: not-allowed;
+}
+
+.microphone-actions button:focus-visible,
+.microphone-scenario-inspector select:focus-visible {
+  outline: 2px solid var(--focus-strong);
+  outline-offset: 2px;
+}
+
+.microphone-action-help {
+  min-width: 0;
+  margin-block-start: -0.75rem;
+}
+
+.microphone-action-help p,
+.microphone-scenario-inspector p {
+  margin: 0.375rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.microphone-scenario-inspector {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 1rem;
+  background: var(--muted);
+}
+
+.microphone-scenario-inspector legend {
+  max-width: 100%;
+  padding-inline: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.microphone-scenario-inspector label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.microphone-scenario-inspector select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .microphone-actions button,
+  .microphone-scenario-inspector select {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}

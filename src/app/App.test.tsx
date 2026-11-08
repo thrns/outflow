@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 describe("Outflow Home and Settings preview", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("renders without errors", () => {
     expect(() => render(<App />)).not.toThrow();
   });
@@ -568,7 +572,7 @@ describe("Outflow Home and Settings preview", () => {
         expect(
           within(panel).getByRole("heading", {
             level: 3,
-            name: "Microphone setup unavailable",
+            name: "Microphone capability",
           }),
         ).toBeVisible();
       } else if (section === "Shortcuts") {
@@ -625,31 +629,64 @@ describe("Outflow Home and Settings preview", () => {
     }
   });
 
-  it("describes the unavailable Microphone preview without reporting device state", () => {
+  it("shows the default microphone preview as unchecked and not connected", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("tab", { name: "Microphone" }));
 
     const panel = screen.getByRole("tabpanel", { name: "Microphone" });
-    const statusMessage = within(panel).getByRole("heading", {
-      level: 3,
-      name: "Microphone setup unavailable",
-    }).parentElement;
-
-    expect(statusMessage).toHaveTextContent(
-      "Microphone selection is not connected in this development preview.",
+    expect(within(panel).getByRole("status")).toHaveTextContent(
+      "Microphone status has not been checked.",
     );
-    expect(statusMessage).toHaveTextContent("No audio is captured");
-    expect(statusMessage).toHaveTextContent(
-      "device availability and microphone permissions have not been checked",
-    );
-    expect(statusMessage).toHaveTextContent(
-      "Selecting an input will require future native integration.",
-    );
-    expect(statusMessage).not.toHaveTextContent(
-      /connected microphone|permissions? (?:are )?granted/i,
-    );
+    expect(panel).toHaveTextContent("Permission statusNot checked");
+    expect(panel).toHaveTextContent("Input-device availabilityNot checked");
+    expect(panel).toHaveTextContent("Native microphone integrationNot connected");
+    expect(panel).toHaveTextContent("No audio is captured");
+    expect(panel).toHaveTextContent("only after you intentionally start dictation");
+    expect(within(panel).getByRole("button", { name: "Check again" })).toBeDisabled();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("opens Microphone settings without calling browser permission or capture APIs", () => {
+    const forbiddenCall = vi.fn(() => {
+      throw new Error("The preview must not access microphone or permission APIs.");
+    });
+    const descriptors: Array<{ target: object; key: string; prior?: PropertyDescriptor }> = [];
+    const installTripwire = (target: object, key: string, value: unknown) => {
+      descriptors.push({ target, key, prior: Object.getOwnPropertyDescriptor(target, key) });
+      Object.defineProperty(target, key, { configurable: true, value });
+    };
+
+    installTripwire(navigator, "mediaDevices", {
+      getUserMedia: forbiddenCall,
+      enumerateDevices: forbiddenCall,
+    });
+    installTripwire(navigator, "permissions", { query: forbiddenCall });
+
+    try {
+      render(<App />);
+      fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Microphone" }));
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Microphone status has not been checked.",
+      );
+      expect(forbiddenCall).not.toHaveBeenCalled();
+    } finally {
+      for (const { target, key, prior } of descriptors.reverse()) {
+        if (prior) Object.defineProperty(target, key, prior);
+        else Reflect.deleteProperty(target, key);
+      }
+    }
+  });
+
+  it("omits development microphone scenarios when Vite reports production mode", () => {
+    vi.stubEnv("DEV", false);
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Microphone" }));
+
+    expect(screen.queryByRole("combobox", { name: "Scenario" })).not.toBeInTheDocument();
   });
 
   it("explains that global shortcuts are unavailable without implying registration", () => {
@@ -704,7 +741,7 @@ describe("Outflow Home and Settings preview", () => {
     expect(
       screen.getByRole("heading", {
         level: 3,
-        name: "Microphone setup unavailable",
+        name: "Microphone capability",
       }),
     ).toBeVisible();
     expect(

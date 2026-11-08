@@ -6,6 +6,8 @@ import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
 import { SettingsSection } from "./SettingsSection";
+import { MicrophoneCapabilityPanel } from "./MicrophoneCapabilityPanel";
+import { MicrophoneScenarioPreview } from "./MicrophoneScenarioPreview";
 import { SettingsStatusMessage } from "./SettingsStatusMessage";
 import TextCleanupModeSelector, {
   type CleanupMode,
@@ -252,12 +254,11 @@ export default function App() {
                   </p>
                 </div>
               ) : selectedSection === "microphone" ? (
-                <SettingsStatusMessage title="Microphone setup unavailable">
-                  Microphone selection is not connected in this development
-                  preview. No audio is captured, and device availability and
-                  microphone permissions have not been checked. Selecting an
-                  input will require future native integration.
-                </SettingsStatusMessage>
+                import.meta.env.DEV ? (
+                  <MicrophoneScenarioPreview />
+                ) : (
+                  <MicrophoneCapabilityPanel />
+                )
               ) : selectedSection === "shortcuts" ? (
                 <SettingsStatusMessage title="Keyboard shortcuts unavailable">
                   Global keyboard shortcuts are not connected in this development

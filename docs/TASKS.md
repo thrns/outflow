@@ -422,6 +422,8 @@ MVP-07 adds a browser-only Home status and Copy Result presentation preview with
 
 MVP-08 strengthens the browser preview's result-lifecycle correlation and routes a deterministic development-only failure/retry/success acknowledgment through the actual Copy Result component. This verifies frontend state handling only. It adds no native bridge or clipboard behavior, and does not complete T-046, T-047, T-050, T-055, AC-09, AC-10, AC-11, or any release gate. The native bridge must correlate opaque frontend tokens with Rust coordinator-owned session and `CopyAttemptId` values. See [`evidence/mvp/mvp-08-copy-lifecycle-ui.md`](../evidence/mvp/mvp-08-copy-lifecycle-ui.md).
 
+MVP-09 adds a browser-only microphone capability and recovery presentation with fixed development-only scenarios. The default status remains unknown; the preview does not request permission, enumerate devices, or connect native actions. This presentation does not complete T-052, T-055, AC-02, AC-11, T-010, or any native microphone/platform task or release gate. T-010 remains blocked. See [`evidence/mvp/mvp-09-microphone-status-ui.md`](../evidence/mvp/mvp-09-microphone-status-ui.md).
+
 - [ ] **T-056 — Verify failure sequences.** Deps: T-048,T-055. Manual and scripted focus-loss, secure field, mic unplug, model error, collision; no content persistence. [F-13/C-07/AC-13]
 
 ### M4 — Privacy, resource and reliability hardening
