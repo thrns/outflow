@@ -4,6 +4,7 @@ import AppHeader, { type AppView } from "./AppHeader";
 import HomePage from "./HomePage";
 import WelcomePage from "./WelcomePage";
 import PrivacyStepPage from "./PrivacyStepPage";
+import PermissionsStepPage from "./PermissionsStepPage";
 import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -69,6 +70,7 @@ export default function App() {
   const settingsHeading = useRef<HTMLHeadingElement | null>(null);
   const welcomeHeading = useRef<HTMLHeadingElement | null>(null);
   const privacyHeading = useRef<HTMLHeadingElement | null>(null);
+  const permissionsHeading = useRef<HTMLHeadingElement | null>(null);
   const [selectedSection, setSelectedSection] =
     useState<SettingsSectionId>("general");
   const [startup, setStartup] = useState({ run_at_login: false });
@@ -103,7 +105,9 @@ export default function App() {
           ? settingsHeading.current
           : activeView === "welcome"
             ? welcomeHeading.current
-            : privacyHeading.current;
+            : activeView === "privacy"
+              ? privacyHeading.current
+              : permissionsHeading.current;
     heading?.focus();
   }, [activeView]);
 
@@ -349,6 +353,17 @@ export default function App() {
       <PrivacyStepPage
         headingRef={(heading) => {
           privacyHeading.current = heading;
+        }}
+        onNavigate={navigateTo}
+      />
+    );
+  }
+
+  if (activeView === "permissions") {
+    return (
+      <PermissionsStepPage
+        headingRef={(heading) => {
+          permissionsHeading.current = heading;
         }}
         onNavigate={navigateTo}
       />

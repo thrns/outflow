@@ -216,6 +216,48 @@ body {
   margin-top: 1.25rem;
 }
 
+.permissions-step-content {
+  display: grid;
+  min-width: 0;
+  max-width: 48rem;
+  gap: 1.5rem;
+  margin-top: clamp(2rem, 5vw, 2.75rem);
+}
+
+.permissions-preview-disclaimer {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--foreground);
+  text-wrap: pretty;
+}
+
+.permissions-capability-list {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+
+.permissions-capability-list > section,
+.permissions-step-checklist {
+  min-width: 0;
+}
+
+.permissions-capability-list > section > p {
+  max-width: 64ch;
+  margin: 0.75rem 0 0;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.permissions-step-checklist > h2 {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
 .home-status-card,
 .home-getting-started-card {
   min-width: 0;

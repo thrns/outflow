@@ -1,6 +1,6 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React Home, Welcome, and Settings preview, including synthetic session-status, Copy Result, and permission readiness scenarios, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React Home, Welcome, Privacy, Permissions, and Settings preview, including synthetic session-status, Copy Result, and permission readiness scenarios, a Rust workspace with local settings persistence, a platform-independent session reducer and an ordered effect coordinator, and a development-only native macOS microphone probe. The coordinator can be exercised through deterministic mock adapters. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
 
 ## Current MVP baseline — 2026-11-08
 
@@ -53,6 +53,27 @@ Use **Back to Welcome** or **Review permission readiness**. The latter opens **S
 This flow is informational only. It does not request permissions, record audio, register shortcuts, invoke the clipboard, make network calls, access Tauri/native APIs, ask for consent, persist setup progress, or mark setup complete. The primary navigation remains Home and Settings. Inspect at desktop width and 320 CSS px, and try 200% browser zoom where available. No 200% zoom or screen-reader result should be inferred from responsive-width testing alone.
 
 **Troubleshooting:** If **Review privacy** is missing, reopen Welcome through **Getting started → Preview setup**. If a privacy disclosure appears to describe current functionality, read its **Privacy implementation in progress** note: the browser UI presents product requirements, not verified native behavior. If the permission checklist is needed, use **Review permission readiness**; it stays at its existing unknown defaults unless a development fixture is manually selected.
+
+### Permissions explanation step preview (MVP-14)
+
+Install the locked frontend dependencies, run the checks, and start the preview from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Open the local Vite URL and follow **Home → Getting started → Preview setup → Review privacy → Continue to permissions**. Permissions explains the planned microphone, global shortcut, and text-insertion capabilities, then reuses the MVP-11 **Permission readiness** checklist. The checklist starts at **Permission readiness has not been checked**. In development mode its scenario selector contains synthetic local fixtures; a production build omits that selector.
+
+Use **Back to Privacy** to return to the prior setup step or **View permission details in Settings** to open **Settings → General**. The existing Privacy **Review permission readiness** action continues to open that same Settings section directly. Navigation moves keyboard focus to the destination heading, and Home is unmounted during all setup steps. A previous volatile Copy Result and simulated acknowledgment are discarded; returning Home does not restore them, while the App-root lifecycle counter remains in memory for later synthetic results.
+
+Expected behavior: this is an unconnected browser preview. It does not request, check, or grant permissions; register shortcuts; record audio; access the clipboard; call native/Tauri, network, or storage APIs; or save setup progress. The planned text-insertion permission is optional for a future Copy-only workflow, while microphone permission remains necessary for actual speech recording. Insertion capability does not establish whether a specific editor is safe or eligible. Settings keeps its independent synthetic capability fixtures.
+
+**Troubleshooting:** If **Continue to permissions** is missing, reopen Welcome from **Getting started → Preview setup**, choose **Review privacy**, and reload the local page if needed. If development scenarios are absent, confirm Vite is running through `npm run dev`; their absence in a production build is expected. The default unknown status is expected because no native capability provider is connected. Use **View permission details in Settings** or the existing direct Privacy action to inspect the separate Settings checklist. No screen-reader or genuine 200% zoom result is inferred from automated tests or a narrow viewport alone.
 
 ### Microphone capability preview (MVP-09)
 

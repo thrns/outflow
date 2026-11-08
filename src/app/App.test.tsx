@@ -1115,6 +1115,12 @@ describe("Welcome setup introduction preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review privacy" }));
   }
 
+  function openPermissions() {
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue to permissions" }),
+    );
+  }
+
   it("offers Preview setup in Home's Getting Started area", () => {
     render(<App />);
 
@@ -1263,6 +1269,223 @@ describe("Welcome setup introduction preview", () => {
     expect(screen.queryByText(/accept (the )?privacy|agree to terms/i)).not.toBeInTheDocument();
   });
 
+  it("adds Continue to permissions without removing the existing Privacy actions", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    expect(
+      screen.getByRole("button", { name: "Back to Welcome" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Review permission readiness" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Continue to permissions" }),
+    ).toBeVisible();
+  });
+
+  it("opens Permissions, focuses its single h1, and keeps only Home and Settings as primary destinations", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Permissions for Outflow",
+    });
+    expect(heading).toBeVisible();
+    expect(heading).toHaveFocus();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(
+      within(
+        screen.getByRole("navigation", { name: "Application navigation" }),
+      )
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Home", "Settings"]);
+    expect(screen.queryByRole("heading", { level: 1, name: "Home" })).not.toBeInTheDocument();
+    for (const name of [
+      "Microphone",
+      "Global shortcuts",
+      "Text insertion",
+      "Review the separate capability details",
+    ]) {
+      expect(screen.getByRole("heading", { level: 2, name })).toBeVisible();
+    }
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Permission readiness" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "This is an unconnected browser preview. No permission has been granted, checked, or requested.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("explains intentional microphone use and separates permission from device availability", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+
+    const microphone = screen.getByRole("region", { name: "Microphone" });
+    expect(microphone).toHaveTextContent(/only after you intentionally start dictation/i);
+    expect(microphone).toHaveTextContent(/Permission and an available input device are separate/i);
+    expect(microphone).toHaveTextContent(/permission alone does not mean a working microphone is available/i);
+  });
+
+  it("explains separate shortcut registration and release-event requirements", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+
+    const shortcuts = screen.getByRole("region", { name: "Global shortcuts" });
+    expect(shortcuts).toHaveTextContent(/intended to start and stop dictation/i);
+    expect(shortcuts).toHaveTextContent(/requires reliable matching press-and-release events/i);
+    expect(shortcuts).toHaveTextContent(/registration alone is not enough/i);
+    expect(
+      screen.getByText(/Unknown release support does not mean push-to-talk works/i),
+    ).toBeVisible();
+  });
+
+  it("separates insertion permission, target eligibility, and the future Copy-only fallback", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+
+    const insertion = screen.getByRole("region", { name: "Text insertion" });
+    expect(insertion).toHaveTextContent(/place finalized text in supported destinations/i);
+    expect(insertion).toHaveTextContent(/does not establish that a specific editor is safe or eligible/i);
+    expect(insertion).toHaveTextContent(/optional for a future Copy-only workflow/i);
+    expect(insertion).toHaveTextContent(/result panel that waits for an explicit Copy Result action/i);
+    expect(insertion).toHaveTextContent(/no clipboard connection and does not enable Copy/i);
+    expect(insertion).toHaveTextContent(/Microphone permission remains necessary for actual speech recording/i);
+    expect(
+      screen.queryByRole("button", { name: /^Copy$/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Next|Finish|Enable|Allow|Start Dictation/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the existing checklist in its unverified default and keeps its fixtures synthetic", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+
+    const checklist = screen.getByRole("region", { name: "Permission readiness" });
+    expect(checklist).toBeVisible();
+    expect(checklist).toHaveTextContent("Permission readiness has not been checked.");
+    const selector = within(checklist).getByRole("combobox", {
+      name: "Developer scenarios (simulated fixtures)",
+    });
+    fireEvent.change(selector, {
+      target: { value: "hypothetical-available" },
+    });
+    expect(within(checklist).getByRole("status")).toHaveTextContent(
+      /Simulated scenario: All capabilities hypothetically available/i,
+    );
+    expect(
+      within(checklist).getByText(
+        /Simulated values are independent fixtures, not shared operating-system observations/i,
+      ),
+    ).toBeVisible();
+  });
+
+  it("omits the developer scenario selector from the Permissions production rendering", () => {
+    vi.stubEnv("DEV", false);
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+
+    expect(screen.queryByRole("combobox", { name: /Developer scenarios/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "" }),
+    ).toHaveTextContent("Permission readiness has not been checked.");
+  });
+
+  it("keeps setup checklist fixtures independent from Settings and returns to General with heading focus", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "Developer scenarios (simulated fixtures)",
+      }),
+      { target: { value: "hypothetical-available" } },
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "View permission details in Settings",
+      }),
+    );
+
+    const settingsHeading = screen.getByRole("heading", {
+      level: 1,
+      name: "Settings",
+    });
+    expect(settingsHeading).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("region", { name: "Permission readiness" }),
+    ).toHaveTextContent("Permission readiness has not been checked.");
+  });
+
+  it("returns to Privacy and focuses its heading", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+
+    const backButton = screen.getByRole("button", { name: "Back to Privacy" });
+    expect(backButton).toHaveAttribute("type", "button");
+    backButton.focus();
+    fireEvent.click(backButton);
+
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Your privacy with Outflow",
+    });
+    expect(heading).toBeVisible();
+    expect(heading).toHaveFocus();
+  });
+
+  it("opens Settings General from Permissions and focuses its heading", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    openPermissions();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "View permission details in Settings",
+      }),
+    );
+
+    const settingsHeading = screen.getByRole("heading", {
+      level: 1,
+      name: "Settings",
+    });
+    expect(settingsHeading).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("region", { name: "Permission readiness" }),
+    ).toBeVisible();
+  });
+
   it("describes local speech recognition, text cleanup, and the no-account offline requirement", () => {
     render(<App />);
     openWelcome();
@@ -1409,7 +1632,10 @@ describe("Welcome setup introduction preview", () => {
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
     openPrivacy();
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    openPermissions();
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
     expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Privacy" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Home" }));
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
@@ -1475,6 +1701,11 @@ describe("Welcome setup introduction preview", () => {
       render(<App />);
       openWelcome();
       openPrivacy();
+      openPermissions();
+      expect(screen.getByRole("region", { name: "Permission readiness" })).toHaveTextContent(
+        "Permission readiness has not been checked.",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Back to Privacy" }));
       fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
       fireEvent.click(screen.getByRole("button", { name: "Review permission readiness" }));
       expect(screen.getByRole("region", { name: "Permission readiness" })).toBeVisible();

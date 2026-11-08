@@ -50,6 +50,13 @@ export default function PrivacyStepPage({
             </button>
             <button
               className="home-open-settings-button"
+              onClick={() => onNavigate("permissions")}
+              type="button"
+            >
+              Continue to permissions
+            </button>
+            <button
+              className="app-navigation-button"
               onClick={() => onNavigate("settings")}
               type="button"
             >
