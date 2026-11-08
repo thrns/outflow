@@ -4,6 +4,10 @@ import App from "./App";
 
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+const originalTauriInternals = Object.getOwnPropertyDescriptor(
+  window,
+  "__TAURI_INTERNALS__",
+);
 
 afterEach(() => {
   for (const [property, descriptor] of [
@@ -12,6 +16,11 @@ afterEach(() => {
   ] as const) {
     if (descriptor) Object.defineProperty(navigator, property, descriptor);
     else Reflect.deleteProperty(navigator, property);
+  }
+  if (originalTauriInternals) {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", originalTauriInternals);
+  } else {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   }
   vi.unstubAllEnvs();
 });
@@ -103,13 +112,21 @@ describe("Home session and Copy Result preview", () => {
     ).toBeVisible();
     expect(
       screen.getByLabelText("Finalized text (kept in memory until dismissed)"),
-    ).toHaveValue("Synthetic preview result: Outflow keeps this sample in memory.");
+    ).toHaveValue(
+      "Synthetic preview result: Outflow keeps this sample in memory.\n" +
+        "Unicode sample: café, naïve, 東京, and 🪶.\n" +
+        "Long Unicode line: " +
+        "長".repeat(80) +
+        "\n" +
+        "Second line remains selectable.",
+    );
     expect(clipboardWrite).not.toHaveBeenCalled();
   });
 
-  it("does not call microphone or clipboard APIs when scenarios change", () => {
+  it("does not call microphone, clipboard, or Tauri APIs when scenarios change", () => {
     const clipboardWrite = vi.fn();
     const getUserMedia = vi.fn();
+    const nativeInvoke = vi.fn();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: clipboardWrite },
@@ -118,36 +135,115 @@ describe("Home session and Copy Result preview", () => {
       configurable: true,
       value: { getUserMedia },
     });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: { invoke: nativeInvoke },
+    });
     render(<App />);
 
-    for (const scenario of ["preparing", "recording", "finalizing", "changed-target"]) {
+    for (const scenario of [
+      "preparing",
+      "recording",
+      "finalizing",
+      "changed-target",
+    ]) {
       selectScenario(scenario);
     }
 
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(clipboardWrite).not.toHaveBeenCalled();
+    expect(nativeInvoke).not.toHaveBeenCalled();
   });
 
-  it("keeps Copy disabled in the browser preview and simulates failure without clipboard access", () => {
+  it("reopens the same scenario with a fresh lifecycle identity after Dismiss", () => {
+    render(<App />);
+    selectScenario("copy-failure");
+
+    const firstLifecycle = screen
+      .getByRole("region", { name: "Review finalized text" })
+      .getAttribute("data-result-lifecycle-id");
+    expect(firstLifecycle).toMatch(/^copy-result-[1-9][0-9]*$/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    selectScenario("copy-failure");
+
+    const secondLifecycle = screen
+      .getByRole("region", { name: "Review finalized text" })
+      .getAttribute("data-result-lifecycle-id");
+    expect(secondLifecycle).toMatch(/^copy-result-[1-9][0-9]*$/);
+    expect(secondLifecycle).not.toBe(firstLifecycle);
+    expect(secondLifecycle).not.toBe("copy-failure");
+  });
+
+  it("exercises the real Copy Result request, failure, retry, and success protocol in development", () => {
     const clipboardWrite = vi.fn();
+    const getUserMedia = vi.fn();
+    const nativeInvoke = vi.fn();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: clipboardWrite },
     });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: { invoke: nativeInvoke },
+    });
     render(<App />);
 
     selectScenario("copy-failure");
-    expect(screen.getByRole("button", { name: "Copy" })).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Simulate Copy action" }));
-
+    const resultText =
+      "Synthetic preview result: Outflow keeps this sample in memory.\n" +
+      "Unicode sample: café, naïve, 東京, and 🪶.\n" +
+      "Long Unicode line: " +
+      "長".repeat(80) +
+      "\n" +
+      "Second line remains selectable.";
     expect(
-      screen.getByText(/Simulated Copy failed\. No clipboard was accessed/),
+      screen.getByRole("button", { name: "Simulate Copy request" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByText(
+        "Development-only mock: the first request fails and the explicit retry succeeds. No clipboard is accessed.",
+      ),
     ).toBeVisible();
     expect(
       screen.getByLabelText("Finalized text (kept in memory until dismissed)"),
-    ).toHaveValue("Synthetic preview result: Outflow keeps this sample in memory.");
+    ).toHaveValue(resultText);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Simulate Copy request" }),
+    );
+
+    expect(
+      screen.getByText(
+        "Copy failed. Your result is still available in this panel.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByLabelText("Finalized text (kept in memory until dismissed)"),
+    ).toHaveValue(resultText);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Simulate Copy request" }),
+    );
+
+    expect(
+      screen.queryByLabelText("Finalized text (kept in memory until dismissed)"),
+    ).not.toBeInTheDocument();
+    const completionStatus = screen.getByRole("status");
+    expect(completionStatus).toHaveTextContent(
+      "Copy completed. The result was cleared.",
+    );
+    expect(completionStatus).toHaveAttribute("aria-live", "polite");
+    expect(
+      screen.getByRole("heading", { name: "Native dictation is not connected" }),
+    ).toBeVisible();
     expect(clipboardWrite).not.toHaveBeenCalled();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(nativeInvoke).not.toHaveBeenCalled();
   });
 
   it("blocks Copy during uncertain insertion until one explicit review acknowledgment", () => {
@@ -238,6 +334,12 @@ describe("Home session and Copy Result preview", () => {
 
       expect(
         screen.queryByRole("combobox", { name: "Scenario" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Simulate Copy request/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Development-only mock/),
       ).not.toBeInTheDocument();
       expect(
         screen.getByRole("heading", {

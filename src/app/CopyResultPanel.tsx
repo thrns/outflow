@@ -7,7 +7,10 @@ export type CopyFallbackReason =
   | "uncertain-reviewed";
 
 export type CopyRequest = {
-  /** Opaque UI correlation token; the adapter maps it to Rust session/attempt IDs. */
+  /**
+   * Opaque UI correlation token, not authorization. A future native bridge must
+   * resolve it to the Rust coordinator's actual session and CopyAttemptId.
+   */
   requestId: string;
 };
 
@@ -30,6 +33,8 @@ type CopyResultPanelProps = {
   /** Only an explicitly connected clipboard adapter should provide this callback. */
   onCopyRequest?: (request: CopyRequest) => void;
   copyAcknowledgment?: CopyAcknowledgment | null;
+  /** Labels the connected callback as a development-only mock, never as clipboard access. */
+  developmentCopySimulation?: boolean;
 };
 
 const reasonText: Record<CopyFallbackReason, string> = {
@@ -50,6 +55,7 @@ export function CopyResultPanel({
   onResultCopied,
   onCopyRequest,
   copyAcknowledgment,
+  developmentCopySimulation = false,
 }: CopyResultPanelProps) {
   const resultField = useRef<HTMLTextAreaElement | null>(null);
   const nextRequestNumber = useRef(1);
@@ -127,13 +133,16 @@ export function CopyResultPanel({
     ? "Copy is unavailable because this browser preview has no clipboard adapter connected."
     : isProtected && !protectedCopyAcknowledged
       ? "Acknowledge the protected-destination notice before requesting Copy."
-      : "Copy sends one explicit request to the connected adapter.";
+      : developmentCopySimulation
+        ? "This development-only mock never accesses the system clipboard."
+        : "Copy sends one explicit request to the connected adapter.";
 
   return (
     <section
       aria-labelledby="copy-result-heading"
       className="home-status-card copy-result-card"
       data-copy-reason={result.reason}
+      data-result-lifecycle-id={requestScope}
     >
       <p className="home-status-label">Copy Result</p>
       <h2 id="copy-result-heading">Review finalized text</h2>
@@ -176,7 +185,11 @@ export function CopyResultPanel({
         may retain copied text.
       </p>
 
-      <div aria-label="Copy Result actions" className="copy-result-actions">
+      <div
+        aria-busy={pendingRequestId !== null}
+        aria-label="Copy Result actions"
+        className="copy-result-actions"
+      >
         <button
           aria-describedby="copy-result-unavailable-note"
           className="copy-result-action copy-result-action-primary"
@@ -184,7 +197,13 @@ export function CopyResultPanel({
           onClick={requestCopy}
           type="button"
         >
-          {pendingRequestId ? "Copy pending…" : "Copy"}
+          {pendingRequestId
+            ? developmentCopySimulation
+              ? "Simulated Copy pending…"
+              : "Copy pending…"
+            : developmentCopySimulation
+              ? "Simulate Copy request"
+              : "Copy"}
         </button>
         <button
           className="copy-result-action"

@@ -288,6 +288,8 @@ trait TargetService {
 
 `TargetService::submit(InsertOnce)` classifies submission failure as either **DefinitelyNotDispatched** or **OutcomeUnknown**. DefinitelyNotDispatched guarantees that no native mutation was attempted and yields CopyReady. OutcomeUnknown means a native API may have seen the request or partially changed the target and yields Uncertain with manual review required; it never retries or offers Copy before review. A successful submit means only that work was accepted and still needs an insertion-completion callback. Completion must be Inserted, a definite no-side-effect failure, or UncertainOrPartial. Adapters classify uncertainty conservatively: a failed OS call is not proof that no text was inserted.
 
+**Frontend Copy correlation is not authority:** a frontend request token identifies a pending UI callback only. A future native bridge must validate the active Rust coordinator session and correlate that token to the coordinator's actual `SessionId` and `CopyAttemptId`. It must not accept an arbitrary frontend string as authorization or as a replacement for those Rust-owned identities. Dismissal, session replacement, or a stale callback must not mutate a newer result lifecycle. The current React preview has no native bridge.
+
 ### 6.1 Tauri command surface (internal only)
 
 | Command | Input | Return | Rules |

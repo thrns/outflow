@@ -1195,25 +1195,14 @@ body {
   color: var(--primary-foreground);
 }
 
-.copy-result-simulation {
-  display: grid;
-  justify-items: start;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  border-top: 1px solid var(--border);
-  padding-top: 0.75rem;
-}
-
-.copy-result-simulation p {
+.copy-result-simulation-note {
+  min-width: 0;
   margin: 0;
   color: var(--muted-foreground);
   font-size: 0.875rem;
   line-height: 1.5;
   text-wrap: pretty;
-}
-
-.copy-result-simulation .copy-result-action {
-  flex: none;
+  overflow-wrap: anywhere;
 }
 
 .uncertain-review-card {

@@ -1,6 +1,11 @@
-import { useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import AppHeader, { type AppPage } from "./AppHeader";
-import { CopyResultPanel, type CopyResult } from "./CopyResultPanel";
+import {
+  CopyResultPanel,
+  type CopyAcknowledgment,
+  type CopyRequest,
+  type CopyResult,
+} from "./CopyResultPanel";
 import { PageContainer } from "./PageContainer";
 import { SessionStatus, type SessionPresentation } from "./SessionStatus";
 import { UncertainInsertionReview } from "./UncertainInsertionReview";
@@ -24,6 +29,12 @@ type HomeScenario = {
   result: CopyResult | null;
 };
 
+type HomePresentationState = {
+  scenario: HomeScenario;
+  /** Identifies one volatile result lifecycle, independent of its scenario. */
+  resultLifecycleId: number | null;
+};
+
 const scenarioOptions: ReadonlyArray<{ id: HomeScenarioId; label: string }> = [
   { id: "unavailable", label: "Unavailable / default" },
   { id: "preparing", label: "Preparing" },
@@ -39,7 +50,12 @@ const scenarioOptions: ReadonlyArray<{ id: HomeScenarioId; label: string }> = [
 ];
 
 const syntheticResultText =
-  "Synthetic preview result: Outflow keeps this sample in memory.";
+  "Synthetic preview result: Outflow keeps this sample in memory.\n" +
+  "Unicode sample: café, naïve, 東京, and 🪶.\n" +
+  "Long Unicode line: " +
+  "長".repeat(80) +
+  "\n" +
+  "Second line remains selectable.";
 
 function createScenario(id: HomeScenarioId): HomeScenario {
   switch (id) {
@@ -94,40 +110,78 @@ type HomePageProps = {
 };
 
 export default function HomePage({ onNavigate, headingRef }: HomePageProps) {
-  const [scenario, setScenario] = useState<HomeScenario>(() =>
-    createScenario("unavailable"),
-  );
-  const [simulatedCopyFailure, setSimulatedCopyFailure] = useState(false);
+  const nextResultLifecycleId = useRef(0);
+  const [homeState, setHomeState] = useState<HomePresentationState>(() => ({
+    scenario: createScenario("unavailable"),
+    resultLifecycleId: null,
+  }));
+  const [copyAcknowledgment, setCopyAcknowledgment] =
+    useState<CopyAcknowledgment | null>(null);
+  const [copyCompletionAnnouncement, setCopyCompletionAnnouncement] =
+    useState("");
+  const scenario = homeState.scenario;
   const isSyntheticScenario =
     import.meta.env.DEV && scenario.id !== "unavailable";
 
+  function createPresentationState(id: HomeScenarioId): HomePresentationState {
+    const nextScenario = createScenario(id);
+    if (!nextScenario.result) {
+      return { scenario: nextScenario, resultLifecycleId: null };
+    }
+
+    const nextId = nextResultLifecycleId.current + 1;
+    if (!Number.isSafeInteger(nextId)) {
+      throw new RangeError("Copy Result lifecycle identity is exhausted.");
+    }
+    nextResultLifecycleId.current = nextId;
+    return { scenario: nextScenario, resultLifecycleId: nextId };
+  }
+
   function handleScenarioChange(event: ChangeEvent<HTMLSelectElement>) {
     const selected = event.currentTarget.value as HomeScenarioId;
-    setSimulatedCopyFailure(false);
-    setScenario(createScenario(selected));
+    setCopyAcknowledgment(null);
+    setCopyCompletionAnnouncement("");
+    setHomeState(createPresentationState(selected));
   }
 
   function handleManualReview() {
-    setScenario((current) => {
-      if (current.presentation.state !== "uncertain" || !current.result) {
+    setHomeState((current) => {
+      if (
+        current.scenario.presentation.state !== "uncertain" ||
+        !current.scenario.result
+      ) {
         return current;
       }
 
       return {
         ...current,
-        presentation: { state: "copy-ready" },
-        result: { ...current.result, reason: "uncertain-reviewed" },
+        scenario: {
+          ...current.scenario,
+          presentation: { state: "copy-ready" },
+          result: { ...current.scenario.result, reason: "uncertain-reviewed" },
+        },
       };
     });
   }
 
   function clearResult() {
-    setSimulatedCopyFailure(false);
-    setScenario(createScenario("unavailable"));
+    setCopyAcknowledgment(null);
+    setCopyCompletionAnnouncement("");
+    setHomeState(createPresentationState("unavailable"));
   }
 
-  function handleSimulatedCopyFailure() {
-    setSimulatedCopyFailure(true);
+  function handleResultCopied() {
+    setCopyAcknowledgment(null);
+    setCopyCompletionAnnouncement("Copy completed. The result was cleared.");
+    setHomeState(createPresentationState("unavailable"));
+  }
+
+  function handleSimulatedCopyRequest(request: CopyRequest) {
+    // This adapter demonstrates the UI protocol only; it never writes a clipboard.
+    setCopyAcknowledgment((previous) => ({
+      requestId: request.requestId,
+      outcome: previous?.outcome === "failed" ? "succeeded" : "failed",
+    }));
   }
 
   return (
@@ -182,50 +236,50 @@ export default function HomePage({ onNavigate, headingRef }: HomePageProps) {
             </section>
           )}
 
+          {copyCompletionAnnouncement && (
+            <p aria-live="polite" className="copy-result-feedback" role="status">
+              {copyCompletionAnnouncement}
+            </p>
+          )}
+
           {scenario.presentation.state === "uncertain" &&
             scenario.result && (
               <UncertainInsertionReview
-                key={scenario.id}
+                key={homeState.resultLifecycleId ?? scenario.id}
                 onReviewed={handleManualReview}
               />
             )}
 
           {scenario.presentation.state === "copy-ready" &&
-            scenario.result && (
+            scenario.result &&
+            homeState.resultLifecycleId !== null && (
               <CopyResultPanel
-                copyAcknowledgment={null}
-                key={scenario.id}
+                copyAcknowledgment={
+                  import.meta.env.DEV && scenario.id === "copy-failure"
+                    ? copyAcknowledgment
+                    : null
+                }
+                key={homeState.resultLifecycleId}
+                developmentCopySimulation={
+                  import.meta.env.DEV && scenario.id === "copy-failure"
+                }
+                onCopyRequest={
+                  import.meta.env.DEV && scenario.id === "copy-failure"
+                    ? handleSimulatedCopyRequest
+                    : undefined
+                }
                 onDismiss={clearResult}
-                onResultCopied={clearResult}
-                requestScope={scenario.id}
+                onResultCopied={handleResultCopied}
+                requestScope={`copy-result-${homeState.resultLifecycleId}`}
                 result={scenario.result}
               />
             )}
 
           {import.meta.env.DEV && scenario.id === "copy-failure" && (
-            <section
-              aria-label="Simulated Copy demonstration"
-              className="home-status-card copy-result-simulation"
-            >
-              <p className="home-status-label">Development-only action</p>
-              <h2>Copy feedback preview</h2>
-              <p>
-                This action never accesses or changes the system clipboard.
-              </p>
-              <button
-                className="copy-result-action"
-                onClick={handleSimulatedCopyFailure}
-                type="button"
-              >
-                Simulate Copy action
-              </button>
-              {simulatedCopyFailure && (
-                <p aria-atomic="true" aria-live="polite" role="status">
-                  Simulated Copy failed. No clipboard was accessed; your result
-                  is still available.
-                </p>
-              )}
-            </section>
+            <p className="copy-result-simulation-note">
+              Development-only mock: the first request fails and the explicit
+              retry succeeds. No clipboard is accessed.
+            </p>
           )}
 
           <section

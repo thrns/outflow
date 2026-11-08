@@ -12,10 +12,14 @@ This README also preserves chronological task snapshots. When an older section d
 
 ```sh
 npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
 npm run dev -- --host 127.0.0.1
 ```
 
-Open the local URL printed by Vite. On Home, use **Inspect synthetic scenarios** → **Scenario** to inspect the status states, CopyReady reasons, uncertain insertion review, and retained-result Copy failure feedback. Every result is fixed synthetic text. Scenario changes discard the prior in-memory result; Dismiss clears it. The Copy action stays disabled because the browser preview has no clipboard adapter. The separately labeled **Simulate Copy action** appears only in the Copy failure scenario and changes preview feedback without touching the system clipboard. The default Home view still says **Native dictation is not connected**; the Recording scenario is explicitly synthetic and does not activate a microphone.
+Open the local URL printed by Vite. On Home, use **Inspect synthetic scenarios** → **Scenario** to inspect the status states, CopyReady reasons, uncertain insertion review, and retained-result Copy failure feedback. Every result is fixed synthetic text. Scenario changes discard the prior in-memory result; Dismiss clears it. Ordinary Copy Result panels keep **Copy** disabled because the browser preview has no clipboard adapter. In the Copy failure scenario, **Simulate Copy request** uses the actual Copy Result request/acknowledgment props: the first explicit request reports failure and retains the exact multiline Unicode result, and an explicit retry reports success and clears it. A status message confirms completion. This deterministic development mock does not access the system clipboard. The default Home view still says **Native dictation is not connected**; the Recording scenario is explicitly synthetic and does not activate a microphone.
 
 Settings remains available from the existing navigation. Neither view connects to Rust or native dictation.
 
@@ -80,6 +84,8 @@ git diff --check
 
 ### MVP-07 Home session status and Copy Result preview
 
+Historical note: MVP-08 below replaces MVP-07's separate Copy feedback action with a development-only adapter connected to the actual Copy Result panel.
+
 Run the browser preview with:
 
 ```sh
@@ -95,6 +101,14 @@ Troubleshooting:
 - If **Inspect synthetic scenarios** is missing, confirm Vite is running with `npm run dev -- --host 127.0.0.1`; production builds intentionally omit the controls.
 - If Copy is disabled, that is expected in this browser-only preview. No browser clipboard API is called.
 - If switching scenarios removes a result, that is expected: only one synthetic scenario is held in memory, and no transcript history is restored after remount.
+
+### MVP-08 Copy Result lifecycle and synthetic acknowledgment preview
+
+Home assigns each in-memory result lifecycle a checked, monotonically increasing numeric identity. Reopening the same scenario creates a new identity; Dismiss and scenario switching remove the current lifecycle, so old request acknowledgments cannot complete or clear a later result. Copy attempt IDs remain scoped to that lifecycle and increase for each explicit request.
+
+In the development-only **Copy failure** scenario, activate **Simulate Copy request** inside the Copy Result panel. The first acknowledgment is a synthetic failure that retains the exact result; activate the same action again to deliver a matching success acknowledgment and clear it. This mock uses the panel's `onCopyRequest` and `copyAcknowledgment` contract and has no timers, network work, browser clipboard write, microphone access, or Tauri call. A regular panel without an adapter continues to show disabled **Copy**.
+
+The frontend request ID is only an opaque correlation token. A future native bridge must validate the active Rust coordinator session and correlate the frontend request to its actual `SessionId` and `CopyAttemptId`; it must never treat an arbitrary frontend string as authorization. This browser-only milestone does not complete T-046, T-047, T-050, T-055, AC-09, AC-10, AC-11, or release gates.
 
 The coordinator suite checks delayed, failed, duplicate, and stale stop callbacks; separation of capture release from full speech-resource closure; cancellation and device-fault races; definite versus unknown insertion submission; delayed/duplicate insertion callbacks; Copy attempt correlation; content-free diagnostics; and 100 completed synthetic sessions with no remaining callbacks or open capture. Adapter tests are synthetic only: they do not open a microphone, run Moonshine, call Tauri, insert into an OS target, or access the clipboard. No model assets, network, or transcript persistence are used. Mock evidence does not complete T-010, T-011, T-023, T-031, T-034, T-042, T-048, or mapped acceptance criteria.
 
