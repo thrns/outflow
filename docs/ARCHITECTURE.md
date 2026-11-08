@@ -119,28 +119,31 @@ stateDiagram-v2
   [*] --> Uninitialized
   Uninitialized --> Idle: check packaged model and permissions
   Uninitialized --> Faulted: model absent/corrupt
-  Idle --> Loading: shortcut valid + mic permitted
-  Loading --> Listening: model loaded + audio ready
-  Loading --> Faulted: init failure
-  Loading --> Cancelled: cancel
-  Listening --> Finalizing: key up / toggle stop
-  Listening --> Cancelled: Escape / mic error / focus invalid
-  Finalizing --> Committing: nonempty final + valid target
-  Finalizing --> CopyReady: unsupported / focus mismatch / secure control
+  Idle --> Loading: accepted shortcut activation
+  Loading --> Listening: model and microphone ready
+  Loading --> Faulted: preparation / permission / microphone failure
+  Loading --> Cancelled: cancel or release before capture starts
+  Loading --> Finalizing: released while microphone start pending and input captured
+  Listening --> Finalizing: key up / second toggle activation after capture
+  Listening --> Cancelled: cancel, input loss, overflow, or release before capture
+  Finalizing --> Cancelled: cancel before target commit
+  Finalizing --> Committing: cleaned final and fresh target match; issue InsertOnce
+  Finalizing --> CopyReady: changed / secure / unsupported target
   Finalizing --> Idle: silence
   Committing --> Idle: inserted once
   Committing --> CopyReady: definite failure, no side effect
   Committing --> Uncertain: possible partial insertion
-  Uncertain --> CopyReady: show result, never auto-retry
-  CopyReady --> Idle: dismiss / explicit copy
-  Cancelled --> Idle: buffers cleared
-  Faulted --> Idle: repair verified + retry
+  Uncertain --> CopyReady: manual review acknowledged; never auto-retry
+  CopyReady --> Cancelled: explicit cancel clears result
+  CopyReady --> Idle: dismissal or explicit copy succeeds
+  Cancelled --> Idle: dismissal clears session
+  Faulted --> Idle: failure dismissed; preparation requested on next start
 ```
 
 **Key invariants:**
 
-1. Every transition includes `session_id: UUID` and monotonic `event_seq` to reject stale duplicate events.
-2. `Loading` cannot transition to `Listening` if user released push-to-talk while loading. It transitions to `Finalizing` only if actually captured audio, otherwise to `Idle`.
+1. Every transition includes a checked, process-wide monotonic `SessionId` and strictly increasing `event_seq` to reject stale or duplicate events. Session IDs are in-process callback handles, not durable identifiers.
+2. A push-to-talk release during model preparation cancels before microphone start. If release races an outstanding microphone start, the adapter receives a stop fence; the reducer finalizes only when input capture was acknowledged, otherwise it cancels and clears the session.
 3. `Listening` alone owns an open microphone. `Cancelled` and `Faulted` always close input stream.
 4. `Finalizing` is non-cancellable with respect to already emitted target insertion? Before `Committing`, cancellation may discard. After commit starts, consider outcome `uncertain`; never retry without user instruction.
 5. Target editor is only mutated inside `Committing`; partial transcription only affects private UI preview.
@@ -171,7 +174,7 @@ struct TargetSnapshot {
 }
 ```
 
-Use UUID v7 or a monotonic unique ID for logs; logs must never contain captured target content. `TargetSnapshot` cannot be persisted, uploaded, or used to scan document contents.
+The Rust reducer uses a checked, process-wide monotonic ID for callback correlation; it is not a durable identifier. Any diagnostic use must remain content-free. `TargetSnapshot` cannot be persisted, uploaded, or used to scan document contents.
 
 ## 5. End-to-end data flows
 
@@ -341,6 +344,10 @@ UPDATE-001 INVALID_SIG     => reject package, old stays installed
 Shortcuts above are **example serialization only**, not universal defaults: actual defaults must avoid conflicts and be registered on each OS; use platform-specific defaults at first launch. `language` remains `en` for MVP; no model UI. Validate `schema_version` and migrate unknown versions safely. Store app license/attribution notices as read-only shipped files.
 
 The `outflow-settings` library also exposes a small explicit-path service: missing files yield validated in-memory defaults without a write; supported preference and vocabulary changes are applied to a candidate snapshot and committed through the atomic writer before replacing live state. Vocabulary operations reuse the stable-ID CRUD functions and the Unicode 18 core validator. Schema v1 contains no matching-policy provenance, so every nonempty collection loaded from disk is reported as `Unknown` and requires an explicit review acknowledgment in that service instance before writes. The acknowledgment is not persisted or inferred from a schema version or marker; opening again requires review again. A conflict-only review decode preserves original strings and order for manual repair while the ordinary loader remains strict. The service changes the stored run-at-login preference only; OS registration remains a shell/platform responsibility. Windows owner-only ACL persistence remains unimplemented.
+
+The current schema-v1 decoder also requires vocabulary IDs to be unique. A duplicate stable ID is ambiguous for ID-based edits, so both strict loading and the read-only vocabulary-review path return a content-free error with the two entry indices; they do not rewrite the original file. The review path still preserves spoken-phrase conflicts for explicit repair when IDs are unique. Each `SettingsService` instance holds its own in-memory snapshot. If two instances write from stale snapshots, atomic replacement prevents a torn file but the last replacement wins and may discard the other instance's update. Callers currently own serialization; the service adds no file locking or watcher.
+
+The platform-independent Rust reducer currently lives in `outflow-core::session_engine` as reusable C-02 logic. A process-wide checked atomic counter supplies monotonic, nonzero session IDs shared across reducer instances; each reducer accepts the caller's strictly increasing event sequence. IDs are coordination handles for the in-process lifecycle, not durable IDs or transcript log keys. Typed events and effects describe future speech/target work; the queue-only `SpeechBackend` and `TargetService` traits have no OS implementation here. Final text is handed to the caller's existing cleanup pipeline once, with a session-scoped failure event if cleanup cannot complete. A bounded `TargetSnapshot` contains opaque target identity, generation, security and editability only, never document text. `InsertOnce` means exactly one adapter attempt and still requires a fresh target revalidation immediately before mutation. CopyReady retains final text only in volatile memory; copying can be requested only by an explicit user event. This library milestone does not implement microphone capture, Moonshine, native shortcuts, Tauri, text insertion or clipboard access.
 
 **Bundled model manifest** (generated in CI, signed by signed installer; hashes validated at app launch):
 

@@ -16,6 +16,7 @@ use outflow_core::vocabulary::{
 };
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
@@ -150,6 +151,7 @@ impl Settings {
     /// This check does not parse, migrate, save, or apply settings.
     pub fn validate(&self) -> Result<(), SettingsError> {
         self.validate_non_vocabulary_fields()?;
+        validate_vocabulary_ids(&self.vocabulary)?;
         validate_vocabulary(&self.vocabulary)
     }
 
@@ -250,6 +252,10 @@ impl Settings {
     fn from_wire_for_vocabulary_review(wire: SettingsWire) -> Result<Self, SettingsError> {
         let settings = Self::from_wire_fields(wire);
         settings.validate_non_vocabulary_fields()?;
+        // Source-phrase conflicts can be reviewed by entry index. Duplicate
+        // stable IDs cannot: edit/delete-by-ID would be ambiguous, so this
+        // path remains fail-closed and leaves the source file untouched.
+        validate_vocabulary_ids(&settings.vocabulary)?;
         validate_vocabulary_allowing_conflicts(&settings.vocabulary)?;
         Ok(settings)
     }
@@ -525,6 +531,11 @@ pub enum SettingsError {
         first_index: usize,
         duplicate_index: usize,
     },
+    /// Two vocabulary entries share a stable ID, making ID-based edits ambiguous.
+    DuplicateVocabularyId {
+        first_index: usize,
+        duplicate_index: usize,
+    },
 }
 
 impl Display for SettingsError {
@@ -568,6 +579,13 @@ impl Display for SettingsError {
             } => write!(
                 formatter,
                 "vocabulary source phrases at entries {first_index} and {duplicate_index} conflict under Unicode 18 canonical-caseless matching"
+            ),
+            Self::DuplicateVocabularyId {
+                first_index,
+                duplicate_index,
+            } => write!(
+                formatter,
+                "vocabulary identifiers at entries {first_index} and {duplicate_index} must be unique"
             ),
         }
     }
@@ -637,6 +655,19 @@ fn validate_shortcuts(recording: &RecordingSettings) -> Result<(), SettingsError
 
 fn validate_vocabulary(entries: &[VocabularyEntry]) -> Result<(), SettingsError> {
     validate_vocabulary_collection(&borrow_vocabulary(entries)).map_err(map_vocabulary_error)
+}
+
+fn validate_vocabulary_ids(entries: &[VocabularyEntry]) -> Result<(), SettingsError> {
+    let mut first_index_by_id = HashMap::with_capacity(entries.len());
+    for (index, entry) in entries.iter().enumerate() {
+        if let Some(first_index) = first_index_by_id.insert(entry.id.as_str(), index) {
+            return Err(SettingsError::DuplicateVocabularyId {
+                first_index,
+                duplicate_index: index,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Lets the service inspect only the conflicting legacy data needed for a
@@ -844,6 +875,59 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("Über")
+        );
+    }
+
+    #[test]
+    fn duplicate_vocabulary_ids_are_rejected_by_strict_and_review_decoders() {
+        let settings = Settings {
+            vocabulary: vec![
+                vocabulary_entry(7, "first synthetic source", "First replacement"),
+                vocabulary_entry(7, "second synthetic source", "Second replacement"),
+            ],
+            ..Settings::default()
+        };
+        let json = serde_json::to_string(&settings)
+            .expect("synthetic duplicate-ID settings serialize for decoder tests");
+        let expected = SettingsJsonError::InvalidSettings(SettingsError::DuplicateVocabularyId {
+            first_index: 0,
+            duplicate_index: 1,
+        });
+
+        assert_eq!(Settings::from_json(&json), Err(expected.clone()));
+        assert_eq!(
+            Settings::from_json_for_vocabulary_review(&json),
+            Err(expected)
+        );
+        assert!(
+            !settings
+                .validate()
+                .expect_err("duplicate IDs are invalid")
+                .to_string()
+                .contains("first synthetic source")
+        );
+    }
+
+    #[test]
+    fn duplicate_ids_are_rejected_even_when_source_conflicts_are_reviewable() {
+        let settings = Settings {
+            vocabulary: vec![
+                vocabulary_entry(4, "straße", "First replacement"),
+                vocabulary_entry(4, "STRASSE", "Second replacement"),
+            ],
+            ..Settings::default()
+        };
+        let json = serde_json::to_string(&settings)
+            .expect("synthetic duplicate-ID source-conflict fixture serializes");
+
+        assert_eq!(
+            Settings::from_json_for_vocabulary_review(&json),
+            Err(SettingsJsonError::InvalidSettings(
+                SettingsError::DuplicateVocabularyId {
+                    first_index: 0,
+                    duplicate_index: 1,
+                }
+            ))
         );
     }
 

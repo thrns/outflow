@@ -4,6 +4,8 @@
 //! `docs/ARCHITECTURE.md`. It intentionally has no frontend, Tauri, operating
 //! system, or external-service dependencies.
 
+/// Platform-independent single-session dictation reducer.
+pub mod session_engine;
 /// Transcript whitespace normalization and vocabulary-stage composition.
 pub mod text_cleanup;
 /// Pure validation for the spoken and written sides of a vocabulary entry.

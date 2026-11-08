@@ -1,10 +1,10 @@
 # Outflow
 
-Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace foundation, and a native Rust settings schema v1 model with JSON serialization, validated decoding, an explicit-path transactional settings service, explicitly confirmed reset, and an atomic JSON writer on Unix. The production Tauri shell and dictation flow, Windows owner-only ACL writing, and release packaging have not been implemented. A separate development-only native macOS microphone probe is documented below.
+Outflow is an offline desktop dictation application in development. This repository contains a browser-based React foundation screen and Settings preview, a Rust workspace with local settings persistence and a platform-independent dictation session reducer, and a development-only native macOS microphone probe. The reducer can be exercised immediately through a synthetic example and mock effects. The production Tauri shell and native dictation adapters, Windows owner-only ACL writing, and release packaging have not been implemented.
 
-## Current MVP baseline — 2026-11-06
+## Current MVP baseline — 2026-11-07
 
-This checkout is not a shipping desktop app. `npm run dev` opens the browser-only Settings preview; it does not request microphone access or connect the React UI to Rust. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+This checkout is not a shipping desktop app. `npm run dev` opens the browser-only Settings preview; it does not request microphone access or connect the React UI to Rust. The Rust session reducer is platform-independent logic exercised by synthetic events; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
 
 This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
@@ -32,6 +32,32 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test
 bash -n scripts/build_macos_mic_probe.sh scripts/run_macos_mic_probe.sh scripts/test_macos_mic_probe.sh
 git diff --check
 ```
+
+### Synthetic Rust session engine (MVP-04)
+
+From the repository root, run the platform-independent session lifecycle example:
+
+```sh
+cargo run -p outflow-settings --example session_engine --locked
+```
+
+It demonstrates push-to-talk start, synthetic model/microphone acknowledgments, two private partial revisions, final cleanup and one simulated insertion; then a changed target with explicit mock Copy and dismissal; and a cancelled session whose late final is rejected. The effect trace is deterministic and content-free:
+
+```text
+Outflow Rust session engine example (synthetic)
+Native shortcuts: NOT INSTALLED
+Session 1: Idle; insertion_attempted=true
+  effects: RequestModelPreparation, RequestMicrophoneStart, PublishPrivatePartial, PublishPrivatePartial, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, AttemptInsertionOnce, ClearPrivateResult
+Session 2: CopyReady -> Idle; target changed; explicit Copy requested
+  effects: RequestModelPreparation, RequestMicrophoneStart, RequestMicrophoneStop, RequestAsrFinalization, PrepareFinalText, RequestTargetVerification, ShowCopyResult, ExplicitCopyRequested, DismissAndClearResult
+Session 3: Cancelled; late final rejected=true
+  effects: RequestModelPreparation, RequestAsrCancellation, ClearPrivateResult
+Native model, microphone, insertion, clipboard, persistence, network: NOT USED
+```
+
+The mock insertion and Copy effects only record labels; no clipboard is changed and no transcript is printed or persisted. Run `cargo test -p outflow-core --locked` and `cargo test -p outflow-settings --locked` for the reducer, mock-effect executor, cleanup handoff and settings integrity suites. The complete workspace/frontend/script commands are listed above.
+
+Troubleshooting: run from the checkout root with the repository's pinned Rust toolchain installed. The example does not need Tauri, native model assets, microphone permission or a desktop session. A build failure mentioning a missing package should be resolved through the checked-in lockfile and toolchain; do not install a native runtime or model for this synthetic example.
 
 ### Native macOS probe limits and recovery
 
@@ -3339,6 +3365,8 @@ This partial implementation does not complete T-038 or AC-08. Boundary-aware rep
 `SettingsService::open(path)` accepts only the caller-supplied path. A missing file returns validated defaults in memory and does not create a file. A valid existing schema-v1 file is loaded read-only. Preference changes and Add/Edit/Delete vocabulary operations clone the snapshot, use the existing validators/CRUD functions, write through `save_settings_atomic()`, and replace live state only after the atomic replacement is visible. Errors contain field names, indices, and operation status; they never include vocabulary text or IDs. Reset calls the existing reset operation and requires explicit confirmation.
 
 Schema v1 does not record vocabulary matching-policy provenance. The service reports nonempty existing collections as `SourcePolicyUnknown`, does not rewrite them on open, and blocks saves until the caller explicitly confirms that the ordered list was reviewed. That acknowledgment applies only to the current service instance. If strict decoding finds a canonical-caseless conflict, a bounded read-only path exposes original entries and index-only readiness so a caller can explicitly edit/delete them; it does not normalize or choose a winner. Every candidate must pass the core Unicode 18 validator before save.
+
+Stable vocabulary IDs must also be unique. Duplicate IDs produce a redacted index-only validation error in strict loading and vocabulary-review decoding; opening or saving does not rewrite the original file, so it remains available for explicit repair. Each `SettingsService` instance keeps an independent snapshot. If multiple instances write concurrently from stale snapshots, the last atomic replacement wins and can overwrite the other instance's update; callers currently serialize writers, and the service has no file lock or watcher.
 
 Run the full synthetic lifecycle from the repository root:
 
