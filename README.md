@@ -38,6 +38,34 @@ In Vite development mode, use **Developer scenarios (simulated) → Scenario** t
 
 **Troubleshooting:** If the selector is missing, confirm the app was launched with `npm run dev`; its absence in a production build is expected. If permission says it has not been checked or the recovery actions are disabled, that is the expected browser-preview state: no native permission adapter is connected. A simulated “available” result is not a real device or permission observation.
 
+### Shortcut capability preview (MVP-10)
+
+Install locked frontend dependencies and start the development preview:
+
+```sh
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open the local URL and choose **Settings → Shortcuts**. The default says **Global keyboard shortcuts are not connected.** Registration and matching press-and-release support are not checked, no shortcut is registered by the preview, and neither recording mode is operational.
+
+In Vite development mode, use **Developer scenarios (simulated) → Scenario** to inspect Unknown / default, registration available with release supported, registration available with release unsupported, conflict, permission / authorization unavailable, unsupported capability, and registration failure. Every option is labeled simulated. The release-unsupported case makes push-to-talk unavailable and describes toggle only as a possible fallback pending actual registration and microphone readiness. A conflict is distinct from missing permission. No scenario assigns a shortcut, observes keyboard events, registers a shortcut, requests microphone permission, or starts recording.
+
+**Check shortcut status** stays disabled in the browser preview because no native status callback is connected. It is a status-only interface for future native integration, not a dictation control. Production builds omit the scenario inspector and continue to show the unverified, not-connected state.
+
+Run the automated frontend checks from the repository root:
+
+```sh
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+```
+
+For a manual check, use keyboard navigation to focus the scenario selector and move through the fixed options. Confirm the selector retains focus, the polite status announcement changes, and no content suggests a real shortcut or active recording. Inspect the view at desktop width and 320 CSS px; at narrow width the cards and selector should stack without horizontal scrolling. Check 200% browser zoom when the browser supports it.
+
+**Troubleshooting:** If the scenario selector is missing, confirm Vite is running in development mode; its absence in a production build is expected. If status checking is disabled, no native shortcut adapter is connected, which is the expected browser-preview state. Simulated capability values are not operating-system observations.
+
 Run the repository checks from the project root:
 
 ```sh
@@ -1421,7 +1449,7 @@ Troubleshooting:
 - **Focus is lost after Save or Cancel:** preserve the row Edit button ref and focus it after the editor closes.
 - **Data survives a full reload:** inspect `App.tsx` for accidental storage; this preview must remain in memory only.
 
-The General section displays: **“Start Outflow automatically when you sign in to your computer.”** and **“Preview only — this setting does not change your computer's startup behavior yet.”** No operating-system login item is registered, and the preference is not written to a configuration file, localStorage, or sessionStorage. The section selection is not persisted. Microphone access, shortcut settings, diagnostics, native Tauri tray/window behavior, and all other dictation features remain unimplemented. The browser preview does not complete F-11, AC-11, T-051, or native startup integration in [`docs/TASKS.md`](docs/TASKS.md). The Rust schema contributes to T-017 but does not complete its migration behavior or its T-001 prerequisite.
+The General section displays: **“Start Outflow automatically when you sign in to your computer.”** and **“Preview only — this setting does not change your computer's startup behavior yet.”** No operating-system login item is registered, and the preference is not written to a configuration file, localStorage, or sessionStorage. The section selection is not persisted. Microphone and shortcut panels explain unverified capabilities without connecting native behavior; diagnostics, native Tauri tray/window behavior, and all dictation features remain unimplemented. The browser preview does not complete F-11, AC-11, T-051, or native startup integration in [`docs/TASKS.md`](docs/TASKS.md). The Rust schema contributes to T-017 but does not complete its migration behavior or its T-001 prerequisite.
 
 The documented Base UI/Nova Switch and Field wrappers are not installed in this React/Vite scaffold (`@base-ui/react`, `components/ui/switch`, and `components/ui/field` are absent). To avoid adding a dependency, the preview uses a native button with `role="switch"`, `aria-checked`, label/description references, Space-key support, and the existing neutral and focus tokens. No component library was added.
 

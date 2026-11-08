@@ -1434,3 +1434,244 @@ body {
     transition: none;
   }
 }
+
+.shortcut-capability-panel {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  margin-block-start: 2rem;
+}
+
+.shortcut-capability-panel > h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-status-announcement {
+  min-width: 0;
+  margin: 0;
+  border-inline-start: 3px solid var(--primary);
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-simulation-label,
+.shortcut-preview-note {
+  min-width: 0;
+  margin: 0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-status-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.shortcut-status-item,
+.shortcut-mode-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 0.875rem;
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.shortcut-status-item dt {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-status-item dd {
+  margin: 0.375rem 0 0;
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-capability-panel h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.shortcut-mode-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.75rem;
+}
+
+.shortcut-mode-card {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+}
+
+.shortcut-mode-card h5 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-mode-card p,
+.shortcut-guidance p {
+  min-width: 0;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-mode-card .shortcut-mode-status {
+  border-inline-start: 2px solid var(--border);
+  padding-inline-start: 0.625rem;
+  color: var(--foreground);
+}
+
+.shortcut-mode-status strong {
+  font-weight: 700;
+}
+
+.shortcut-guidance {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.shortcut-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.shortcut-actions button {
+  max-width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.shortcut-actions button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.shortcut-actions button:disabled {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  cursor: not-allowed;
+}
+
+.shortcut-actions button:focus-visible,
+.shortcut-scenario-inspector select:focus-visible {
+  outline: 2px solid var(--focus-strong);
+  outline-offset: 2px;
+}
+
+.shortcut-action-help {
+  min-width: 0;
+  margin-block-start: -0.75rem;
+}
+
+.shortcut-action-help p,
+.shortcut-scenario-inspector p {
+  min-width: 0;
+  margin: 0.375rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-scenario-inspector {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 1rem;
+  background: var(--muted);
+}
+
+.shortcut-scenario-inspector legend {
+  max-width: 100%;
+  padding-inline: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-scenario-inspector label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.shortcut-scenario-inspector select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-actions button,
+  .shortcut-scenario-inspector select {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}

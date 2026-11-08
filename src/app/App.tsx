@@ -8,7 +8,8 @@ import { SettingsSwitch } from "./SettingsSwitch";
 import { SettingsSection } from "./SettingsSection";
 import { MicrophoneCapabilityPanel } from "./MicrophoneCapabilityPanel";
 import { MicrophoneScenarioPreview } from "./MicrophoneScenarioPreview";
-import { SettingsStatusMessage } from "./SettingsStatusMessage";
+import { ShortcutCapabilityPanel } from "./ShortcutCapabilityPanel";
+import { ShortcutScenarioPreview } from "./ShortcutScenarioPreview";
 import TextCleanupModeSelector, {
   type CleanupMode,
 } from "./TextCleanupModeSelector";
@@ -37,7 +38,7 @@ const settingsSections = [
   {
     id: "shortcuts",
     title: "Shortcuts",
-    description: "Choose how dictation starts and stops.",
+    description: "Review global shortcut availability and recording-mode requirements.",
   },
   {
     id: "text-vocabulary",
@@ -260,12 +261,11 @@ export default function App() {
                   <MicrophoneCapabilityPanel />
                 )
               ) : selectedSection === "shortcuts" ? (
-                <SettingsStatusMessage title="Keyboard shortcuts unavailable">
-                  Global keyboard shortcuts are not connected in this development
-                  preview. No system-wide shortcuts are registered or monitored.
-                  Shortcut configuration will become available after native
-                  integration.
-                </SettingsStatusMessage>
+                import.meta.env.DEV ? (
+                  <ShortcutScenarioPreview />
+                ) : (
+                  <ShortcutCapabilityPanel />
+                )
               ) : selectedSection === "text-vocabulary" ? (
                 <div className="text-vocabulary-settings">
                   <TextCleanupModeSelector

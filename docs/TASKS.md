@@ -424,6 +424,8 @@ MVP-08 strengthens the browser preview's result-lifecycle correlation and routes
 
 MVP-09 adds a browser-only microphone capability and recovery presentation with fixed development-only scenarios. The default status remains unknown; the preview does not request permission, enumerate devices, or connect native actions. This presentation does not complete T-052, T-055, AC-02, AC-11, T-010, or any native microphone/platform task or release gate. T-010 remains blocked. See [`evidence/mvp/mvp-09-microphone-status-ui.md`](../evidence/mvp/mvp-09-microphone-status-ui.md).
 
+MVP-10 adds a browser-only shortcut capability panel with fixed development-only scenarios. Registration, matching press-and-release support, and recording readiness remain separate; the preview does not capture keyboard input, register shortcuts, request microphone access, or start recording. Unsupported or unknown release events never enable push-to-talk, and toggle remains only a possible fallback until native registration and microphone readiness are verified. This presentation does not complete T-032, T-033, T-052, T-055, AC-03, AC-04, AC-11, T-010, or any native shortcut, microphone, or release gate. All task and acceptance checkboxes remain open; T-010 remains blocked. See [`evidence/mvp/mvp-10-shortcut-status-ui.md`](../evidence/mvp/mvp-10-shortcut-status-ui.md).
+
 - [ ] **T-056 — Verify failure sequences.** Deps: T-048,T-055. Manual and scripted focus-loss, secure field, mic unplug, model error, collision; no content persistence. [F-13/C-07/AC-13]
 
 ### M4 — Privacy, resource and reliability hardening

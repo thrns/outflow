@@ -579,7 +579,7 @@ describe("Outflow Home and Settings preview", () => {
         expect(
           within(panel).getByRole("heading", {
             level: 3,
-            name: "Keyboard shortcuts unavailable",
+            name: "Global shortcut capability",
           }),
         ).toBeVisible();
       } else if (section === "Text & Vocabulary") {
@@ -689,40 +689,63 @@ describe("Outflow Home and Settings preview", () => {
     expect(screen.queryByRole("combobox", { name: "Scenario" })).not.toBeInTheDocument();
   });
 
-  it("explains that global shortcuts are unavailable without implying registration", () => {
+  it("omits the shortcut scenario inspector when Vite reports production mode", () => {
+    vi.stubEnv("DEV", false);
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("tab", { name: "Shortcuts" }));
 
     const panel = screen.getByRole("tabpanel", { name: "Shortcuts" });
-    const title = within(panel).getByRole("heading", {
-      level: 3,
-      name: "Keyboard shortcuts unavailable",
-    });
-    if (title.parentElement === null) {
-      throw new Error("The Shortcuts message heading must have a container.");
-    }
-    const message = title.parentElement;
+    expect(
+      within(panel).getByRole("heading", {
+        level: 3,
+        name: "Global shortcut capability",
+      }),
+    ).toBeVisible();
+    expect(
+      within(panel).queryByRole("group", {
+        name: "Developer scenarios (simulated)",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("combobox", { name: "Scenario" }),
+    ).not.toBeInTheDocument();
+  });
 
-    expect(message).toHaveTextContent(
-      "Global keyboard shortcuts are not connected in this development preview.",
+  it("shows unverified global shortcut status without implying registration", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Shortcuts" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "Shortcuts" });
+    expect(
+      within(panel).getByRole("heading", {
+        level: 3,
+        name: "Global shortcut capability",
+      }),
+    ).toBeVisible();
+    expect(within(panel).getByRole("status")).toHaveTextContent(
+      "Global keyboard shortcuts are not connected.",
     );
-    expect(message).toHaveTextContent(
-      "No system-wide shortcuts are registered or monitored.",
+    expect(panel).toHaveTextContent("Global shortcut registrationNot checked");
+    expect(panel).toHaveTextContent("Matching press-and-release eventsNot checked");
+    expect(panel).toHaveTextContent(
+      "No shortcut is currently registered by this preview.",
     );
-    expect(message).toHaveTextContent(
-      "Shortcut configuration will become available after native integration.",
+    expect(panel).toHaveTextContent("No recording mode is operational.");
+    expect(within(panel).getByRole("status")).toHaveAttribute(
+      "aria-live",
+      "polite",
     );
-    expect(message).not.toHaveTextContent(
-      /global shortcuts? (?:are|is) registered/i,
-    );
-    expect(panel.querySelector("[aria-live]")).toBeNull();
     expect(within(panel).queryByRole("alert")).not.toBeInTheDocument();
     expect(
-      message.querySelectorAll(
-        "a, button, input, select, textarea, [tabindex]",
-      ),
-    ).toHaveLength(0);
+      within(panel).getByRole("button", { name: "Check shortcut status" }),
+    ).toBeDisabled();
+    expect(
+      within(panel).getByRole("group", {
+        name: "Developer scenarios (simulated)",
+      }),
+    ).toBeVisible();
   });
 
   it("switches between Shortcuts and Microphone status messages", () => {
@@ -733,7 +756,7 @@ describe("Outflow Home and Settings preview", () => {
     expect(
       screen.getByRole("heading", {
         level: 3,
-        name: "Keyboard shortcuts unavailable",
+        name: "Global shortcut capability",
       }),
     ).toBeVisible();
 
@@ -747,7 +770,7 @@ describe("Outflow Home and Settings preview", () => {
     expect(
       screen.queryByRole("heading", {
         level: 3,
-        name: "Keyboard shortcuts unavailable",
+        name: "Global shortcut capability",
       }),
     ).not.toBeInTheDocument();
 
@@ -755,7 +778,7 @@ describe("Outflow Home and Settings preview", () => {
     expect(
       screen.getByRole("heading", {
         level: 3,
-        name: "Keyboard shortcuts unavailable",
+        name: "Global shortcut capability",
       }),
     ).toBeVisible();
   });
