@@ -1,7 +1,8 @@
 import "../styles/global.css";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import AppHeader, { type AppPage } from "./AppHeader";
+import AppHeader, { type AppView } from "./AppHeader";
 import HomePage from "./HomePage";
+import WelcomePage from "./WelcomePage";
 import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -61,10 +62,11 @@ const settingsSections = [
 type SettingsSectionId = (typeof settingsSections)[number]["id"];
 
 export default function App() {
-  const [activeView, setActiveView] = useState<AppPage>("home");
+  const [activeView, setActiveView] = useState<AppView>("home");
   const previousView = useRef(activeView);
   const homeHeading = useRef<HTMLHeadingElement | null>(null);
   const settingsHeading = useRef<HTMLHeadingElement | null>(null);
+  const welcomeHeading = useRef<HTMLHeadingElement | null>(null);
   const [selectedSection, setSelectedSection] =
     useState<SettingsSectionId>("general");
   const [startup, setStartup] = useState({ run_at_login: false });
@@ -79,7 +81,7 @@ export default function App() {
     VocabularyPreviewEntry[]
   >([]);
   const nextVocabularyEntryId = useRef(0);
-  // Settings unmounts Home, so keep this volatile correlation sequence at App scope.
+  // Settings and Welcome unmount Home; keep its result IDs unique across both routes.
   // A native bridge must still validate the Rust coordinator's authoritative IDs.
   const nextCopyResultLifecycleId = useRef(0);
   const sectionTabs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -93,15 +95,19 @@ export default function App() {
 
     previousView.current = activeView;
     const heading =
-      activeView === "home" ? homeHeading.current : settingsHeading.current;
+      activeView === "home"
+        ? homeHeading.current
+        : activeView === "settings"
+          ? settingsHeading.current
+          : welcomeHeading.current;
     heading?.focus();
   }, [activeView]);
 
-  function navigateTo(page: AppPage) {
-    if (page === activeView) return;
+  function navigateTo(view: AppView) {
+    if (view === activeView) return;
 
-    if (page === "settings") setSelectedSection("general");
-    setActiveView(page);
+    if (view === "settings") setSelectedSection("general");
+    setActiveView(view);
   }
 
   function addVocabularyPreviewEntry(value: VocabularyDraft) {
@@ -320,6 +326,17 @@ export default function App() {
           </div>
         </PageContainer>
       </main>
+    );
+  }
+
+  if (activeView === "welcome") {
+    return (
+      <WelcomePage
+        headingRef={(heading) => {
+          welcomeHeading.current = heading;
+        }}
+        onNavigate={navigateTo}
+      />
     );
   }
 

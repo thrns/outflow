@@ -1,7 +1,9 @@
 export type AppPage = "home" | "settings";
+// Welcome is transient Home flow state, not a third primary navigation page.
+export type AppView = AppPage | "welcome";
 
 type AppHeaderProps = {
-  currentPage: AppPage;
+  currentPage?: AppPage;
   onNavigate: (page: AppPage) => void;
 };
 

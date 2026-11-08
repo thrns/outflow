@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent } from "react";
-import AppHeader, { type AppPage } from "./AppHeader";
+import AppHeader, { type AppView } from "./AppHeader";
 import {
   CopyResultPanel,
   type CopyAcknowledgment,
@@ -106,7 +106,7 @@ function createScenario(id: HomeScenarioId): HomeScenario {
 
 type HomePageProps = {
   allocateResultLifecycleId: () => number;
-  onNavigate: (page: AppPage) => void;
+  onNavigate: (page: AppView) => void;
   headingRef: (heading: HTMLHeadingElement | null) => void;
 };
 
@@ -298,6 +298,13 @@ export default function HomePage({
                 and native dictation are not connected in this preview.
               </p>
             </div>
+            <button
+              className="app-navigation-button"
+              onClick={() => onNavigate("welcome")}
+              type="button"
+            >
+              Preview setup
+            </button>
             <button
               className="home-open-settings-button"
               onClick={() => onNavigate("settings")}

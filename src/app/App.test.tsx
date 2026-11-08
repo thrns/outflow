@@ -1101,3 +1101,210 @@ describe("Outflow Home and Settings preview", () => {
     expect(screen.getByText("I mentioned “south station” today.")).toBeVisible();
   });
 });
+
+describe("Welcome setup introduction preview", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function openWelcome() {
+    fireEvent.click(screen.getByRole("button", { name: "Preview setup" }));
+  }
+
+  it("offers Preview setup in Home's Getting Started area", () => {
+    render(<App />);
+
+    const gettingStarted = screen.getByRole("region", {
+      name: "Dictation that stays local",
+    });
+    const previewButton = within(gettingStarted).getByRole("button", {
+      name: "Preview setup",
+    });
+
+    expect(previewButton).toHaveAttribute("type", "button");
+    expect(previewButton.tabIndex).toBe(0);
+  });
+
+  it("opens Welcome with the planned offline and privacy principles and preview disclaimer", () => {
+    render(<App />);
+    openWelcome();
+
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Welcome to Outflow",
+    });
+    expect(heading).toBeVisible();
+    expect(heading).toHaveFocus();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(
+      within(
+        screen.getByRole("navigation", { name: "Application navigation" }),
+      ).getAllByRole("button"),
+    ).toHaveLength(2);
+    expect(
+      screen.getByText(
+        "Speech stays on this device. No account. No transcript history.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/intended privacy design for the planned MVP/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Development preview" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/does not prove that offline speech processing is complete/i),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/functioning Outflow desktop application and microphone permission/i),
+    ).toBeVisible();
+  });
+
+  it("does not claim that recording, setup, or dictation is ready", () => {
+    render(<App />);
+    openWelcome();
+
+    expect(
+      screen.queryByText(/ready to dictate|recording started|microphone connected|setup complete/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /record|dictate/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/listening/i)).not.toBeInTheDocument();
+  });
+
+  it("returns to Home and moves focus to the Home heading", () => {
+    render(<App />);
+    openWelcome();
+
+    const backButton = screen.getByRole("button", { name: "Back to Home" });
+    expect(backButton).toHaveAttribute("type", "button");
+    backButton.focus();
+    expect(backButton).toHaveFocus();
+    fireEvent.click(backButton);
+
+    const homeHeading = screen.getByRole("heading", { level: 1, name: "Home" });
+    expect(homeHeading).toBeVisible();
+    expect(homeHeading).toHaveFocus();
+  });
+
+  it("opens Settings to General with the existing checklist and six tabs", () => {
+    render(<App />);
+    openWelcome();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review permission readiness" }),
+    );
+
+    const settingsHeading = screen.getByRole("heading", {
+      level: 1,
+      name: "Settings",
+    });
+    expect(settingsHeading).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("region", { name: "Permission readiness" }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    for (const tab of [
+      "General",
+      "Microphone",
+      "Shortcuts",
+      "Text & Vocabulary",
+      "Privacy",
+      "About & Diagnostics",
+    ]) {
+      expect(screen.getByRole("tab", { name: tab })).toBeVisible();
+    }
+  });
+
+  it("discards Home's volatile Copy Result and acknowledgment but keeps lifecycle IDs unique", async () => {
+    render(<App />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Scenario" }), {
+      target: { value: "copy-failure" },
+    });
+    const firstResult = screen.getByRole("region", { name: "Review finalized text" });
+    const firstLifecycleId = firstResult.getAttribute("data-result-lifecycle-id");
+    fireEvent.click(screen.getByRole("button", { name: "Simulate Copy request" }));
+    expect(
+      await screen.findByText("Copy failed. Your result is still available in this panel."),
+    ).toBeVisible();
+
+    openWelcome();
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Home" }));
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Scenario" })).toHaveValue(
+      "unavailable",
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Scenario" }), {
+      target: { value: "copy-failure" },
+    });
+    const secondResult = screen.getByRole("region", { name: "Review finalized text" });
+    const secondLifecycleId = secondResult.getAttribute("data-result-lifecycle-id");
+    expect(firstLifecycleId).not.toBeNull();
+    expect(secondLifecycleId).not.toBe(firstLifecycleId);
+
+    fireEvent.click(screen.getByRole("button", { name: "Simulate Copy request" }));
+    expect(
+      await screen.findByText("Copy failed. Your result is still available in this panel."),
+    ).toBeVisible();
+    expect(screen.getByRole("region", { name: "Review finalized text" })).toBeVisible();
+  });
+
+  it("does not call native, keyboard, clipboard, network, or persistence APIs while navigating", () => {
+    const forbiddenCall = vi.fn(() => {
+      throw new Error("Welcome navigation must remain browser-only and temporary.");
+    });
+    const descriptors: Array<{
+      target: object;
+      key: PropertyKey;
+      prior?: PropertyDescriptor;
+    }> = [];
+    const installTripwire = (target: object, key: PropertyKey, value: unknown) => {
+      descriptors.push({ target, key, prior: Object.getOwnPropertyDescriptor(target, key) });
+      Object.defineProperty(target, key, { configurable: true, value });
+    };
+    const apiTrap = new Proxy(
+      {},
+      {
+        get: forbiddenCall,
+        apply: forbiddenCall,
+      },
+    );
+    const networkConstructorTrap = new Proxy(function () {}, {
+      apply: forbiddenCall,
+      construct: forbiddenCall,
+    });
+    const addEventListenerSpy = vi.spyOn(window, "addEventListener");
+    installTripwire(navigator, "mediaDevices", apiTrap);
+    installTripwire(navigator, "permissions", apiTrap);
+    installTripwire(navigator, "clipboard", apiTrap);
+    installTripwire(window, "fetch", forbiddenCall);
+    installTripwire(window, "XMLHttpRequest", networkConstructorTrap);
+    installTripwire(window, "WebSocket", networkConstructorTrap);
+    installTripwire(window, "EventSource", networkConstructorTrap);
+    installTripwire(navigator, "sendBeacon", forbiddenCall);
+    installTripwire(window, "__TAURI__", apiTrap);
+    installTripwire(window, "__TAURI_INTERNALS__", apiTrap);
+    installTripwire(Storage.prototype, "setItem", forbiddenCall);
+
+    try {
+      render(<App />);
+      openWelcome();
+      fireEvent.click(screen.getByRole("button", { name: "Review permission readiness" }));
+      expect(screen.getByRole("region", { name: "Permission readiness" })).toBeVisible();
+      expect(forbiddenCall).not.toHaveBeenCalled();
+      expect(
+        addEventListenerSpy.mock.calls.some(([type]) => type === "keydown" || type === "keyup"),
+      ).toBe(false);
+    } finally {
+      addEventListenerSpy.mockRestore();
+      for (const { target, key, prior } of descriptors.reverse()) {
+        if (prior) Object.defineProperty(target, key, prior);
+        else Reflect.deleteProperty(target, key);
+      }
+    }
+  });
+});
