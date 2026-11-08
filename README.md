@@ -206,6 +206,34 @@ At 320 CSS px the indicator text can wrap and should not widen the page. For a m
 
 **Troubleshooting:** If the indicator is absent, confirm the preview is running and that the current page is one of the six setup screens; it is intentionally absent on Home and Settings. If the number or label is wrong, reload and follow the pages in order; the position is derived from the single static setup definition and is not saved. If native permission, keyboard, microphone, recording, or tray state is expected, those functions are not connected by this informational preview.
 
+### Return to the originating setup view from Settings (MVP-19)
+
+Install dependencies, run the frontend checks, and start the browser preview from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Try each explicit Settings action in the setup walkthrough:
+
+- **Home → Preview setup → Welcome → Review permission readiness** opens **Settings → General**. Choose **Return to setup: Welcome** to return to Welcome.
+- **Welcome → Review privacy → Privacy → Continue to permissions → Permissions → View permission details in Settings** opens **Settings → General**. Choose **Return to setup: Permissions** to return to Permissions.
+- **Permissions → Continue to shortcuts → Shortcuts → View shortcut details in Settings** opens **Settings → Shortcuts**. Choose **Return to setup: Shortcuts** to return to Shortcut setup.
+- **Privacy → Review permission readiness** opens **Settings → General**. Choose **Return to setup: Privacy** to return to Privacy.
+
+Expected behavior: Settings keeps its heading as the initial focus target. The contextual return button appears below the heading only after one of those explicit setup actions, uses the shared setup-step label, and remains available while Settings tabs change. Activating it returns to the exact setup screen, clears the temporary return context, focuses that page's `h1`, and shows its existing step indicator. The action uses the existing neutral navigation button style.
+
+The primary **Settings** navigation on Home or a setup page and Home's **Open Settings** action open General without a return button. Leaving Settings for Home clears any return context; opening Settings again through Home shows General without the button. The origin is held only in App memory, so refreshing starts without it. This adds no completion state or saved setup progress; Home stays unmounted while setup or Settings is active, and the preview still uses no native capability, microphone, permission, shortcut, clipboard, storage, telemetry, or network API.
+
+For a keyboard check, open Settings from a setup action, confirm focus starts on **Settings**, press Tab to reach **Return to setup: [Step]**, and press Enter. Focus should move to the originating setup heading. Inspect the route at desktop width and 320 CSS px for horizontal overflow. Genuine 200% zoom, reduced-motion emulation, and spoken screen-reader behavior require browser or OS controls beyond the current in-app preview; record them as unavailable if those controls are not present.
+
+**Troubleshooting:** If the return button is absent, confirm Settings was opened with the named action inside Welcome, Privacy, Permissions, or Shortcut setup. The primary Settings navigation intentionally clears this context. If Welcome, Privacy, or Permissions opened the wrong tab, the expected destination is General; only **View shortcut details in Settings** opens Shortcuts. If an ordinary Settings visit shows a return action after going Home, reload the preview and repeat the Home → Settings route; a fresh App mount does not restore the context.
+
 ### Permission readiness checklist (MVP-11)
 
 Run the browser preview from the repository root:

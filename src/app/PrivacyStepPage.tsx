@@ -5,6 +5,7 @@ import SetupStepIndicator from "./SetupStepIndicator";
 
 type PrivacyStepPageProps = {
   onNavigate: (view: AppView) => void;
+  onOpenSettings: () => void;
   headingRef: (heading: HTMLHeadingElement | null) => void;
 };
 
@@ -14,6 +15,7 @@ type PrivacyStepPageProps = {
  */
 export default function PrivacyStepPage({
   onNavigate,
+  onOpenSettings,
   headingRef,
 }: PrivacyStepPageProps) {
   return (
@@ -59,7 +61,7 @@ export default function PrivacyStepPage({
             </button>
             <button
               className="app-navigation-button"
-              onClick={() => onNavigate("settings")}
+              onClick={onOpenSettings}
               type="button"
             >
               Review permission readiness

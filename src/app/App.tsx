@@ -30,6 +30,10 @@ import VocabularyPreviewList, {
 } from "./VocabularyPreviewList";
 import PrivacyOverview from "./PrivacyOverview";
 import AboutDiagnosticsOverview from "./AboutDiagnosticsOverview";
+import {
+  SETUP_STEP_DEFINITIONS,
+  type SetupStepView,
+} from "./SetupStepIndicator";
 
 const settingsSections = [
   {
@@ -68,6 +72,8 @@ type SettingsSectionId = (typeof settingsSections)[number]["id"];
 
 export default function App() {
   const [activeView, setActiveView] = useState<AppView>("home");
+  const [settingsReturnView, setSettingsReturnView] =
+    useState<SetupStepView | null>(null);
   const previousView = useRef(activeView);
   const homeHeading = useRef<HTMLHeadingElement | null>(null);
   const settingsHeading = useRef<HTMLHeadingElement | null>(null);
@@ -99,6 +105,11 @@ export default function App() {
     (section) => section.id === selectedSection,
   );
   const selectedDetails = settingsSections[selectedIndex];
+  const settingsReturnStep = settingsReturnView
+    ? SETUP_STEP_DEFINITIONS.find(
+        (step) => step.view === settingsReturnView,
+      )
+    : undefined;
 
   useEffect(() => {
     if (previousView.current === activeView) return;
@@ -129,10 +140,20 @@ export default function App() {
   ) {
     if (view === activeView) return;
 
+    setSettingsReturnView(null);
     if (view === "settings") {
       setSelectedSection(settingsSection ?? "general");
     }
     setActiveView(view);
+  }
+
+  function openSettingsFromSetup(
+    view: SetupStepView,
+    settingsSection: SettingsSectionId = "general",
+  ) {
+    setSettingsReturnView(view);
+    setSelectedSection(settingsSection);
+    setActiveView("settings");
   }
 
   function addVocabularyPreviewEntry(value: VocabularyDraft) {
@@ -203,6 +224,17 @@ export default function App() {
               <h1 id="settings-heading" ref={settingsHeading} tabIndex={-1}>
                 Settings
               </h1>
+              {settingsReturnStep ? (
+                <button
+                  className="app-navigation-button settings-return-button"
+                  onClick={() => {
+                    if (settingsReturnView) navigateTo(settingsReturnView);
+                  }}
+                  type="button"
+                >
+                  Return to setup: {settingsReturnStep.label}
+                </button>
+              ) : null}
               <p className="settings-description">
                 Configure your offline dictation experience.
               </p>
@@ -361,6 +393,7 @@ export default function App() {
           welcomeHeading.current = heading;
         }}
         onNavigate={navigateTo}
+        onOpenSettings={() => openSettingsFromSetup("welcome")}
       />
     );
   }
@@ -372,6 +405,7 @@ export default function App() {
           privacyHeading.current = heading;
         }}
         onNavigate={navigateTo}
+        onOpenSettings={() => openSettingsFromSetup("privacy")}
       />
     );
   }
@@ -383,6 +417,7 @@ export default function App() {
           permissionsHeading.current = heading;
         }}
         onNavigate={navigateTo}
+        onOpenSettings={() => openSettingsFromSetup("permissions")}
       />
     );
   }
@@ -394,7 +429,9 @@ export default function App() {
           shortcutSetupHeading.current = heading;
         }}
         onNavigate={navigateTo}
-        onOpenShortcuts={() => navigateTo("settings", "shortcuts")}
+        onOpenShortcuts={() =>
+          openSettingsFromSetup("shortcut-setup", "shortcuts")
+        }
       />
     );
   }

@@ -1634,6 +1634,16 @@ describe("Welcome setup introduction preview", () => {
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
     openPermissions();
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "View permission details in Settings",
+      }),
+    );
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return to setup: Permissions" }),
+    );
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
     expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue to shortcuts" }));
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
@@ -1709,6 +1719,7 @@ describe("Welcome setup introduction preview", () => {
     const addEventListenerSpy = vi.spyOn(window, "addEventListener");
     installTripwire(navigator, "mediaDevices", apiTrap);
     installTripwire(navigator, "permissions", apiTrap);
+    installTripwire(navigator, "keyboard", apiTrap);
     installTripwire(navigator, "clipboard", apiTrap);
     installTripwire(window, "fetch", forbiddenCall);
     installTripwire(window, "XMLHttpRequest", networkConstructorTrap);
@@ -1733,6 +1744,26 @@ describe("Welcome setup introduction preview", () => {
       fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
       fireEvent.click(screen.getByRole("button", { name: "Review permission readiness" }));
       expect(screen.getByRole("region", { name: "Permission readiness" })).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Return to setup: Welcome" }),
+      ).toBeVisible();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Return to setup: Welcome" }),
+      );
+      expect(
+        screen.getByRole("heading", {
+          level: 1,
+          name: "Welcome to Outflow",
+        }),
+      ).toHaveFocus();
+      fireEvent.click(
+        within(
+          screen.getByRole("navigation", { name: "Application navigation" }),
+        ).getByRole("button", { name: "Settings" }),
+      );
+      expect(
+        screen.queryByRole("button", { name: /^Return to setup:/ }),
+      ).not.toBeInTheDocument();
       expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
       expect(screen.queryByText(/accept (the )?privacy|agree to terms/i)).not.toBeInTheDocument();
       expect(forbiddenCall).not.toHaveBeenCalled();

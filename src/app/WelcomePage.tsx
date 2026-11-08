@@ -4,11 +4,13 @@ import SetupStepIndicator from "./SetupStepIndicator";
 
 type WelcomePageProps = {
   onNavigate: (view: AppView) => void;
+  onOpenSettings: () => void;
   headingRef: (heading: HTMLHeadingElement | null) => void;
 };
 
 export default function WelcomePage({
   onNavigate,
+  onOpenSettings,
   headingRef,
 }: WelcomePageProps) {
   return (
@@ -76,7 +78,7 @@ export default function WelcomePage({
             </button>
             <button
               className="home-open-settings-button"
-              onClick={() => onNavigate("settings")}
+              onClick={onOpenSettings}
               type="button"
             >
               Review permission readiness

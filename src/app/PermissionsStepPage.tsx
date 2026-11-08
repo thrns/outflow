@@ -5,6 +5,7 @@ import SetupStepIndicator from "./SetupStepIndicator";
 
 type PermissionsStepPageProps = {
   onNavigate: (view: AppView) => void;
+  onOpenSettings: () => void;
   headingRef: (heading: HTMLHeadingElement | null) => void;
 };
 
@@ -14,6 +15,7 @@ type PermissionsStepPageProps = {
  */
 export default function PermissionsStepPage({
   onNavigate,
+  onOpenSettings,
   headingRef,
 }: PermissionsStepPageProps) {
   return (
@@ -106,7 +108,7 @@ export default function PermissionsStepPage({
             </button>
             <button
               className="home-open-settings-button"
-              onClick={() => onNavigate("settings")}
+              onClick={onOpenSettings}
               type="button"
             >
               View permission details in Settings
