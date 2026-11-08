@@ -191,6 +191,31 @@ body {
   margin-top: clamp(2rem, 5vw, 2.75rem);
 }
 
+.privacy-step-content {
+  display: grid;
+  min-width: 0;
+  max-width: 48rem;
+  gap: 1.5rem;
+  margin-top: clamp(2rem, 5vw, 2.75rem);
+}
+
+.privacy-step-requirements {
+  min-width: 0;
+}
+
+.privacy-step-requirements > h2 {
+  max-width: 64ch;
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.privacy-step-requirements .privacy-overview {
+  margin-top: 1.25rem;
+}
+
 .home-status-card,
 .home-getting-started-card {
   min-width: 0;

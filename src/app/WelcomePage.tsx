@@ -1,8 +1,8 @@
-import AppHeader, { type AppPage } from "./AppHeader";
+import AppHeader, { type AppView } from "./AppHeader";
 import { PageContainer } from "./PageContainer";
 
 type WelcomePageProps = {
-  onNavigate: (page: AppPage) => void;
+  onNavigate: (view: AppView) => void;
   headingRef: (heading: HTMLHeadingElement | null) => void;
 };
 
@@ -64,6 +64,13 @@ export default function WelcomePage({
               type="button"
             >
               Back to Home
+            </button>
+            <button
+              className="app-navigation-button"
+              onClick={() => onNavigate("privacy")}
+              type="button"
+            >
+              Review privacy
             </button>
             <button
               className="home-open-settings-button"

@@ -1,6 +1,6 @@
 export type AppPage = "home" | "settings";
-// Welcome is transient Home flow state, not a third primary navigation page.
-export type AppView = AppPage | "welcome";
+// Setup views are transient Home flow states, not additional primary destinations.
+export type AppView = AppPage | "welcome" | "privacy";
 
 type AppHeaderProps = {
   currentPage?: AppPage;

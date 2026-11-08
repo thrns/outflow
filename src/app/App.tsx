@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import AppHeader, { type AppView } from "./AppHeader";
 import HomePage from "./HomePage";
 import WelcomePage from "./WelcomePage";
+import PrivacyStepPage from "./PrivacyStepPage";
 import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -67,6 +68,7 @@ export default function App() {
   const homeHeading = useRef<HTMLHeadingElement | null>(null);
   const settingsHeading = useRef<HTMLHeadingElement | null>(null);
   const welcomeHeading = useRef<HTMLHeadingElement | null>(null);
+  const privacyHeading = useRef<HTMLHeadingElement | null>(null);
   const [selectedSection, setSelectedSection] =
     useState<SettingsSectionId>("general");
   const [startup, setStartup] = useState({ run_at_login: false });
@@ -81,7 +83,7 @@ export default function App() {
     VocabularyPreviewEntry[]
   >([]);
   const nextVocabularyEntryId = useRef(0);
-  // Settings and Welcome unmount Home; keep its result IDs unique across both routes.
+  // Settings and transient setup pages unmount Home; keep result IDs unique across routes.
   // A native bridge must still validate the Rust coordinator's authoritative IDs.
   const nextCopyResultLifecycleId = useRef(0);
   const sectionTabs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -99,7 +101,9 @@ export default function App() {
         ? homeHeading.current
         : activeView === "settings"
           ? settingsHeading.current
-          : welcomeHeading.current;
+          : activeView === "welcome"
+            ? welcomeHeading.current
+            : privacyHeading.current;
     heading?.focus();
   }, [activeView]);
 
@@ -334,6 +338,17 @@ export default function App() {
       <WelcomePage
         headingRef={(heading) => {
           welcomeHeading.current = heading;
+        }}
+        onNavigate={navigateTo}
+      />
+    );
+  }
+
+  if (activeView === "privacy") {
+    return (
+      <PrivacyStepPage
+        headingRef={(heading) => {
+          privacyHeading.current = heading;
         }}
         onNavigate={navigateTo}
       />

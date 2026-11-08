@@ -1,17 +1,37 @@
 import { SettingsStatusMessage } from "./SettingsStatusMessage";
 
+type PrivacyOverviewProps = {
+  /** Adds setup-specific wording while leaving Settings → Privacy unchanged. */
+  setupDisclosure?: boolean;
+};
+
 /**
  * Presents Outflow's privacy requirements and the limits of the current UI preview.
  * This component is informational only; it does not inspect or change app data.
  */
-export default function PrivacyOverview() {
+export default function PrivacyOverview({
+  setupDisclosure = false,
+}: PrivacyOverviewProps) {
   return (
     <div className="privacy-overview">
       <SettingsStatusMessage title="Privacy implementation in progress">
-        This page describes Outflow&apos;s privacy requirements. Native recording,
-        offline speech recognition, clipboard handling, network isolation, and
-        data-retention safeguards have not yet been fully implemented and
-        verified. This frontend preview does not implement microphone recording.
+        {setupDisclosure ? (
+          <>
+            This page describes Outflow&apos;s privacy requirements. Native
+            recording, complete offline operation, clipboard integration,
+            network isolation, and privacy safeguards have not yet been fully
+            implemented and verified. This browser preview does not implement
+            microphone recording or prove those privacy guarantees.
+          </>
+        ) : (
+          <>
+            This page describes Outflow&apos;s privacy requirements. Native
+            recording, offline speech recognition, clipboard handling, network
+            isolation, and data-retention safeguards have not yet been fully
+            implemented and verified. This frontend preview does not implement
+            microphone recording.
+          </>
+        )}
       </SettingsStatusMessage>
 
       <div className="privacy-overview-sections">
@@ -32,6 +52,12 @@ export default function PrivacyOverview() {
             frontend preview. Speech recognition and offline operation have not
             been delivered here.
           </p>
+          {setupDisclosure ? (
+            <p>
+              Dictated speech is not intended to be sent to a cloud
+              transcription service.
+            </p>
+          ) : null}
         </section>
 
         <section
@@ -87,6 +113,14 @@ export default function PrivacyOverview() {
             Outflow cannot guarantee cryptographic erasure of data from system
             memory.
           </p>
+          {setupDisclosure ? (
+            <p>
+              If you explicitly choose Copy Result, the intended behavior is to
+              place that text on the system clipboard. The operating system and
+              clipboard managers may retain it. Outflow cannot promise
+              cryptographic erasure from memory or operating-system swap.
+            </p>
+          ) : null}
           <p>
             The intended update mechanism is an optional, explicit,
             user-initiated check for signed full-application updates. Normal
@@ -94,6 +128,13 @@ export default function PrivacyOverview() {
             Native clipboard behavior and signed updates are not implemented in
             this preview.
           </p>
+          {setupDisclosure ? (
+            <p>
+              Normal dictation must not require Internet access. A future signed
+              full-app update check is separate and may connect only after the
+              user initiates it.
+            </p>
+          ) : null}
         </section>
       </div>
     </div>

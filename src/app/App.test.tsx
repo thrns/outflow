@@ -1111,6 +1111,10 @@ describe("Welcome setup introduction preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview setup" }));
   }
 
+  function openPrivacy() {
+    fireEvent.click(screen.getByRole("button", { name: "Review privacy" }));
+  }
+
   it("offers Preview setup in Home's Getting Started area", () => {
     render(<App />);
 
@@ -1123,6 +1127,19 @@ describe("Welcome setup introduction preview", () => {
 
     expect(previewButton).toHaveAttribute("type", "button");
     expect(previewButton.tabIndex).toBe(0);
+  });
+
+  it("offers Review privacy while preserving the existing Welcome actions", () => {
+    render(<App />);
+    openWelcome();
+
+    for (const label of [
+      "Back to Home",
+      "Review privacy",
+      "Review permission readiness",
+    ]) {
+      expect(screen.getByRole("button", { name: label })).toBeVisible();
+    }
   });
 
   it("opens Welcome with the planned offline and privacy principles and preview disclaimer", () => {
@@ -1218,6 +1235,164 @@ describe("Welcome setup introduction preview", () => {
     }
   });
 
+  it("opens the Privacy explanation, focuses its heading, and keeps primary navigation to Home and Settings", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Your privacy with Outflow",
+    });
+    expect(heading).toBeVisible();
+    expect(heading).toHaveFocus();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Home" })).not.toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("navigation", { name: "Application navigation" }),
+      ).getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Home", "Settings"]);
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: "Planned privacy requirements",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/accept (the )?privacy|agree to terms/i)).not.toBeInTheDocument();
+  });
+
+  it("describes local speech recognition, text cleanup, and the no-account offline requirement", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    const section = screen.getByRole("region", { name: "Offline processing" });
+    expect(section).toHaveTextContent(
+      /speech recognition and text cleanup locally/i,
+    );
+    expect(section).toHaveTextContent(/without an Internet connection/i);
+    expect(section).toHaveTextContent(/an account, or cloud inference/i);
+    expect(section).toHaveTextContent(/not intended to be sent to a cloud transcription service/i);
+    expect(section).toHaveTextContent(/not verified behavior in this frontend preview/i);
+  });
+
+  it("distinguishes prohibited audio and transcript retention from local preferences and vocabulary", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    const retention = screen.getByRole("region", {
+      name: "What Outflow is designed not to retain",
+    });
+    expect(retention).toHaveTextContent("Saved audio recordings.");
+    expect(retention).toHaveTextContent(/transcript history or persistent transcript caches/i);
+    expect(retention).toHaveTextContent(/requirements prohibit retaining or tracking/i);
+
+    const storage = screen.getByRole("region", { name: "What may be stored" });
+    expect(storage).toHaveTextContent(/Application settings may be stored locally/i);
+    expect(storage).toHaveTextContent(/vocabulary entries may eventually be stored locally/i);
+    expect(storage).toHaveTextContent(/Recording audio and transcript history must not be stored/i);
+    expect(storage).toHaveTextContent(/vocabulary draft is not persisted/i);
+  });
+
+  it("discloses explicit Copy Result, external clipboard retention, and memory or swap erasure limits", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    const section = screen.getByRole("region", {
+      name: "Clipboard, operating system, and updates",
+    });
+    expect(section).toHaveTextContent(/explicitly choose Copy Result/i);
+    expect(section).toHaveTextContent(/system clipboard/i);
+    expect(section).toHaveTextContent(
+      /destination application, operating system swap, and clipboard managers may retain content/i,
+    );
+    expect(section).toHaveTextContent(
+      /cannot promise cryptographic erasure from memory or operating-system swap/i,
+    );
+  });
+
+  it("separates user-initiated signed updates from normal offline dictation", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    const section = screen.getByRole("region", {
+      name: "Clipboard, operating system, and updates",
+    });
+    expect(section).toHaveTextContent(
+      /optional, explicit, user-initiated check for signed full-application updates/i,
+    );
+    expect(section).toHaveTextContent(/Normal dictation must not require update checks/i);
+    expect(section).toHaveTextContent(/Normal dictation must not require Internet access/i);
+    expect(section).toHaveTextContent(/runtime model downloads/i);
+    expect(section).toHaveTextContent(/signed updates are not implemented in this preview/i);
+  });
+
+  it("labels the native and privacy guarantees as unimplemented and unverified", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    const status = screen.getByRole("heading", {
+      level: 3,
+      name: "Privacy implementation in progress",
+    }).parentElement;
+    expect(status).not.toBeNull();
+    expect(status).toHaveTextContent(/native recording/i);
+    expect(status).toHaveTextContent(/complete offline operation/i);
+    expect(status).toHaveTextContent(/clipboard integration/i);
+    expect(status).toHaveTextContent(/privacy safeguards have not yet been fully implemented and verified/i);
+    expect(status).toHaveTextContent(/does not implement microphone recording/i);
+  });
+
+  it("returns to Welcome and moves focus to its heading", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+
+    const backButton = screen.getByRole("button", { name: "Back to Welcome" });
+    expect(backButton).toHaveAttribute("type", "button");
+    backButton.focus();
+    fireEvent.click(backButton);
+
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Welcome to Outflow",
+    });
+    expect(heading).toBeVisible();
+    expect(heading).toHaveFocus();
+  });
+
+  it("opens Settings General from Privacy with the existing accessible checklist", () => {
+    render(<App />);
+    openWelcome();
+    openPrivacy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review permission readiness" }),
+    );
+
+    const settingsHeading = screen.getByRole("heading", {
+      level: 1,
+      name: "Settings",
+    });
+    expect(settingsHeading).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const checklist = screen.getByRole("region", {
+      name: "Permission readiness",
+    });
+    expect(checklist).toBeVisible();
+    expect(checklist).toHaveTextContent("Permission readiness has not been checked");
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(screen.queryByText(/setup complete/i)).not.toBeInTheDocument();
+  });
+
   it("discards Home's volatile Copy Result and acknowledgment but keeps lifecycle IDs unique", async () => {
     render(<App />);
     fireEvent.change(screen.getByRole("combobox", { name: "Scenario" }), {
@@ -1232,6 +1407,10 @@ describe("Welcome setup introduction preview", () => {
 
     openWelcome();
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    openPrivacy();
+    expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy failed. Your result is still available in this panel.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Home" }));
     expect(screen.queryByRole("region", { name: "Review finalized text" })).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Scenario" })).toHaveValue(
@@ -1255,7 +1434,7 @@ describe("Welcome setup introduction preview", () => {
 
   it("does not call native, keyboard, clipboard, network, or persistence APIs while navigating", () => {
     const forbiddenCall = vi.fn(() => {
-      throw new Error("Welcome navigation must remain browser-only and temporary.");
+      throw new Error("Setup navigation must remain browser-only and temporary.");
     });
     const descriptors: Array<{
       target: object;
@@ -1289,12 +1468,18 @@ describe("Welcome setup introduction preview", () => {
     installTripwire(window, "__TAURI__", apiTrap);
     installTripwire(window, "__TAURI_INTERNALS__", apiTrap);
     installTripwire(Storage.prototype, "setItem", forbiddenCall);
+    installTripwire(Storage.prototype, "getItem", forbiddenCall);
+    installTripwire(Storage.prototype, "removeItem", forbiddenCall);
 
     try {
       render(<App />);
       openWelcome();
+      openPrivacy();
+      fireEvent.click(screen.getByRole("button", { name: "Back to Welcome" }));
       fireEvent.click(screen.getByRole("button", { name: "Review permission readiness" }));
       expect(screen.getByRole("region", { name: "Permission readiness" })).toBeVisible();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      expect(screen.queryByText(/accept (the )?privacy|agree to terms/i)).not.toBeInTheDocument();
       expect(forbiddenCall).not.toHaveBeenCalled();
       expect(
         addEventListenerSpy.mock.calls.some(([type]) => type === "keydown" || type === "keyup"),

@@ -4,7 +4,7 @@ Outflow is an offline desktop dictation application in development. This reposit
 
 ## Current MVP baseline — 2026-11-08
 
-This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home, Welcome, and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Settings → General includes a browser-only permission readiness checklist with separate fixed development scenarios; it does not check or request permissions or connect native capabilities. The Recording state is not an active microphone session, and Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
+This checkout is not a shipping desktop app. `npm run dev -- --host 127.0.0.1` opens the browser-only Home, Welcome, Privacy, and Settings preview; it does not request microphone access or connect the React UI to Rust. Home's development-only scenario selector displays fixed synthetic state and result fixtures. Settings → General includes a browser-only permission readiness checklist with separate fixed development scenarios; it does not check or request permissions or connect native capabilities. The Recording state is not an active microphone session, and Copy actions do not access the system clipboard. The Rust session coordinator routes the existing platform-independent reducer through deterministic mocks; it does not call a microphone, model, operating system or clipboard. The native macOS microphone and Copy Result probe is a separate development tool. Production Tauri work remains gated on the blocked T-010 model feasibility decision.
 
 This README also preserves chronological task snapshots. When an older section describes settings validation or persistence as not yet implemented, read it as the status at that task; the current Rust settings-service behavior and limitations are summarized in [Transactional Rust settings and vocabulary service](#transactional-rust-settings-and-vocabulary-service-partial-t-038) below.
 
@@ -32,6 +32,27 @@ Use **Back to Home** to return to the default unavailable Home view, or **Review
 Expected behavior: these actions change only the browser view. They do not request permissions, record audio, register keyboard shortcuts, write the clipboard, make network requests, or save setup progress. The permission checklist still says **Permission readiness has not been checked** until its development-only fixture is manually selected; fixture values are not OS observations. The preview remains reachable from Home in the browser build and does not redirect on first launch.
 
 Troubleshooting: if **Preview setup** is missing, confirm the local Vite browser preview is running from the repository root with `npm run dev -- --host 127.0.0.1`, then reload the page. If the permission checklist is missing, choose **Review permission readiness** on Welcome and confirm the **General** tab is selected. A blank or unchanged browser permission status is expected because native permission integration is not connected.
+
+### Privacy explanation step preview (MVP-13)
+
+Install and run the browser preview from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Open **Home → Getting started → Preview setup → Review privacy**. The Privacy step reuses the Settings → Privacy overview to explain the intended local recognition and cleanup, no-account/no-cloud/no-history requirements, permitted local preferences and vocabulary, explicit Copy Result clipboard boundary, memory/swap limitations, and separately user-initiated signed full-app update checks. Each is labeled as a planned requirement; native recording, complete offline behavior, clipboard integration, and privacy safeguards remain unimplemented or unverified in this browser preview.
+
+Use **Back to Welcome** or **Review permission readiness**. The latter opens **Settings → General** and the existing checklist. Headings receive focus after each view change; Home is unmounted while Welcome or Privacy is open. A prior Copy Result and any simulated acknowledgment are discarded, while the App-owned lifecycle counter remains in memory. Returning Home restores its default unavailable state; a later synthetic result gets a new lifecycle ID. Vocabulary and preference previews retain their existing App-level state behavior.
+
+This flow is informational only. It does not request permissions, record audio, register shortcuts, invoke the clipboard, make network calls, access Tauri/native APIs, ask for consent, persist setup progress, or mark setup complete. The primary navigation remains Home and Settings. Inspect at desktop width and 320 CSS px, and try 200% browser zoom where available. No 200% zoom or screen-reader result should be inferred from responsive-width testing alone.
+
+**Troubleshooting:** If **Review privacy** is missing, reopen Welcome through **Getting started → Preview setup**. If a privacy disclosure appears to describe current functionality, read its **Privacy implementation in progress** note: the browser UI presents product requirements, not verified native behavior. If the permission checklist is needed, use **Review permission readiness**; it stays at its existing unknown defaults unless a development fixture is manually selected.
 
 ### Microphone capability preview (MVP-09)
 
