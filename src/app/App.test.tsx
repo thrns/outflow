@@ -1761,6 +1761,16 @@ describe("Welcome setup introduction preview", () => {
           screen.getByRole("navigation", { name: "Application navigation" }),
         ).getByRole("button", { name: "Settings" }),
       );
+      fireEvent.click(screen.getByRole("tab", { name: "Shortcuts" }));
+      fireEvent.click(
+        within(
+          screen.getByRole("navigation", { name: "Application navigation" }),
+        ).getByRole("button", { name: "Settings" }),
+      );
+      expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
       expect(
         screen.queryByRole("button", { name: /^Return to setup:/ }),
       ).not.toBeInTheDocument();

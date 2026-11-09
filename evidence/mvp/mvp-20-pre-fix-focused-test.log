@@ -1,0 +1,94 @@
+
+> outflow@0.1.0 test
+> vitest --run src/app/AppSetupSettingsReturn.test.tsx
+
+
+ RUN  v5.0.5 /private/tmp/outflow-mvp20-settings-reentry-fix
+
+ ❯ src/app/AppSetupSettingsReturn.test.tsx (22 tests | 5 failed) 1272ms
+   ❯ return to setup from Settings (22)
+     × same-view primary Settings navigation from Shortcuts selects General 38ms
+     × same-view primary Settings navigation from Privacy selects General 33ms
+     × same-view primary Settings clears the Welcome return action and tab changes do not restore it 35ms
+     × same-view primary Settings clears the Shortcuts return action and tab changes do not restore it 61ms
+     × preserves Settings preferences and vocabulary preview values on same-view navigation 92ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/AppSetupSettingsReturn.test.tsx > return to setup from Settings > same-view primary Settings navigation from Shortcuts selects General
+ FAIL  src/app/AppSetupSettingsReturn.test.tsx > return to setup from Settings > same-view primary Settings navigation from Privacy selects General
+Error: expect(element).toHaveAttribute("aria-selected", "true") // element.getAttribute("aria-selected") === "true"
+
+Expected the element to have attribute:
+  aria-selected="true"
+Received:
+  aria-selected="false"
+ ❯ src/app/AppSetupSettingsReturn.test.tsx:150:60
+    148|       fireEvent.click(getPrimaryNavigationButton("Settings"));
+    149|
+    150|       expect(screen.getByRole("tab", { name: "General" })).toHaveAttri…
+       |                                                            ^
+    151|         "aria-selected",
+    152|         "true",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/app/AppSetupSettingsReturn.test.tsx > return to setup from Settings > same-view primary Settings clears the Welcome return action and tab changes do not restore it
+Error: expect(element).not.toBeInTheDocument()
+
+expected document not to contain element, found <button
+  class="app-navigation-button settings-return-button"
+  type="button"
+>
+  Return to setup:
+  Welcome
+</button> instead
+ ❯ src/app/AppSetupSettingsReturn.test.tsx:204:13
+    202|       expect(
+    203|         screen.queryByRole("button", { name: /^Return to setup:/ }),
+    204|       ).not.toBeInTheDocument();
+       |             ^
+    205|       expect(
+    206|         screen.getByRole("heading", { level: 1, name: "Settings" }),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/app/AppSetupSettingsReturn.test.tsx > return to setup from Settings > same-view primary Settings clears the Shortcuts return action and tab changes do not restore it
+Error: expect(element).toHaveAttribute("aria-selected", "true") // element.getAttribute("aria-selected") === "true"
+
+Expected the element to have attribute:
+  aria-selected="true"
+Received:
+  aria-selected="false"
+ ❯ src/app/AppSetupSettingsReturn.test.tsx:198:60
+    196|       fireEvent.click(getPrimaryNavigationButton("Settings"));
+    197|
+    198|       expect(screen.getByRole("tab", { name: "General" })).toHaveAttri…
+       |                                                            ^
+    199|         "aria-selected",
+    200|         "true",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/app/AppSetupSettingsReturn.test.tsx > return to setup from Settings > preserves Settings preferences and vocabulary preview values on same-view navigation
+Error: expect(element).toHaveAttribute("aria-selected", "true") // element.getAttribute("aria-selected") === "true"
+
+Expected the element to have attribute:
+  aria-selected="true"
+Received:
+  aria-selected="false"
+ ❯ src/app/AppSetupSettingsReturn.test.tsx:233:58
+    231|     fireEvent.click(getPrimaryNavigationButton("Settings"));
+    232|
+    233|     expect(screen.getByRole("tab", { name: "General" })).toHaveAttribu…
+       |                                                          ^
+    234|       "aria-selected",
+    235|       "true",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 17 passed (22)
+   Start at  17:24:02
+   Duration  2.04s (tests 65%, environment 20%, transform 8%, setup 5%, import 1%)

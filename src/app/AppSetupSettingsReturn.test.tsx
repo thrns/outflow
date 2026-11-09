@@ -134,6 +134,133 @@ describe("return to setup from Settings", () => {
     ).toHaveFocus();
   });
 
+  it.each(["Shortcuts", "Privacy"] as const)(
+    "same-view primary Settings navigation from %s selects General",
+    (section) => {
+      render(<App />);
+      fireEvent.click(getPrimaryNavigationButton("Settings"));
+      fireEvent.click(screen.getByRole("tab", { name: section }));
+
+      expect(screen.getByRole("tab", { name: section })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      fireEvent.click(getPrimaryNavigationButton("Settings"));
+
+      expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.getByRole("tab", { name: section })).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    },
+  );
+
+  it("focuses the Settings heading after same-view primary navigation", () => {
+    render(<App />);
+    fireEvent.click(getPrimaryNavigationButton("Settings"));
+    fireEvent.click(screen.getByRole("tab", { name: "Shortcuts" }));
+
+    const settingsButton = getPrimaryNavigationButton("Settings");
+    settingsButton.focus();
+    fireEvent.click(settingsButton);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toHaveFocus();
+  });
+
+  it.each([
+    {
+      view: "welcome" as const,
+      label: "Welcome",
+      action: "Review permission readiness",
+      tab: "Shortcuts",
+    },
+    {
+      view: "shortcut-setup" as const,
+      label: "Shortcuts",
+      action: "View shortcut details in Settings",
+      tab: "General",
+    },
+  ])(
+    "same-view primary Settings clears the $label return action and tab changes do not restore it",
+    ({ view, label, action, tab }) => {
+      render(<App />);
+      openSetup(view);
+      fireEvent.click(screen.getByRole("button", { name: action }));
+
+      expect(
+        screen.getByRole("button", { name: `Return to setup: ${label}` }),
+      ).toBeVisible();
+      fireEvent.click(getPrimaryNavigationButton("Settings"));
+
+      expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(
+        screen.queryByRole("button", { name: /^Return to setup:/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { level: 1, name: "Settings" }),
+      ).toHaveFocus();
+
+      fireEvent.click(screen.getByRole("tab", { name: tab }));
+      expect(
+        screen.queryByRole("button", { name: /^Return to setup:/ }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("preserves Settings preferences and vocabulary preview values on same-view navigation", () => {
+    render(<App />);
+    fireEvent.click(getPrimaryNavigationButton("Settings"));
+    fireEvent.click(screen.getByRole("switch", { name: "Launch at Login" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Text & Vocabulary" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Verbatim" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Spoken phrase" }), {
+      target: { value: "re-entry preview term" },
+    });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Written replacement" }),
+      { target: { value: "Re-entry Preview Term" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add to preview list" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Spoken phrase" }), {
+      target: { value: "unsaved re-entry draft" },
+    });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Written replacement" }),
+      { target: { value: "Unsaved Re-entry Draft" } },
+    );
+
+    fireEvent.click(getPrimaryNavigationButton("Settings"));
+
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("switch", { name: "Launch at Login" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Text & Vocabulary" }));
+
+    expect(screen.getByRole("radio", { name: "Verbatim" })).toBeChecked();
+    expect(screen.getByText("1 of 500 entries")).toBeVisible();
+    expect(screen.getByText("re-entry preview term")).toBeVisible();
+    expect(screen.getByText("Re-entry Preview Term")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Spoken phrase" })).toHaveValue(
+      "unsaved re-entry draft",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Written replacement" }),
+    ).toHaveValue("Unsaved Re-entry Draft");
+  });
+
   it.each(setupOrigins)(
     "ordinary primary Settings navigation from $label has no return action and opens General",
     ({ view }) => {

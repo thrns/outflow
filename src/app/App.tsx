@@ -138,7 +138,14 @@ export default function App() {
     view: AppView,
     settingsSection?: SettingsSectionId,
   ) {
-    if (view === activeView) return;
+    if (view === activeView) {
+      if (view === "settings") {
+        setSettingsReturnView(null);
+        setSelectedSection(settingsSection ?? "general");
+        settingsHeading.current?.focus();
+      }
+      return;
+    }
 
     setSettingsReturnView(null);
     if (view === "settings") {
