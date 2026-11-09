@@ -9,9 +9,8 @@ import ShortcutSetupStepPage from "./ShortcutSetupStepPage";
 import TryDictationStepPage from "./TryDictationStepPage";
 import TrayStatusStepPage from "./TrayStatusStepPage";
 import { PageContainer } from "./PageContainer";
-import { SettingsRow } from "./SettingsRow";
-import { SettingsSwitch } from "./SettingsSwitch";
 import { SettingsSection } from "./SettingsSection";
+import { GeneralSettingsPanel } from "./GeneralSettingsPanel";
 import SettingsNavigation, {
   SETTINGS_SECTIONS,
   type SettingsSectionId,
@@ -20,7 +19,6 @@ import { MicrophoneCapabilityPanel } from "./MicrophoneCapabilityPanel";
 import { MicrophoneScenarioPreview } from "./MicrophoneScenarioPreview";
 import { ShortcutCapabilityPanel } from "./ShortcutCapabilityPanel";
 import { ShortcutScenarioPreview } from "./ShortcutScenarioPreview";
-import { PermissionReadinessChecklist } from "./PermissionReadinessChecklist";
 import TextCleanupModeSelector, {
   type CleanupMode,
 } from "./TextCleanupModeSelector";
@@ -199,40 +197,15 @@ export default function App() {
               description={selectedDetails.description}
             >
               {selectedSection === "general" ? (
-                <div className="settings-preferences">
-                  <SettingsRow
-                    title="Launch at Login"
-                    titleId="launch-at-login-label"
-                    description="Start Outflow automatically when you sign in to your computer."
-                    descriptionId="launch-at-login-description"
-                  >
-                    <div className="settings-field-control">
-                      <span className="settings-switch-state">
-                        {startup.run_at_login ? "On" : "Off"}
-                      </span>
-                      <SettingsSwitch
-                        checked={startup.run_at_login}
-                        onCheckedChange={(checked) =>
-                          setStartup((current) => ({
-                            ...current,
-                            run_at_login: checked,
-                          }))
-                        }
-                        labelledBy="launch-at-login-label"
-                        describedBy="launch-at-login-description launch-at-login-preview-note"
-                      />
-                    </div>
-                  </SettingsRow>
-                  <p
-                    className="settings-preview-note"
-                    id="launch-at-login-preview-note"
-                    role="note"
-                  >
-                    Preview only — this setting does not change your computer&apos;s
-                    startup behavior yet.
-                  </p>
-                  <PermissionReadinessChecklist />
-                </div>
+                <GeneralSettingsPanel
+                  runAtLogin={startup.run_at_login}
+                  onRunAtLoginChange={(checked) =>
+                    setStartup((current) => ({
+                      ...current,
+                      run_at_login: checked,
+                    }))
+                  }
+                />
               ) : selectedSection === "microphone" ? (
                 import.meta.env.DEV ? (
                   <MicrophoneScenarioPreview />

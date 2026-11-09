@@ -4806,3 +4806,47 @@ protection gates on that approved corpus. `AC-07 acceptance` remains
 `NOT EVALUATED`; `CLEANUP_MODE_POLICY.md` remains **PROPOSED — NOT APPROVED**,
 the PRD thresholds are unchanged, and all related task and release gates stay
 unchecked.
+
+## MVP-22 — General Settings panel extraction
+
+[`src/app/GeneralSettingsPanel.tsx`](src/app/GeneralSettingsPanel.tsx) renders
+the existing Launch at Login row, preview-only note, and Permission readiness
+checklist. `App.tsx` keeps the `run_at_login` value in memory and passes it to
+the panel with an `onRunAtLoginChange` callback. The panel does not persist the
+value or change operating-system startup behavior. General remains inside the
+existing `SettingsSection`; labels, descriptions, ARIA IDs, CSS classes,
+checklist order, six-tab navigation, and Home/Settings routing are unchanged.
+
+Run the frontend checks from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run src/app/GeneralSettingsPanel.test.tsx
+npm run test -- --run
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+Expected preview behavior: a fresh App mount shows Off; mouse or Space
+activation updates the displayed value immediately, while repeated Space
+keydown does not toggle twice. The value survives Settings tab changes and
+Home/Settings navigation, then resets after refresh. Leaving General and
+reopening it resets the checklist's local development fixture to the
+unverified default. Production mode omits the development scenario selector.
+
+Troubleshooting:
+
+- **The value resets while navigating:** keep `startup` state in `App.tsx` and
+  pass it through the controlled panel props; do not add panel state or storage.
+- **The switch name or description is missing:** preserve the row title and
+  description IDs and their matching `labelledBy`/`describedBy` references.
+- **Checklist scenarios persist after leaving General:** ensure the General
+  branch mounts the checklist beneath the conditional panel so its local
+  fixture state is discarded when the section changes.
+
+See [`evidence/mvp/mvp-22-general-settings-extraction.md`](evidence/mvp/mvp-22-general-settings-extraction.md)
+for implementation and verification results. This refactor does not complete
+T-010, T-011, T-041, T-050, T-051, T-054, T-055, AC-11, or any native,
+accessibility, or release gate.
