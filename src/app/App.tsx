@@ -1,5 +1,5 @@
 import "../styles/global.css";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import AppHeader, { type AppView } from "./AppHeader";
 import HomePage from "./HomePage";
 import WelcomePage from "./WelcomePage";
@@ -12,6 +12,10 @@ import { PageContainer } from "./PageContainer";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
 import { SettingsSection } from "./SettingsSection";
+import SettingsNavigation, {
+  SETTINGS_SECTIONS,
+  type SettingsSectionId,
+} from "./SettingsNavigation";
 import { MicrophoneCapabilityPanel } from "./MicrophoneCapabilityPanel";
 import { MicrophoneScenarioPreview } from "./MicrophoneScenarioPreview";
 import { ShortcutCapabilityPanel } from "./ShortcutCapabilityPanel";
@@ -34,41 +38,6 @@ import {
   SETUP_STEP_DEFINITIONS,
   type SetupStepView,
 } from "./SetupStepIndicator";
-
-const settingsSections = [
-  {
-    id: "general",
-    title: "General",
-    description: "Manage general application preferences.",
-  },
-  {
-    id: "microphone",
-    title: "Microphone",
-    description: "Configure microphone access and input selection.",
-  },
-  {
-    id: "shortcuts",
-    title: "Shortcuts",
-    description: "Review global shortcut availability and recording-mode requirements.",
-  },
-  {
-    id: "text-vocabulary",
-    title: "Text & Vocabulary",
-    description: "Set text cleanup preferences and custom terms.",
-  },
-  {
-    id: "privacy",
-    title: "Privacy",
-    description: "Review how Outflow handles audio, transcripts, and diagnostics.",
-  },
-  {
-    id: "about-diagnostics",
-    title: "About & Diagnostics",
-    description: "Find application details and troubleshooting information.",
-  },
-] as const;
-
-type SettingsSectionId = (typeof settingsSections)[number]["id"];
 
 export default function App() {
   const [activeView, setActiveView] = useState<AppView>("home");
@@ -100,11 +69,10 @@ export default function App() {
   // Settings and transient setup pages unmount Home; keep result IDs unique across routes.
   // A native bridge must still validate the Rust coordinator's authoritative IDs.
   const nextCopyResultLifecycleId = useRef(0);
-  const sectionTabs = useRef<Array<HTMLButtonElement | null>>([]);
-  const selectedIndex = settingsSections.findIndex(
+  const selectedIndex = SETTINGS_SECTIONS.findIndex(
     (section) => section.id === selectedSection,
   );
-  const selectedDetails = settingsSections[selectedIndex];
+  const selectedDetails = SETTINGS_SECTIONS[selectedIndex];
   const settingsReturnStep = settingsReturnView
     ? SETUP_STEP_DEFINITIONS.find(
         (step) => step.view === settingsReturnView,
@@ -191,36 +159,6 @@ export default function App() {
     );
   }
 
-  function handleTabKeyDown(
-    event: KeyboardEvent<HTMLButtonElement>,
-    currentIndex: number,
-  ) {
-    let nextIndex: number | undefined;
-
-    switch (event.key) {
-      case "ArrowDown":
-        nextIndex = (currentIndex + 1) % settingsSections.length;
-        break;
-      case "ArrowUp":
-        nextIndex =
-          (currentIndex - 1 + settingsSections.length) % settingsSections.length;
-        break;
-      case "Home":
-        nextIndex = 0;
-        break;
-      case "End":
-        nextIndex = settingsSections.length - 1;
-        break;
-      default:
-        return;
-    }
-
-    event.preventDefault();
-    const nextSection = settingsSections[nextIndex];
-    setSelectedSection(nextSection.id);
-    sectionTabs.current[nextIndex]?.focus();
-  }
-
   if (activeView === "settings") {
     return (
       <main>
@@ -249,41 +187,10 @@ export default function App() {
           </div>
 
           <div className="settings-layout">
-            <nav
-              aria-label="Settings sections"
-              className="settings-navigation"
-            >
-              <p className="settings-nav-label">Sections</p>
-              <div
-                aria-orientation="vertical"
-                className="settings-tab-list"
-                role="tablist"
-              >
-                {settingsSections.map((section, index) => {
-                  const isSelected = section.id === selectedSection;
-
-                  return (
-                    <button
-                      aria-controls="settings-panel"
-                      aria-selected={isSelected}
-                      className="settings-tab"
-                      id={`settings-tab-${section.id}`}
-                      key={section.id}
-                      onClick={() => setSelectedSection(section.id)}
-                      onKeyDown={(event) => handleTabKeyDown(event, index)}
-                      ref={(element) => {
-                        sectionTabs.current[index] = element;
-                      }}
-                      role="tab"
-                      tabIndex={isSelected ? 0 : -1}
-                      type="button"
-                    >
-                      {section.title}
-                    </button>
-                  );
-                })}
-              </div>
-            </nav>
+            <SettingsNavigation
+              selectedSection={selectedSection}
+              onSelectSection={setSelectedSection}
+            />
 
             <SettingsSection
               id="settings-panel"

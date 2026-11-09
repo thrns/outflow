@@ -235,6 +235,34 @@ For a keyboard check, open Settings from a setup action, confirm focus starts on
 
 **Troubleshooting:** If the return button is absent, confirm Settings was opened with the named action inside Welcome, Privacy, Permissions, or Shortcut setup. The primary Settings navigation intentionally clears this context and returns to General, even when Settings is already open; if the old section remains selected, click the primary **Settings** button in the application header and confirm the Settings heading receives focus. If Welcome, Privacy, or Permissions opened the wrong tab, the expected destination is General; only **View shortcut details in Settings** opens Shortcuts. If an ordinary Settings visit shows a return action after going Home, click **Settings** again to clear it; a fresh App mount also starts without the context.
 
+### Controlled Settings tab navigation extraction (MVP-21)
+
+The six existing Settings tabs are rendered by a controlled `SettingsNavigation` component. `App` continues to own the selected section, routes, Settings heading focus, preference previews, vocabulary preview, and Copy Result lifecycle identity. The six labels, order, descriptions, CSS classes, vertical arrow-key behavior, selected tab stop, panel relationship, and visible Settings layout remain unchanged.
+
+Run the exact frontend and repository checks from the repository root:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm run test -- --run src/app/SettingsNavigation.test.tsx
+npm run test -- --run
+npm run build
+cargo fmt --all -- --check
+cargo check --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+git diff --check
+npm run dev -- --host 127.0.0.1
+```
+
+`src/app/SettingsNavigation.test.tsx` checks tab order, controlled selection, roving tab stops, keyboard wrapping/focus, and the tab-to-panel ARIA relationship. The existing `App` integration tests continue to cover General and explicit Shortcuts destinations, same-view re-entry, all contextual return origins, preview-state retention, Copy Result lifecycle cleanup, setup fixture independence, and browser API tripwires.
+
+In the browser preview, open **Home → Settings**, inspect each section, and check the tab keys: ArrowDown and ArrowUp move and wrap; Home and End select and focus the first and last tab. From **Settings → Shortcuts**, click primary **Settings** and confirm General is selected and the Settings heading receives focus. Repeat the setup route **Home → Welcome → Privacy → Permissions → Shortcuts → View shortcut details in Settings → Return to setup: Shortcuts**; Shortcuts should open, then return should focus Step 4 of 6. Inspect desktop and 320 CSS px layouts for horizontal overflow. Resizing the viewport is not a substitute for genuine 200% zoom.
+
+**Troubleshooting:** If a tab changes focus without changing the panel, verify the controlled `selectedSection` value is still owned by `App` and passed to both navigation and `SettingsSection`. If arrow keys stop at an end, confirm the focused tab receives its local key event. If primary Settings remains on Shortcuts, repeat the primary navigation action and check the heading focus. Genuine 200% zoom, reduced-motion emulation, and spoken screen-reader checks need browser or OS controls; record unavailable checks as `NOT_RUN`.
+
 ### Permission readiness checklist (MVP-11)
 
 Run the browser preview from the repository root:
